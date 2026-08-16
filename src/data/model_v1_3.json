@@ -1,0 +1,2853 @@
+{
+ "model": "DAMM",
+ "version": "1.3-DRAFT",
+ "extracted_from": "DAMM_v1.3_Workbook_DRAFT.xlsx",
+ "status": "BETA / PILOT - scoring core; DESIGN DRAFT - operationalization layer",
+ "prohibitions": [
+  "No cross-country ranking",
+  "No maturity stage before human validation (engagement-package rule)",
+  "No DAMM score or stage movement as PDO indicator, DLI or disbursement condition",
+  "No automatic financing, procurement, vendor or technology decisions"
+ ],
+ "pillars": {
+  "C0": {
+   "name": "Agricultural context & need",
+   "role": "Context",
+   "aggregated": false
+  },
+  "C1": {
+   "name": "Connectivity & affordable access",
+   "role": "Capability",
+   "weight": 0.25
+  },
+  "C2": {
+   "name": "Data infrastructure & DPI",
+   "role": "Capability",
+   "weight": 0.3
+  },
+  "C3": {
+   "name": "Policy, governance & safeguards",
+   "role": "Capability",
+   "weight": 0.25
+  },
+  "C4": {
+   "name": "Human & institutional capacity",
+   "role": "Capability",
+   "weight": 0.2
+  },
+  "E1": {
+   "name": "Innovation & private sector",
+   "role": "Ecosystem",
+   "weight": 0.55
+  },
+  "E2": {
+   "name": "Responsible AI & emerging tech",
+   "role": "Ecosystem",
+   "weight": 0.45
+  },
+  "O1": {
+   "name": "Inclusion, sustainability & outcomes",
+   "role": "Outcome",
+   "weight": 1.0
+  }
+ },
+ "coverage_gates": {
+  "cms_min": 0.7,
+  "pillar_min": 0.6,
+  "ems_min": 0.6,
+  "evidence_adequacy_min": 0.5
+ },
+ "confidence_weights": {
+  "High": 1,
+  "Medium": 0.6,
+  "Low/Estimated": 0.3
+ },
+ "bands": [
+  {
+   "level": 1,
+   "name": "Nascent",
+   "lo": 1.0,
+   "hi": 1.8
+  },
+  {
+   "level": 2,
+   "name": "Emerging",
+   "lo": 1.8,
+   "hi": 2.6
+  },
+  {
+   "level": 3,
+   "name": "Established",
+   "lo": 2.6,
+   "hi": 3.4
+  },
+  {
+   "level": 4,
+   "name": "Advanced",
+   "lo": 3.4,
+   "hi": 4.2
+  },
+  {
+   "level": 5,
+   "name": "Transformative",
+   "lo": 4.2,
+   "hi": 5.01
+  }
+ ],
+ "stage_thresholds": {
+  "stage2_cms": 2.6,
+  "stage3_cms": 3.4,
+  "stage3_ems": 2.6,
+  "stage4_cms": 4.2,
+  "stage4_ems": 3.4,
+  "stage4_oes": 2.6
+ },
+ "assessment_year": 2026,
+ "indicators": [
+  {
+   "id": "1.1",
+   "name": "Agriculture value added per worker (constant 2015 USD)",
+   "source_type": "Global",
+   "role": "Context",
+   "pillar": "C0",
+   "pillar_name": "C0: Agricultural context & need",
+   "method": "Context profile (not aggregated)",
+   "direction": "N/A",
+   "cuts": null,
+   "anchors": {
+    "L1": "Profile the observed level and trend; do not interpret as digital maturity.",
+    "L2": "Profile only.",
+    "L3": "Profile only.",
+    "L4": "Profile only.",
+    "L5": "Profile only."
+   },
+   "gate": false,
+   "max_age": 3,
+   "rubric_status": "Context only",
+   "calibration_note": "Report level, distribution and trend separately; exclude from maturity arithmetic."
+  },
+  {
+   "id": "1.2",
+   "name": "Cereal yield (kg per hectare)",
+   "source_type": "Global",
+   "role": "Context",
+   "pillar": "C0",
+   "pillar_name": "C0: Agricultural context & need",
+   "method": "Context profile (not aggregated)",
+   "direction": "N/A",
+   "cuts": null,
+   "anchors": {
+    "L1": "Profile the observed level and trend; do not interpret as digital maturity.",
+    "L2": "Profile only.",
+    "L3": "Profile only.",
+    "L4": "Profile only.",
+    "L5": "Profile only."
+   },
+   "gate": false,
+   "max_age": 3,
+   "rubric_status": "Context only",
+   "calibration_note": "Report level, distribution and trend separately; exclude from maturity arithmetic."
+  },
+  {
+   "id": "1.3",
+   "name": "Employment in agriculture (% of total employment)",
+   "source_type": "Global",
+   "role": "Context",
+   "pillar": "C0",
+   "pillar_name": "C0: Agricultural context & need",
+   "method": "Context profile (not aggregated)",
+   "direction": "N/A",
+   "cuts": null,
+   "anchors": {
+    "L1": "Profile the observed level and trend; do not interpret as digital maturity.",
+    "L2": "Profile only.",
+    "L3": "Profile only.",
+    "L4": "Profile only.",
+    "L5": "Profile only."
+   },
+   "gate": false,
+   "max_age": 3,
+   "rubric_status": "Context only",
+   "calibration_note": "Report level, distribution and trend separately; exclude from maturity arithmetic."
+  },
+  {
+   "id": "1.4",
+   "name": "Food production index (2014-2016 = 100)",
+   "source_type": "Global",
+   "role": "Context",
+   "pillar": "C0",
+   "pillar_name": "C0: Agricultural context & need",
+   "method": "Context profile (not aggregated)",
+   "direction": "N/A",
+   "cuts": null,
+   "anchors": {
+    "L1": "Profile the observed level and trend; do not interpret as digital maturity.",
+    "L2": "Profile only.",
+    "L3": "Profile only.",
+    "L4": "Profile only.",
+    "L5": "Profile only."
+   },
+   "gate": false,
+   "max_age": 3,
+   "rubric_status": "Context only",
+   "calibration_note": "Report level, distribution and trend separately; exclude from maturity arithmetic."
+  },
+  {
+   "id": "1.5",
+   "name": "Post-harvest loss rate (%)",
+   "source_type": "Local",
+   "role": "Context",
+   "pillar": "C0",
+   "pillar_name": "C0: Agricultural context & need",
+   "method": "Context profile (not aggregated)",
+   "direction": "N/A",
+   "cuts": null,
+   "anchors": {
+    "L1": "Profile the observed level and trend; do not interpret as digital maturity.",
+    "L2": "Profile only.",
+    "L3": "Profile only.",
+    "L4": "Profile only.",
+    "L5": "Profile only."
+   },
+   "gate": false,
+   "max_age": 2,
+   "rubric_status": "Context only",
+   "calibration_note": "Report level, distribution and trend separately; exclude from maturity arithmetic."
+  },
+  {
+   "id": "1.6",
+   "name": "Smallholder access to formal markets (%)",
+   "source_type": "Local",
+   "role": "Context",
+   "pillar": "C0",
+   "pillar_name": "C0: Agricultural context & need",
+   "method": "Context profile (not aggregated)",
+   "direction": "N/A",
+   "cuts": null,
+   "anchors": {
+    "L1": "Profile the observed level and trend; do not interpret as digital maturity.",
+    "L2": "Profile only.",
+    "L3": "Profile only.",
+    "L4": "Profile only.",
+    "L5": "Profile only."
+   },
+   "gate": false,
+   "max_age": 2,
+   "rubric_status": "Context only",
+   "calibration_note": "Report level, distribution and trend separately; exclude from maturity arithmetic."
+  },
+  {
+   "id": "1.7",
+   "name": "Agricultural credit access (% of farmers)",
+   "source_type": "Local",
+   "role": "Context",
+   "pillar": "C0",
+   "pillar_name": "C0: Agricultural context & need",
+   "method": "Context profile (not aggregated)",
+   "direction": "N/A",
+   "cuts": null,
+   "anchors": {
+    "L1": "Profile the observed level and trend; do not interpret as digital maturity.",
+    "L2": "Profile only.",
+    "L3": "Profile only.",
+    "L4": "Profile only.",
+    "L5": "Profile only."
+   },
+   "gate": false,
+   "max_age": 2,
+   "rubric_status": "Context only",
+   "calibration_note": "Report level, distribution and trend separately; exclude from maturity arithmetic."
+  },
+  {
+   "id": "1.8",
+   "name": "Farmers using climate-smart/sustainable practices (%)",
+   "source_type": "Local",
+   "role": "Context",
+   "pillar": "C0",
+   "pillar_name": "C0: Agricultural context & need",
+   "method": "Context profile (not aggregated)",
+   "direction": "N/A",
+   "cuts": null,
+   "anchors": {
+    "L1": "Profile the observed level and trend; do not interpret as digital maturity.",
+    "L2": "Profile only.",
+    "L3": "Profile only.",
+    "L4": "Profile only.",
+    "L5": "Profile only."
+   },
+   "gate": false,
+   "max_age": 2,
+   "rubric_status": "Context only",
+   "calibration_note": "Report level, distribution and trend separately; exclude from maturity arithmetic."
+  },
+  {
+   "id": "1.9",
+   "name": "National innovation/extension programs with digital component",
+   "source_type": "Local",
+   "role": "Capability",
+   "pillar": "C4",
+   "pillar_name": "C4: Human & institutional capacity",
+   "method": "Anchored capability rubric",
+   "direction": "N/A",
+   "cuts": null,
+   "anchors": {
+    "L1": "No credible national innovation/extension programs with digital component capability, or isolated informal activity only.",
+    "L2": "Pilot or ad hoc national innovation/extension programs with digital component; narrow coverage, unclear ownership or donor dependence.",
+    "L3": "Operational national innovation/extension programs with digital component with defined ownership and partial coverage; adoption or interoperability gaps remain.",
+    "L4": "Scaled and funded national innovation/extension programs with digital component, with accountable governance, interoperability and broad use.",
+    "L5": "Institutionalized, inclusive and resilient national innovation/extension programs with digital component, continuously improved and supported by verified outcomes."
+   },
+   "gate": false,
+   "max_age": 2,
+   "rubric_status": "Anchored rubric - validate through panel scoring",
+   "calibration_note": "Score through a multi-stakeholder evidence panel; require documentary evidence and record dissent."
+  },
+  {
+   "id": "2.1",
+   "name": "Rural population covered by at least 3G (%)",
+   "source_type": "Global",
+   "role": "Capability",
+   "pillar": "C1",
+   "pillar_name": "C1: Connectivity & affordable access",
+   "method": "Quantitative threshold",
+   "direction": "Higher",
+   "cuts": [
+    20,
+    40,
+    60,
+    80
+   ],
+   "anchors": {
+    "L1": "< 20",
+    "L2": "20 to < 40",
+    "L3": "40 to < 60",
+    "L4": "60 to < 80",
+    "L5": ">= 80"
+   },
+   "gate": true,
+   "max_age": 3,
+   "rubric_status": "PROVISIONAL - calibrate against peer distribution",
+   "calibration_note": "Use the suggested level as a starting point only; document any override and recalibrate cut-offs using peer distributions."
+  },
+  {
+   "id": "2.2",
+   "name": "Rural population covered by at least 4G (%)",
+   "source_type": "Global",
+   "role": "Capability",
+   "pillar": "C1",
+   "pillar_name": "C1: Connectivity & affordable access",
+   "method": "Quantitative threshold",
+   "direction": "Higher",
+   "cuts": [
+    20,
+    40,
+    60,
+    80
+   ],
+   "anchors": {
+    "L1": "< 20",
+    "L2": "20 to < 40",
+    "L3": "40 to < 60",
+    "L4": "60 to < 80",
+    "L5": ">= 80"
+   },
+   "gate": false,
+   "max_age": 3,
+   "rubric_status": "PROVISIONAL - calibrate against peer distribution",
+   "calibration_note": "Use the suggested level as a starting point only; document any override and recalibrate cut-offs using peer distributions."
+  },
+  {
+   "id": "2.3",
+   "name": "Active mobile broadband subscriptions per 100 inhabitants",
+   "source_type": "Global",
+   "role": "Capability",
+   "pillar": "C1",
+   "pillar_name": "C1: Connectivity & affordable access",
+   "method": "Quantitative threshold",
+   "direction": "Higher",
+   "cuts": [
+    20,
+    40,
+    70,
+    100
+   ],
+   "anchors": {
+    "L1": "< 20",
+    "L2": "20 to < 40",
+    "L3": "40 to < 70",
+    "L4": "70 to < 100",
+    "L5": ">= 100"
+   },
+   "gate": false,
+   "max_age": 3,
+   "rubric_status": "PROVISIONAL - calibrate against peer distribution",
+   "calibration_note": "Use the suggested level as a starting point only; document any override and recalibrate cut-offs using peer distributions."
+  },
+  {
+   "id": "2.4",
+   "name": "Individuals using the Internet (% of population)",
+   "source_type": "Global",
+   "role": "Capability",
+   "pillar": "C1",
+   "pillar_name": "C1: Connectivity & affordable access",
+   "method": "Quantitative threshold",
+   "direction": "Higher",
+   "cuts": [
+    20,
+    40,
+    60,
+    80
+   ],
+   "anchors": {
+    "L1": "< 20",
+    "L2": "20 to < 40",
+    "L3": "40 to < 60",
+    "L4": "60 to < 80",
+    "L5": ">= 80"
+   },
+   "gate": false,
+   "max_age": 3,
+   "rubric_status": "PROVISIONAL - calibrate against peer distribution",
+   "calibration_note": "Use the suggested level as a starting point only; document any override and recalibrate cut-offs using peer distributions."
+  },
+  {
+   "id": "2.5",
+   "name": "Mobile broadband basket price (% GNI per capita)",
+   "source_type": "Global",
+   "role": "Capability",
+   "pillar": "C1",
+   "pillar_name": "C1: Connectivity & affordable access",
+   "method": "Quantitative threshold",
+   "direction": "Lower",
+   "cuts": [
+    10,
+    5,
+    2,
+    1
+   ],
+   "anchors": {
+    "L1": "> 10",
+    "L2": "> 5 to <= 10",
+    "L3": "> 2 to <= 5",
+    "L4": "> 1 to <= 2",
+    "L5": "<= 1"
+   },
+   "gate": true,
+   "max_age": 3,
+   "rubric_status": "PROVISIONAL - calibrate against peer distribution",
+   "calibration_note": "Use the suggested level as a starting point only; document any override and recalibrate cut-offs using peer distributions."
+  },
+  {
+   "id": "2.6",
+   "name": "Adults with mobile phone (% age 15+)",
+   "source_type": "Global",
+   "role": "Capability",
+   "pillar": "C1",
+   "pillar_name": "C1: Connectivity & affordable access",
+   "method": "Quantitative threshold",
+   "direction": "Higher",
+   "cuts": [
+    20,
+    40,
+    60,
+    80
+   ],
+   "anchors": {
+    "L1": "< 20",
+    "L2": "20 to < 40",
+    "L3": "40 to < 60",
+    "L4": "60 to < 80",
+    "L5": ">= 80"
+   },
+   "gate": false,
+   "max_age": 3,
+   "rubric_status": "PROVISIONAL - calibrate against peer distribution",
+   "calibration_note": "Use the suggested level as a starting point only; document any override and recalibrate cut-offs using peer distributions."
+  },
+  {
+   "id": "2.7",
+   "name": "Smartphone ownership among rural/agricultural population (%)",
+   "source_type": "Local",
+   "role": "Capability",
+   "pillar": "C1",
+   "pillar_name": "C1: Connectivity & affordable access",
+   "method": "Quantitative threshold",
+   "direction": "Higher",
+   "cuts": [
+    20,
+    40,
+    60,
+    80
+   ],
+   "anchors": {
+    "L1": "< 20",
+    "L2": "20 to < 40",
+    "L3": "40 to < 60",
+    "L4": "60 to < 80",
+    "L5": ">= 80"
+   },
+   "gate": false,
+   "max_age": 2,
+   "rubric_status": "PROVISIONAL - calibrate against peer distribution",
+   "calibration_note": "Use the suggested level as a starting point only; document any override and recalibrate cut-offs using peer distributions."
+  },
+  {
+   "id": "2.8",
+   "name": "Average mobile data cost in rural areas (USD per GB)",
+   "source_type": "Local",
+   "role": "Capability",
+   "pillar": "C1",
+   "pillar_name": "C1: Connectivity & affordable access",
+   "method": "Quantitative threshold",
+   "direction": "Lower",
+   "cuts": [
+    10,
+    5,
+    2,
+    1
+   ],
+   "anchors": {
+    "L1": "> 10",
+    "L2": "> 5 to <= 10",
+    "L3": "> 2 to <= 5",
+    "L4": "> 1 to <= 2",
+    "L5": "<= 1"
+   },
+   "gate": false,
+   "max_age": 2,
+   "rubric_status": "PROVISIONAL - calibrate against peer distribution",
+   "calibration_note": "Use the suggested level as a starting point only; document any override and recalibrate cut-offs using peer distributions."
+  },
+  {
+   "id": "2.9",
+   "name": "Electricity access in rural areas (%)",
+   "source_type": "Local",
+   "role": "Capability",
+   "pillar": "C1",
+   "pillar_name": "C1: Connectivity & affordable access",
+   "method": "Quantitative threshold",
+   "direction": "Higher",
+   "cuts": [
+    20,
+    40,
+    60,
+    80
+   ],
+   "anchors": {
+    "L1": "< 20",
+    "L2": "20 to < 40",
+    "L3": "40 to < 60",
+    "L4": "60 to < 80",
+    "L5": ">= 80"
+   },
+   "gate": true,
+   "max_age": 2,
+   "rubric_status": "PROVISIONAL - calibrate against peer distribution",
+   "calibration_note": "Use the suggested level as a starting point only; document any override and recalibrate cut-offs using peer distributions."
+  },
+  {
+   "id": "2.10",
+   "name": "Average download speed in agricultural areas (Mbps)",
+   "source_type": "Local",
+   "role": "Capability",
+   "pillar": "C1",
+   "pillar_name": "C1: Connectivity & affordable access",
+   "method": "Quantitative threshold",
+   "direction": "Higher",
+   "cuts": [
+    2,
+    5,
+    10,
+    25
+   ],
+   "anchors": {
+    "L1": "< 2",
+    "L2": "2 to < 5",
+    "L3": "5 to < 10",
+    "L4": "10 to < 25",
+    "L5": ">= 25"
+   },
+   "gate": false,
+   "max_age": 2,
+   "rubric_status": "PROVISIONAL - calibrate against peer distribution",
+   "calibration_note": "Use the suggested level as a starting point only; document any override and recalibrate cut-offs using peer distributions."
+  },
+  {
+   "id": "2.11",
+   "name": "Device financing/subsidy schemes for farmers",
+   "source_type": "Local",
+   "role": "Capability",
+   "pillar": "C1",
+   "pillar_name": "C1: Connectivity & affordable access",
+   "method": "Anchored capability rubric",
+   "direction": "N/A",
+   "cuts": null,
+   "anchors": {
+    "L1": "No credible device financing/subsidy schemes for farmers capability, or isolated informal activity only.",
+    "L2": "Pilot or ad hoc device financing/subsidy schemes for farmers; narrow coverage, unclear ownership or donor dependence.",
+    "L3": "Operational device financing/subsidy schemes for farmers with defined ownership and partial coverage; adoption or interoperability gaps remain.",
+    "L4": "Scaled and funded device financing/subsidy schemes for farmers, with accountable governance, interoperability and broad use.",
+    "L5": "Institutionalized, inclusive and resilient device financing/subsidy schemes for farmers, continuously improved and supported by verified outcomes."
+   },
+   "gate": false,
+   "max_age": 2,
+   "rubric_status": "Anchored rubric - validate through panel scoring",
+   "calibration_note": "Score through a multi-stakeholder evidence panel; require documentary evidence and record dissent."
+  },
+  {
+   "id": "3.1",
+   "name": "UN E-Government Development Index (EGDI)",
+   "source_type": "Global",
+   "role": "Capability",
+   "pillar": "C2",
+   "pillar_name": "C2: Data infrastructure & DPI",
+   "method": "Quantitative threshold",
+   "direction": "Higher",
+   "cuts": [
+    0.2,
+    0.4,
+    0.6,
+    0.8
+   ],
+   "anchors": {
+    "L1": "< 0.2",
+    "L2": "0.2 to < 0.4",
+    "L3": "0.4 to < 0.6",
+    "L4": "0.6 to < 0.8",
+    "L5": ">= 0.8"
+   },
+   "gate": false,
+   "max_age": 3,
+   "rubric_status": "PROVISIONAL - calibrate against peer distribution",
+   "calibration_note": "Use the suggested level as a starting point only; document any override and recalibrate cut-offs using peer distributions."
+  },
+  {
+   "id": "3.2",
+   "name": "Open Data Inventory (ODIN) score",
+   "source_type": "Global",
+   "role": "Capability",
+   "pillar": "C2",
+   "pillar_name": "C2: Data infrastructure & DPI",
+   "method": "Quantitative threshold",
+   "direction": "Higher",
+   "cuts": [
+    20,
+    40,
+    60,
+    80
+   ],
+   "anchors": {
+    "L1": "< 20",
+    "L2": "20 to < 40",
+    "L3": "40 to < 60",
+    "L4": "60 to < 80",
+    "L5": ">= 80"
+   },
+   "gate": false,
+   "max_age": 3,
+   "rubric_status": "PROVISIONAL - calibrate against peer distribution",
+   "calibration_note": "Use the suggested level as a starting point only; document any override and recalibrate cut-offs using peer distributions."
+  },
+  {
+   "id": "3.3",
+   "name": "National farmer registry/database",
+   "source_type": "Local",
+   "role": "Capability",
+   "pillar": "C2",
+   "pillar_name": "C2: Data infrastructure & DPI",
+   "method": "Anchored capability rubric",
+   "direction": "N/A",
+   "cuts": null,
+   "anchors": {
+    "L1": "No credible national farmer registry/database capability, or isolated informal activity only.",
+    "L2": "Pilot or ad hoc national farmer registry/database; narrow coverage, unclear ownership or donor dependence.",
+    "L3": "Operational national farmer registry/database with defined ownership and partial coverage; adoption or interoperability gaps remain.",
+    "L4": "Scaled and funded national farmer registry/database, with accountable governance, interoperability and broad use.",
+    "L5": "Institutionalized, inclusive and resilient national farmer registry/database, continuously improved and supported by verified outcomes."
+   },
+   "gate": true,
+   "max_age": 2,
+   "rubric_status": "Anchored rubric - validate through panel scoring",
+   "calibration_note": "Score through a multi-stakeholder evidence panel; require documentary evidence and record dissent."
+  },
+  {
+   "id": "3.4",
+   "name": "Digital land/plot registration system",
+   "source_type": "Local",
+   "role": "Capability",
+   "pillar": "C2",
+   "pillar_name": "C2: Data infrastructure & DPI",
+   "method": "Anchored capability rubric",
+   "direction": "N/A",
+   "cuts": null,
+   "anchors": {
+    "L1": "No credible digital land/plot registration system capability, or isolated informal activity only.",
+    "L2": "Pilot or ad hoc digital land/plot registration system; narrow coverage, unclear ownership or donor dependence.",
+    "L3": "Operational digital land/plot registration system with defined ownership and partial coverage; adoption or interoperability gaps remain.",
+    "L4": "Scaled and funded digital land/plot registration system, with accountable governance, interoperability and broad use.",
+    "L5": "Institutionalized, inclusive and resilient digital land/plot registration system, continuously improved and supported by verified outcomes."
+   },
+   "gate": false,
+   "max_age": 2,
+   "rubric_status": "Anchored rubric - validate through panel scoring",
+   "calibration_note": "Score through a multi-stakeholder evidence panel; require documentary evidence and record dissent."
+  },
+  {
+   "id": "3.5",
+   "name": "National agricultural data portal / open data",
+   "source_type": "Local",
+   "role": "Capability",
+   "pillar": "C2",
+   "pillar_name": "C2: Data infrastructure & DPI",
+   "method": "Anchored capability rubric",
+   "direction": "N/A",
+   "cuts": null,
+   "anchors": {
+    "L1": "No credible national agricultural data portal / open data capability, or isolated informal activity only.",
+    "L2": "Pilot or ad hoc national agricultural data portal / open data; narrow coverage, unclear ownership or donor dependence.",
+    "L3": "Operational national agricultural data portal / open data with defined ownership and partial coverage; adoption or interoperability gaps remain.",
+    "L4": "Scaled and funded national agricultural data portal / open data, with accountable governance, interoperability and broad use.",
+    "L5": "Institutionalized, inclusive and resilient national agricultural data portal / open data, continuously improved and supported by verified outcomes."
+   },
+   "gate": false,
+   "max_age": 2,
+   "rubric_status": "Anchored rubric - validate through panel scoring",
+   "calibration_note": "Score through a multi-stakeholder evidence panel; require documentary evidence and record dissent."
+  },
+  {
+   "id": "3.6",
+   "name": "Weather/climate data infrastructure for agriculture",
+   "source_type": "Local",
+   "role": "Capability",
+   "pillar": "C2",
+   "pillar_name": "C2: Data infrastructure & DPI",
+   "method": "Anchored capability rubric",
+   "direction": "N/A",
+   "cuts": null,
+   "anchors": {
+    "L1": "No functioning agrometeorological observation network or data access.",
+    "L2": "Observation infrastructure exists but agriculture-relevant forecasts are not produced reliably.",
+    "L3": "Agriculture-relevant forecasts and advisories are produced with defined ownership; dissemination reaches a minority of farming households; impact-based advisories are absent.",
+    "L4": "Impact-based agromet advisories are produced and disseminated through channels reaching most farming areas (radio, mobile, extension), aligned to crop calendars.",
+    "L5": "End-to-end climate services: observations, impact-based forecasts and last-mile dissemination with verified reach and farmer feedback, sustained by budget and a hydromet-agriculture agreement."
+   },
+   "gate": false,
+   "max_age": 2,
+   "rubric_status": "Anchored rubric - validate through panel scoring",
+   "calibration_note": "v1.3 rewrite: anchor now tests the full climate-services chain (observation -> forecast -> last-mile reach), not data infrastructure alone."
+  },
+  {
+   "id": "3.7",
+   "name": "Satellite/earth observation data integration capability",
+   "source_type": "Local",
+   "role": "Capability",
+   "pillar": "C2",
+   "pillar_name": "C2: Data infrastructure & DPI",
+   "method": "Anchored capability rubric",
+   "direction": "N/A",
+   "cuts": null,
+   "anchors": {
+    "L1": "No credible satellite/earth observation data integration capability capability, or isolated informal activity only.",
+    "L2": "Pilot or ad hoc satellite/earth observation data integration capability; narrow coverage, unclear ownership or donor dependence.",
+    "L3": "Operational satellite/earth observation data integration capability with defined ownership and partial coverage; adoption or interoperability gaps remain.",
+    "L4": "Scaled and funded satellite/earth observation data integration capability, with accountable governance, interoperability and broad use.",
+    "L5": "Institutionalized, inclusive and resilient satellite/earth observation data integration capability, continuously improved and supported by verified outcomes."
+   },
+   "gate": false,
+   "max_age": 2,
+   "rubric_status": "Anchored rubric - validate through panel scoring",
+   "calibration_note": "Score through a multi-stakeholder evidence panel; require documentary evidence and record dissent."
+  },
+  {
+   "id": "3.8",
+   "name": "National soil map/database (digital)",
+   "source_type": "Local",
+   "role": "Capability",
+   "pillar": "C2",
+   "pillar_name": "C2: Data infrastructure & DPI",
+   "method": "Anchored capability rubric",
+   "direction": "N/A",
+   "cuts": null,
+   "anchors": {
+    "L1": "No credible national soil map/database capability, or isolated informal activity only.",
+    "L2": "Pilot or ad hoc national soil map/database; narrow coverage, unclear ownership or donor dependence.",
+    "L3": "Operational national soil map/database with defined ownership and partial coverage; adoption or interoperability gaps remain.",
+    "L4": "Scaled and funded national soil map/database, with accountable governance, interoperability and broad use.",
+    "L5": "Institutionalized, inclusive and resilient national soil map/database, continuously improved and supported by verified outcomes."
+   },
+   "gate": false,
+   "max_age": 2,
+   "rubric_status": "Anchored rubric - validate through panel scoring",
+   "calibration_note": "Score through a multi-stakeholder evidence panel; require documentary evidence and record dissent."
+  },
+  {
+   "id": "3.9",
+   "name": "Digital advisory platforms reaching >10,000 users",
+   "source_type": "Local",
+   "role": "Capability",
+   "pillar": "C2",
+   "pillar_name": "C2: Data infrastructure & DPI",
+   "method": "Quantitative threshold",
+   "direction": "Higher",
+   "cuts": [
+    20,
+    40,
+    60,
+    80
+   ],
+   "anchors": {
+    "L1": "< 20",
+    "L2": "20 to < 40",
+    "L3": "40 to < 60",
+    "L4": "60 to < 80",
+    "L5": ">= 80"
+   },
+   "gate": false,
+   "max_age": 2,
+   "rubric_status": "PROVISIONAL - calibrate against peer distribution",
+   "calibration_note": "Use the suggested level as a starting point only; document any override and recalibrate cut-offs using peer distributions."
+  },
+  {
+   "id": "3.10",
+   "name": "Digital agricultural market/e-commerce platforms (>5,000 active users)",
+   "source_type": "Local",
+   "role": "Capability",
+   "pillar": "C2",
+   "pillar_name": "C2: Data infrastructure & DPI",
+   "method": "Anchored capability rubric",
+   "direction": "N/A",
+   "cuts": null,
+   "anchors": {
+    "L1": "No credible digital agricultural market/e-commerce platforms capability, or isolated informal activity only.",
+    "L2": "Pilot or ad hoc digital agricultural market/e-commerce platforms; narrow coverage, unclear ownership or donor dependence.",
+    "L3": "Operational digital agricultural market/e-commerce platforms with defined ownership and partial coverage; adoption or interoperability gaps remain.",
+    "L4": "Scaled and funded digital agricultural market/e-commerce platforms, with accountable governance, interoperability and broad use.",
+    "L5": "Institutionalized, inclusive and resilient digital agricultural market/e-commerce platforms, continuously improved and supported by verified outcomes."
+   },
+   "gate": false,
+   "max_age": 2,
+   "rubric_status": "Anchored rubric - validate through panel scoring",
+   "calibration_note": "Score through a multi-stakeholder evidence panel; require documentary evidence and record dissent."
+  },
+  {
+   "id": "3.11",
+   "name": "Interoperability standards for agricultural data",
+   "source_type": "Local",
+   "role": "Capability",
+   "pillar": "C2",
+   "pillar_name": "C2: Data infrastructure & DPI",
+   "method": "Anchored capability rubric",
+   "direction": "N/A",
+   "cuts": null,
+   "anchors": {
+    "L1": "No credible interoperability standards for agricultural data capability, or isolated informal activity only.",
+    "L2": "Pilot or ad hoc interoperability standards for agricultural data; narrow coverage, unclear ownership or donor dependence.",
+    "L3": "Operational interoperability standards for agricultural data with defined ownership and partial coverage; adoption or interoperability gaps remain.",
+    "L4": "Scaled and funded interoperability standards for agricultural data, with accountable governance, interoperability and broad use.",
+    "L5": "Institutionalized, inclusive and resilient interoperability standards for agricultural data, continuously improved and supported by verified outcomes."
+   },
+   "gate": true,
+   "max_age": 2,
+   "rubric_status": "Anchored rubric - validate through panel scoring",
+   "calibration_note": "Score through a multi-stakeholder evidence panel; require documentary evidence and record dissent."
+  },
+  {
+   "id": "3.12",
+   "name": "AI-ready agricultural datasets",
+   "source_type": "Local",
+   "role": "Capability",
+   "pillar": "C2",
+   "pillar_name": "C2: Data infrastructure & DPI",
+   "method": "Anchored capability rubric",
+   "direction": "N/A",
+   "cuts": null,
+   "anchors": {
+    "L1": "No credible ai-ready agricultural datasets capability, or isolated informal activity only.",
+    "L2": "Pilot or ad hoc ai-ready agricultural datasets; narrow coverage, unclear ownership or donor dependence.",
+    "L3": "Operational ai-ready agricultural datasets with defined ownership and partial coverage; adoption or interoperability gaps remain.",
+    "L4": "Scaled and funded ai-ready agricultural datasets, with accountable governance, interoperability and broad use.",
+    "L5": "Institutionalized, inclusive and resilient ai-ready agricultural datasets, continuously improved and supported by verified outcomes."
+   },
+   "gate": false,
+   "max_age": 2,
+   "rubric_status": "Anchored rubric - validate through panel scoring",
+   "calibration_note": "Score through a multi-stakeholder evidence panel; require documentary evidence and record dissent."
+  },
+  {
+   "id": "4.1",
+   "name": "Data protection/privacy law",
+   "source_type": "Global",
+   "role": "Capability",
+   "pillar": "C3",
+   "pillar_name": "C3: Policy, governance & safeguards",
+   "method": "Anchored capability rubric",
+   "direction": "N/A",
+   "cuts": null,
+   "anchors": {
+    "L1": "No credible data protection/privacy law capability, or isolated informal activity only.",
+    "L2": "Pilot or ad hoc data protection/privacy law; narrow coverage, unclear ownership or donor dependence.",
+    "L3": "Operational data protection/privacy law with defined ownership and partial coverage; adoption or interoperability gaps remain.",
+    "L4": "Scaled and funded data protection/privacy law, with accountable governance, interoperability and broad use.",
+    "L5": "Institutionalized, inclusive and resilient data protection/privacy law, continuously improved and supported by verified outcomes."
+   },
+   "gate": true,
+   "max_age": 3,
+   "rubric_status": "Anchored rubric - validate through panel scoring",
+   "calibration_note": "Score through a multi-stakeholder evidence panel; require documentary evidence and record dissent."
+  },
+  {
+   "id": "4.2",
+   "name": "Cybersecurity legal framework (ITU GCI)",
+   "source_type": "Global",
+   "role": "Capability",
+   "pillar": "C3",
+   "pillar_name": "C3: Policy, governance & safeguards",
+   "method": "Quantitative threshold",
+   "direction": "Higher",
+   "cuts": [
+    0.2,
+    0.4,
+    0.6,
+    0.8
+   ],
+   "anchors": {
+    "L1": "< 0.2",
+    "L2": "0.2 to < 0.4",
+    "L3": "0.4 to < 0.6",
+    "L4": "0.6 to < 0.8",
+    "L5": ">= 0.8"
+   },
+   "gate": true,
+   "max_age": 3,
+   "rubric_status": "PROVISIONAL - calibrate against peer distribution",
+   "calibration_note": "Use the suggested level as a starting point only; document any override and recalibrate cut-offs using peer distributions."
+  },
+  {
+   "id": "4.3",
+   "name": "Government AI Readiness Index",
+   "source_type": "Global",
+   "role": "Capability",
+   "pillar": "C3",
+   "pillar_name": "C3: Policy, governance & safeguards",
+   "method": "Quantitative threshold",
+   "direction": "Higher",
+   "cuts": [
+    20,
+    40,
+    60,
+    80
+   ],
+   "anchors": {
+    "L1": "< 20",
+    "L2": "20 to < 40",
+    "L3": "40 to < 60",
+    "L4": "60 to < 80",
+    "L5": ">= 80"
+   },
+   "gate": false,
+   "max_age": 3,
+   "rubric_status": "PROVISIONAL - calibrate against peer distribution",
+   "calibration_note": "Use the suggested level as a starting point only; document any override and recalibrate cut-offs using peer distributions."
+  },
+  {
+   "id": "4.4",
+   "name": "National digital agriculture strategy",
+   "source_type": "Local",
+   "role": "Capability",
+   "pillar": "C3",
+   "pillar_name": "C3: Policy, governance & safeguards",
+   "method": "Anchored capability rubric",
+   "direction": "N/A",
+   "cuts": null,
+   "anchors": {
+    "L1": "No credible national digital agriculture strategy capability, or isolated informal activity only.",
+    "L2": "Pilot or ad hoc national digital agriculture strategy; narrow coverage, unclear ownership or donor dependence.",
+    "L3": "Operational national digital agriculture strategy with defined ownership and partial coverage; adoption or interoperability gaps remain.",
+    "L4": "Scaled and funded national digital agriculture strategy, with accountable governance, interoperability and broad use.",
+    "L5": "Institutionalized, inclusive and resilient national digital agriculture strategy, continuously improved and supported by verified outcomes."
+   },
+   "gate": false,
+   "max_age": 2,
+   "rubric_status": "Anchored rubric - validate through panel scoring",
+   "calibration_note": "Score through a multi-stakeholder evidence panel; require documentary evidence and record dissent."
+  },
+  {
+   "id": "4.5",
+   "name": "Agricultural data governance framework",
+   "source_type": "Local",
+   "role": "Capability",
+   "pillar": "C3",
+   "pillar_name": "C3: Policy, governance & safeguards",
+   "method": "Anchored capability rubric",
+   "direction": "N/A",
+   "cuts": null,
+   "anchors": {
+    "L1": "No credible agricultural data governance framework capability, or isolated informal activity only.",
+    "L2": "Pilot or ad hoc agricultural data governance framework; narrow coverage, unclear ownership or donor dependence.",
+    "L3": "Operational agricultural data governance framework with defined ownership and partial coverage; adoption or interoperability gaps remain.",
+    "L4": "Scaled and funded agricultural data governance framework, with accountable governance, interoperability and broad use.",
+    "L5": "Institutionalized, inclusive and resilient agricultural data governance framework, continuously improved and supported by verified outcomes."
+   },
+   "gate": true,
+   "max_age": 2,
+   "rubric_status": "Anchored rubric - validate through panel scoring",
+   "calibration_note": "Score through a multi-stakeholder evidence panel; require documentary evidence and record dissent."
+  },
+  {
+   "id": "4.6",
+   "name": "National AI strategy with agriculture component",
+   "source_type": "Local",
+   "role": "Capability",
+   "pillar": "C3",
+   "pillar_name": "C3: Policy, governance & safeguards",
+   "method": "Anchored capability rubric",
+   "direction": "N/A",
+   "cuts": null,
+   "anchors": {
+    "L1": "No credible national ai strategy with agriculture component capability, or isolated informal activity only.",
+    "L2": "Pilot or ad hoc national ai strategy with agriculture component; narrow coverage, unclear ownership or donor dependence.",
+    "L3": "Operational national ai strategy with agriculture component with defined ownership and partial coverage; adoption or interoperability gaps remain.",
+    "L4": "Scaled and funded national ai strategy with agriculture component, with accountable governance, interoperability and broad use.",
+    "L5": "Institutionalized, inclusive and resilient national ai strategy with agriculture component, continuously improved and supported by verified outcomes."
+   },
+   "gate": false,
+   "max_age": 2,
+   "rubric_status": "Anchored rubric - validate through panel scoring",
+   "calibration_note": "Score through a multi-stakeholder evidence panel; require documentary evidence and record dissent."
+  },
+  {
+   "id": "4.7",
+   "name": "Digital ID system coverage (% of population)",
+   "source_type": "Local",
+   "role": "Capability",
+   "pillar": "C3",
+   "pillar_name": "C3: Policy, governance & safeguards",
+   "method": "Quantitative threshold",
+   "direction": "Higher",
+   "cuts": [
+    20,
+    40,
+    60,
+    80
+   ],
+   "anchors": {
+    "L1": "< 20",
+    "L2": "20 to < 40",
+    "L3": "40 to < 60",
+    "L4": "60 to < 80",
+    "L5": ">= 80"
+   },
+   "gate": false,
+   "max_age": 2,
+   "rubric_status": "PROVISIONAL - calibrate against peer distribution",
+   "calibration_note": "Use the suggested level as a starting point only; document any override and recalibrate cut-offs using peer distributions."
+  },
+  {
+   "id": "4.8",
+   "name": "Data sovereignty provisions for agricultural data",
+   "source_type": "Local",
+   "role": "Capability",
+   "pillar": "C3",
+   "pillar_name": "C3: Policy, governance & safeguards",
+   "method": "Anchored capability rubric",
+   "direction": "N/A",
+   "cuts": null,
+   "anchors": {
+    "L1": "No credible data sovereignty provisions for agricultural data capability, or isolated informal activity only.",
+    "L2": "Pilot or ad hoc data sovereignty provisions for agricultural data; narrow coverage, unclear ownership or donor dependence.",
+    "L3": "Operational data sovereignty provisions for agricultural data with defined ownership and partial coverage; adoption or interoperability gaps remain.",
+    "L4": "Scaled and funded data sovereignty provisions for agricultural data, with accountable governance, interoperability and broad use.",
+    "L5": "Institutionalized, inclusive and resilient data sovereignty provisions for agricultural data, continuously improved and supported by verified outcomes."
+   },
+   "gate": false,
+   "max_age": 2,
+   "rubric_status": "Anchored rubric - validate through panel scoring",
+   "calibration_note": "Score through a multi-stakeholder evidence panel; require documentary evidence and record dissent."
+  },
+  {
+   "id": "4.9",
+   "name": "Inter-ministerial coordination mechanism for digital agriculture",
+   "source_type": "Local",
+   "role": "Capability",
+   "pillar": "C3",
+   "pillar_name": "C3: Policy, governance & safeguards",
+   "method": "Anchored capability rubric",
+   "direction": "N/A",
+   "cuts": null,
+   "anchors": {
+    "L1": "No credible inter-ministerial coordination mechanism for digital agriculture capability, or isolated informal activity only.",
+    "L2": "Pilot or ad hoc inter-ministerial coordination mechanism for digital agriculture; narrow coverage, unclear ownership or donor dependence.",
+    "L3": "Operational inter-ministerial coordination mechanism for digital agriculture with defined ownership and partial coverage; adoption or interoperability gaps remain.",
+    "L4": "Scaled and funded inter-ministerial coordination mechanism for digital agriculture, with accountable governance, interoperability and broad use.",
+    "L5": "Institutionalized, inclusive and resilient inter-ministerial coordination mechanism for digital agriculture, continuously improved and supported by verified outcomes."
+   },
+   "gate": true,
+   "max_age": 2,
+   "rubric_status": "Anchored rubric - validate through panel scoring",
+   "calibration_note": "Score through a multi-stakeholder evidence panel; require documentary evidence and record dissent."
+  },
+  {
+   "id": "4.10",
+   "name": "Competition/antitrust framework for digital agricultural markets",
+   "source_type": "Local",
+   "role": "Capability",
+   "pillar": "C3",
+   "pillar_name": "C3: Policy, governance & safeguards",
+   "method": "Anchored capability rubric",
+   "direction": "N/A",
+   "cuts": null,
+   "anchors": {
+    "L1": "No credible competition/antitrust framework for digital agricultural markets capability, or isolated informal activity only.",
+    "L2": "Pilot or ad hoc competition/antitrust framework for digital agricultural markets; narrow coverage, unclear ownership or donor dependence.",
+    "L3": "Operational competition/antitrust framework for digital agricultural markets with defined ownership and partial coverage; adoption or interoperability gaps remain.",
+    "L4": "Scaled and funded competition/antitrust framework for digital agricultural markets, with accountable governance, interoperability and broad use.",
+    "L5": "Institutionalized, inclusive and resilient competition/antitrust framework for digital agricultural markets, continuously improved and supported by verified outcomes."
+   },
+   "gate": false,
+   "max_age": 2,
+   "rubric_status": "Anchored rubric - validate through panel scoring",
+   "calibration_note": "Score through a multi-stakeholder evidence panel; require documentary evidence and record dissent."
+  },
+  {
+   "id": "4.11",
+   "name": "Public procurement rules enabling digital agriculture innovation",
+   "source_type": "Local",
+   "role": "Capability",
+   "pillar": "C3",
+   "pillar_name": "C3: Policy, governance & safeguards",
+   "method": "Anchored capability rubric",
+   "direction": "N/A",
+   "cuts": null,
+   "anchors": {
+    "L1": "No credible public procurement rules enabling digital agriculture innovation capability, or isolated informal activity only.",
+    "L2": "Pilot or ad hoc public procurement rules enabling digital agriculture innovation; narrow coverage, unclear ownership or donor dependence.",
+    "L3": "Operational public procurement rules enabling digital agriculture innovation with defined ownership and partial coverage; adoption or interoperability gaps remain.",
+    "L4": "Scaled and funded public procurement rules enabling digital agriculture innovation, with accountable governance, interoperability and broad use.",
+    "L5": "Institutionalized, inclusive and resilient public procurement rules enabling digital agriculture innovation, continuously improved and supported by verified outcomes."
+   },
+   "gate": false,
+   "max_age": 2,
+   "rubric_status": "Anchored rubric - validate through panel scoring",
+   "calibration_note": "Score through a multi-stakeholder evidence panel; require documentary evidence and record dissent."
+  },
+  {
+   "id": "4.12",
+   "name": "Spectrum allocation for rural/agricultural IoT",
+   "source_type": "Local",
+   "role": "Capability",
+   "pillar": "C3",
+   "pillar_name": "C3: Policy, governance & safeguards",
+   "method": "Anchored capability rubric",
+   "direction": "N/A",
+   "cuts": null,
+   "anchors": {
+    "L1": "No credible spectrum allocation for rural/agricultural iot capability, or isolated informal activity only.",
+    "L2": "Pilot or ad hoc spectrum allocation for rural/agricultural iot; narrow coverage, unclear ownership or donor dependence.",
+    "L3": "Operational spectrum allocation for rural/agricultural iot with defined ownership and partial coverage; adoption or interoperability gaps remain.",
+    "L4": "Scaled and funded spectrum allocation for rural/agricultural iot, with accountable governance, interoperability and broad use.",
+    "L5": "Institutionalized, inclusive and resilient spectrum allocation for rural/agricultural iot, continuously improved and supported by verified outcomes."
+   },
+   "gate": false,
+   "max_age": 2,
+   "rubric_status": "Anchored rubric - validate through panel scoring",
+   "calibration_note": "Score through a multi-stakeholder evidence panel; require documentary evidence and record dissent."
+  },
+  {
+   "id": "4.13",
+   "name": "Responsible AI principles/guidelines for agriculture",
+   "source_type": "Local",
+   "role": "Capability",
+   "pillar": "C3",
+   "pillar_name": "C3: Policy, governance & safeguards",
+   "method": "Anchored capability rubric",
+   "direction": "N/A",
+   "cuts": null,
+   "anchors": {
+    "L1": "No credible responsible ai principles/guidelines for agriculture capability, or isolated informal activity only.",
+    "L2": "Pilot or ad hoc responsible ai principles/guidelines for agriculture; narrow coverage, unclear ownership or donor dependence.",
+    "L3": "Operational responsible ai principles/guidelines for agriculture with defined ownership and partial coverage; adoption or interoperability gaps remain.",
+    "L4": "Scaled and funded responsible ai principles/guidelines for agriculture, with accountable governance, interoperability and broad use.",
+    "L5": "Institutionalized, inclusive and resilient responsible ai principles/guidelines for agriculture, continuously improved and supported by verified outcomes."
+   },
+   "gate": false,
+   "max_age": 2,
+   "rubric_status": "Anchored rubric - validate through panel scoring",
+   "calibration_note": "Score through a multi-stakeholder evidence panel; require documentary evidence and record dissent."
+  },
+  {
+   "id": "5.1",
+   "name": "Mean years of schooling (adults 25+)",
+   "source_type": "Global",
+   "role": "Capability",
+   "pillar": "C4",
+   "pillar_name": "C4: Human & institutional capacity",
+   "method": "Quantitative threshold",
+   "direction": "Higher",
+   "cuts": [
+    4,
+    6,
+    8,
+    10
+   ],
+   "anchors": {
+    "L1": "< 4",
+    "L2": "4 to < 6",
+    "L3": "6 to < 8",
+    "L4": "8 to < 10",
+    "L5": ">= 10"
+   },
+   "gate": false,
+   "max_age": 3,
+   "rubric_status": "PROVISIONAL - calibrate against peer distribution",
+   "calibration_note": "Use the suggested level as a starting point only; document any override and recalibrate cut-offs using peer distributions."
+  },
+  {
+   "id": "5.2",
+   "name": "Adult literacy rate (% age 15+)",
+   "source_type": "Global",
+   "role": "Capability",
+   "pillar": "C4",
+   "pillar_name": "C4: Human & institutional capacity",
+   "method": "Quantitative threshold",
+   "direction": "Higher",
+   "cuts": [
+    50,
+    65,
+    80,
+    90
+   ],
+   "anchors": {
+    "L1": "< 50",
+    "L2": "50 to < 65",
+    "L3": "65 to < 80",
+    "L4": "80 to < 90",
+    "L5": ">= 90"
+   },
+   "gate": false,
+   "max_age": 3,
+   "rubric_status": "PROVISIONAL - calibrate against peer distribution",
+   "calibration_note": "Use the suggested level as a starting point only; document any override and recalibrate cut-offs using peer distributions."
+  },
+  {
+   "id": "5.3",
+   "name": "Tertiary enrollment in STEM fields (% gross)",
+   "source_type": "Global",
+   "role": "Capability",
+   "pillar": "C4",
+   "pillar_name": "C4: Human & institutional capacity",
+   "method": "Quantitative threshold",
+   "direction": "Higher",
+   "cuts": [
+    10,
+    20,
+    30,
+    40
+   ],
+   "anchors": {
+    "L1": "< 10",
+    "L2": "10 to < 20",
+    "L3": "20 to < 30",
+    "L4": "30 to < 40",
+    "L5": ">= 40"
+   },
+   "gate": false,
+   "max_age": 3,
+   "rubric_status": "PROVISIONAL - calibrate against peer distribution",
+   "calibration_note": "Use the suggested level as a starting point only; document any override and recalibrate cut-offs using peer distributions."
+  },
+  {
+   "id": "5.4",
+   "name": "Digital literacy among farmers (%)",
+   "source_type": "Local",
+   "role": "Capability",
+   "pillar": "C4",
+   "pillar_name": "C4: Human & institutional capacity",
+   "method": "Quantitative threshold",
+   "direction": "Higher",
+   "cuts": [
+    10,
+    25,
+    50,
+    75
+   ],
+   "anchors": {
+    "L1": "< 10",
+    "L2": "10 to < 25",
+    "L3": "25 to < 50",
+    "L4": "50 to < 75",
+    "L5": ">= 75"
+   },
+   "gate": false,
+   "max_age": 2,
+   "rubric_status": "PROVISIONAL - calibrate against peer distribution",
+   "calibration_note": "Use the suggested level as a starting point only; document any override and recalibrate cut-offs using peer distributions."
+  },
+  {
+   "id": "5.5",
+   "name": "Extension workers trained in digital tools (%)",
+   "source_type": "Local",
+   "role": "Capability",
+   "pillar": "C4",
+   "pillar_name": "C4: Human & institutional capacity",
+   "method": "Quantitative threshold",
+   "direction": "Higher",
+   "cuts": [
+    10,
+    25,
+    50,
+    75
+   ],
+   "anchors": {
+    "L1": "< 10",
+    "L2": "10 to < 25",
+    "L3": "25 to < 50",
+    "L4": "50 to < 75",
+    "L5": ">= 75"
+   },
+   "gate": true,
+   "max_age": 2,
+   "rubric_status": "PROVISIONAL - calibrate against peer distribution",
+   "calibration_note": "Use the suggested level as a starting point only; document any override and recalibrate cut-offs using peer distributions."
+  },
+  {
+   "id": "5.6",
+   "name": "Farmer-to-digital-extension-worker ratio",
+   "source_type": "Local",
+   "role": "Capability",
+   "pillar": "C4",
+   "pillar_name": "C4: Human & institutional capacity",
+   "method": "Anchored capability rubric",
+   "direction": "N/A",
+   "cuts": null,
+   "anchors": {
+    "L1": "No credible farmer-to-digital-extension-worker ratio capability, or isolated informal activity only.",
+    "L2": "Pilot or ad hoc farmer-to-digital-extension-worker ratio; narrow coverage, unclear ownership or donor dependence.",
+    "L3": "Operational farmer-to-digital-extension-worker ratio with defined ownership and partial coverage; adoption or interoperability gaps remain.",
+    "L4": "Scaled and funded farmer-to-digital-extension-worker ratio, with accountable governance, interoperability and broad use.",
+    "L5": "Institutionalized, inclusive and resilient farmer-to-digital-extension-worker ratio, continuously improved and supported by verified outcomes."
+   },
+   "gate": false,
+   "max_age": 2,
+   "rubric_status": "Anchored rubric - validate through panel scoring",
+   "calibration_note": "Score through a multi-stakeholder evidence panel; require documentary evidence and record dissent."
+  },
+  {
+   "id": "5.7",
+   "name": "Dedicated digital/AI units in Ministry of Agriculture",
+   "source_type": "Local",
+   "role": "Capability",
+   "pillar": "C4",
+   "pillar_name": "C4: Human & institutional capacity",
+   "method": "Anchored capability rubric",
+   "direction": "N/A",
+   "cuts": null,
+   "anchors": {
+    "L1": "No credible dedicated digital/ai units in ministry of agriculture capability, or isolated informal activity only.",
+    "L2": "Pilot or ad hoc dedicated digital/ai units in ministry of agriculture; narrow coverage, unclear ownership or donor dependence.",
+    "L3": "Operational dedicated digital/ai units in ministry of agriculture with defined ownership and partial coverage; adoption or interoperability gaps remain.",
+    "L4": "Scaled and funded dedicated digital/ai units in ministry of agriculture, with accountable governance, interoperability and broad use.",
+    "L5": "Institutionalized, inclusive and resilient dedicated digital/ai units in ministry of agriculture, continuously improved and supported by verified outcomes."
+   },
+   "gate": true,
+   "max_age": 2,
+   "rubric_status": "Anchored rubric - validate through panel scoring",
+   "calibration_note": "Score through a multi-stakeholder evidence panel; require documentary evidence and record dissent."
+  },
+  {
+   "id": "5.8",
+   "name": "University programs in agtech/digital agriculture",
+   "source_type": "Local",
+   "role": "Capability",
+   "pillar": "C4",
+   "pillar_name": "C4: Human & institutional capacity",
+   "method": "Anchored capability rubric",
+   "direction": "N/A",
+   "cuts": null,
+   "anchors": {
+    "L1": "No credible university programs in agtech/digital agriculture capability, or isolated informal activity only.",
+    "L2": "Pilot or ad hoc university programs in agtech/digital agriculture; narrow coverage, unclear ownership or donor dependence.",
+    "L3": "Operational university programs in agtech/digital agriculture with defined ownership and partial coverage; adoption or interoperability gaps remain.",
+    "L4": "Scaled and funded university programs in agtech/digital agriculture, with accountable governance, interoperability and broad use.",
+    "L5": "Institutionalized, inclusive and resilient university programs in agtech/digital agriculture, continuously improved and supported by verified outcomes."
+   },
+   "gate": false,
+   "max_age": 2,
+   "rubric_status": "Anchored rubric - validate through panel scoring",
+   "calibration_note": "Score through a multi-stakeholder evidence panel; require documentary evidence and record dissent."
+  },
+  {
+   "id": "5.9",
+   "name": "Data science/AI training programs for agriculture",
+   "source_type": "Local",
+   "role": "Capability",
+   "pillar": "C4",
+   "pillar_name": "C4: Human & institutional capacity",
+   "method": "Anchored capability rubric",
+   "direction": "N/A",
+   "cuts": null,
+   "anchors": {
+    "L1": "No credible data science/ai training programs for agriculture capability, or isolated informal activity only.",
+    "L2": "Pilot or ad hoc data science/ai training programs for agriculture; narrow coverage, unclear ownership or donor dependence.",
+    "L3": "Operational data science/ai training programs for agriculture with defined ownership and partial coverage; adoption or interoperability gaps remain.",
+    "L4": "Scaled and funded data science/ai training programs for agriculture, with accountable governance, interoperability and broad use.",
+    "L5": "Institutionalized, inclusive and resilient data science/ai training programs for agriculture, continuously improved and supported by verified outcomes."
+   },
+   "gate": false,
+   "max_age": 2,
+   "rubric_status": "Anchored rubric - validate through panel scoring",
+   "calibration_note": "Score through a multi-stakeholder evidence panel; require documentary evidence and record dissent."
+  },
+  {
+   "id": "5.10",
+   "name": "Digital skills training reach (% of farmer population per year)",
+   "source_type": "Local",
+   "role": "Capability",
+   "pillar": "C4",
+   "pillar_name": "C4: Human & institutional capacity",
+   "method": "Quantitative threshold",
+   "direction": "Higher",
+   "cuts": [
+    2,
+    5,
+    10,
+    20
+   ],
+   "anchors": {
+    "L1": "< 2",
+    "L2": "2 to < 5",
+    "L3": "5 to < 10",
+    "L4": "10 to < 20",
+    "L5": ">= 20"
+   },
+   "gate": false,
+   "max_age": 2,
+   "rubric_status": "PROVISIONAL - calibrate against peer distribution",
+   "calibration_note": "Use the suggested level as a starting point only; document any override and recalibrate cut-offs using peer distributions."
+  },
+  {
+   "id": "5.11",
+   "name": "Institutional digital maturity of key agricultural agencies",
+   "source_type": "Local",
+   "role": "Capability",
+   "pillar": "C4",
+   "pillar_name": "C4: Human & institutional capacity",
+   "method": "Anchored capability rubric",
+   "direction": "N/A",
+   "cuts": null,
+   "anchors": {
+    "L1": "No credible institutional digital maturity of key agricultural agencies capability, or isolated informal activity only.",
+    "L2": "Pilot or ad hoc institutional digital maturity of key agricultural agencies; narrow coverage, unclear ownership or donor dependence.",
+    "L3": "Operational institutional digital maturity of key agricultural agencies with defined ownership and partial coverage; adoption or interoperability gaps remain.",
+    "L4": "Scaled and funded institutional digital maturity of key agricultural agencies, with accountable governance, interoperability and broad use.",
+    "L5": "Institutionalized, inclusive and resilient institutional digital maturity of key agricultural agencies, continuously improved and supported by verified outcomes."
+   },
+   "gate": false,
+   "max_age": 2,
+   "rubric_status": "Anchored rubric - validate through panel scoring",
+   "calibration_note": "Score through a multi-stakeholder evidence panel; require documentary evidence and record dissent."
+  },
+  {
+   "id": "5.12",
+   "name": "Gender balance in digital agriculture workforce",
+   "source_type": "Local",
+   "role": "Capability",
+   "pillar": "C4",
+   "pillar_name": "C4: Human & institutional capacity",
+   "method": "Quantitative threshold",
+   "direction": "Higher",
+   "cuts": [
+    20,
+    35,
+    45,
+    50
+   ],
+   "anchors": {
+    "L1": "< 20",
+    "L2": "20 to < 35",
+    "L3": "35 to < 45",
+    "L4": "45 to < 50",
+    "L5": ">= 50"
+   },
+   "gate": false,
+   "max_age": 2,
+   "rubric_status": "PROVISIONAL - calibrate against peer distribution",
+   "calibration_note": "Use the suggested level as a starting point only; document any override and recalibrate cut-offs using peer distributions."
+  },
+  {
+   "id": "6.1",
+   "name": "Global Innovation Index (GII) score",
+   "source_type": "Global",
+   "role": "Ecosystem",
+   "pillar": "E1",
+   "pillar_name": "E1: Innovation & private sector",
+   "method": "Quantitative threshold",
+   "direction": "Higher",
+   "cuts": [
+    25,
+    35,
+    45,
+    55
+   ],
+   "anchors": {
+    "L1": "< 25",
+    "L2": "25 to < 35",
+    "L3": "35 to < 45",
+    "L4": "45 to < 55",
+    "L5": ">= 55"
+   },
+   "gate": false,
+   "max_age": 3,
+   "rubric_status": "PROVISIONAL - calibrate against peer distribution",
+   "calibration_note": "Use the suggested level as a starting point only; document any override and recalibrate cut-offs using peer distributions."
+  },
+  {
+   "id": "6.2",
+   "name": "R&D expenditure (% of GDP)",
+   "source_type": "Global",
+   "role": "Ecosystem",
+   "pillar": "E1",
+   "pillar_name": "E1: Innovation & private sector",
+   "method": "Quantitative threshold",
+   "direction": "Higher",
+   "cuts": [
+    0.1,
+    0.5,
+    1,
+    2
+   ],
+   "anchors": {
+    "L1": "< 0.1",
+    "L2": "0.1 to < 0.5",
+    "L3": "0.5 to < 1",
+    "L4": "1 to < 2",
+    "L5": ">= 2"
+   },
+   "gate": false,
+   "max_age": 3,
+   "rubric_status": "PROVISIONAL - calibrate against peer distribution",
+   "calibration_note": "Use the suggested level as a starting point only; document any override and recalibrate cut-offs using peer distributions."
+  },
+  {
+   "id": "6.3",
+   "name": "Business Ready (B-READY) score",
+   "source_type": "Global",
+   "role": "Ecosystem",
+   "pillar": "E1",
+   "pillar_name": "E1: Innovation & private sector",
+   "method": "Quantitative threshold",
+   "direction": "Higher",
+   "cuts": [
+    30,
+    45,
+    60,
+    75
+   ],
+   "anchors": {
+    "L1": "< 30",
+    "L2": "30 to < 45",
+    "L3": "45 to < 60",
+    "L4": "60 to < 75",
+    "L5": ">= 75"
+   },
+   "gate": false,
+   "max_age": 3,
+   "rubric_status": "PROVISIONAL - calibrate against peer distribution",
+   "calibration_note": "Use the suggested level as a starting point only; document any override and recalibrate cut-offs using peer distributions."
+  },
+  {
+   "id": "6.4",
+   "name": "Active agtech startups/firms",
+   "source_type": "Local",
+   "role": "Ecosystem",
+   "pillar": "E1",
+   "pillar_name": "E1: Innovation & private sector",
+   "method": "Anchored capability rubric",
+   "direction": "N/A",
+   "cuts": null,
+   "anchors": {
+    "L1": "No credible active agtech startups/firms capability, or isolated informal activity only.",
+    "L2": "Pilot or ad hoc active agtech startups/firms; narrow coverage, unclear ownership or donor dependence.",
+    "L3": "Operational active agtech startups/firms with defined ownership and partial coverage; adoption or interoperability gaps remain.",
+    "L4": "Scaled and funded active agtech startups/firms, with accountable governance, interoperability and broad use.",
+    "L5": "Institutionalized, inclusive and resilient active agtech startups/firms, continuously improved and supported by verified outcomes."
+   },
+   "gate": false,
+   "max_age": 2,
+   "rubric_status": "Anchored rubric - validate through panel scoring",
+   "calibration_note": "Score through a multi-stakeholder evidence panel; require documentary evidence and record dissent."
+  },
+  {
+   "id": "6.5",
+   "name": "Venture capital/investment in agtech (annual USD)",
+   "source_type": "Local",
+   "role": "Ecosystem",
+   "pillar": "E1",
+   "pillar_name": "E1: Innovation & private sector",
+   "method": "Anchored capability rubric",
+   "direction": "N/A",
+   "cuts": null,
+   "anchors": {
+    "L1": "No credible venture capital/investment in agtech capability, or isolated informal activity only.",
+    "L2": "Pilot or ad hoc venture capital/investment in agtech; narrow coverage, unclear ownership or donor dependence.",
+    "L3": "Operational venture capital/investment in agtech with defined ownership and partial coverage; adoption or interoperability gaps remain.",
+    "L4": "Scaled and funded venture capital/investment in agtech, with accountable governance, interoperability and broad use.",
+    "L5": "Institutionalized, inclusive and resilient venture capital/investment in agtech, continuously improved and supported by verified outcomes."
+   },
+   "gate": false,
+   "max_age": 2,
+   "rubric_status": "Anchored rubric - validate through panel scoring",
+   "calibration_note": "Score through a multi-stakeholder evidence panel; require documentary evidence and record dissent."
+  },
+  {
+   "id": "6.6",
+   "name": "Agtech accelerators/incubators",
+   "source_type": "Local",
+   "role": "Ecosystem",
+   "pillar": "E1",
+   "pillar_name": "E1: Innovation & private sector",
+   "method": "Anchored capability rubric",
+   "direction": "N/A",
+   "cuts": null,
+   "anchors": {
+    "L1": "No credible agtech accelerators/incubators capability, or isolated informal activity only.",
+    "L2": "Pilot or ad hoc agtech accelerators/incubators; narrow coverage, unclear ownership or donor dependence.",
+    "L3": "Operational agtech accelerators/incubators with defined ownership and partial coverage; adoption or interoperability gaps remain.",
+    "L4": "Scaled and funded agtech accelerators/incubators, with accountable governance, interoperability and broad use.",
+    "L5": "Institutionalized, inclusive and resilient agtech accelerators/incubators, continuously improved and supported by verified outcomes."
+   },
+   "gate": false,
+   "max_age": 2,
+   "rubric_status": "Anchored rubric - validate through panel scoring",
+   "calibration_note": "Score through a multi-stakeholder evidence panel; require documentary evidence and record dissent."
+  },
+  {
+   "id": "6.7",
+   "name": "Agribusiness firms using AI/ML in operations (%)",
+   "source_type": "Local",
+   "role": "Ecosystem",
+   "pillar": "E1",
+   "pillar_name": "E1: Innovation & private sector",
+   "method": "Quantitative threshold",
+   "direction": "Higher",
+   "cuts": [
+    5,
+    15,
+    30,
+    50
+   ],
+   "anchors": {
+    "L1": "< 5",
+    "L2": "5 to < 15",
+    "L3": "15 to < 30",
+    "L4": "30 to < 50",
+    "L5": ">= 50"
+   },
+   "gate": false,
+   "max_age": 2,
+   "rubric_status": "PROVISIONAL - calibrate against peer distribution",
+   "calibration_note": "Use the suggested level as a starting point only; document any override and recalibrate cut-offs using peer distributions."
+  },
+  {
+   "id": "6.8",
+   "name": "Regulatory sandboxes for agtech/fintech",
+   "source_type": "Local",
+   "role": "Ecosystem",
+   "pillar": "E1",
+   "pillar_name": "E1: Innovation & private sector",
+   "method": "Anchored capability rubric",
+   "direction": "N/A",
+   "cuts": null,
+   "anchors": {
+    "L1": "No credible regulatory sandboxes for agtech/fintech capability, or isolated informal activity only.",
+    "L2": "Pilot or ad hoc regulatory sandboxes for agtech/fintech; narrow coverage, unclear ownership or donor dependence.",
+    "L3": "Operational regulatory sandboxes for agtech/fintech with defined ownership and partial coverage; adoption or interoperability gaps remain.",
+    "L4": "Scaled and funded regulatory sandboxes for agtech/fintech, with accountable governance, interoperability and broad use.",
+    "L5": "Institutionalized, inclusive and resilient regulatory sandboxes for agtech/fintech, continuously improved and supported by verified outcomes."
+   },
+   "gate": false,
+   "max_age": 2,
+   "rubric_status": "Anchored rubric - validate through panel scoring",
+   "calibration_note": "Score through a multi-stakeholder evidence panel; require documentary evidence and record dissent."
+  },
+  {
+   "id": "6.9",
+   "name": "Public-private partnerships in digital agriculture",
+   "source_type": "Local",
+   "role": "Ecosystem",
+   "pillar": "E1",
+   "pillar_name": "E1: Innovation & private sector",
+   "method": "Anchored capability rubric",
+   "direction": "N/A",
+   "cuts": null,
+   "anchors": {
+    "L1": "No credible public-private partnerships in digital agriculture capability, or isolated informal activity only.",
+    "L2": "Pilot or ad hoc public-private partnerships in digital agriculture; narrow coverage, unclear ownership or donor dependence.",
+    "L3": "Operational public-private partnerships in digital agriculture with defined ownership and partial coverage; adoption or interoperability gaps remain.",
+    "L4": "Scaled and funded public-private partnerships in digital agriculture, with accountable governance, interoperability and broad use.",
+    "L5": "Institutionalized, inclusive and resilient public-private partnerships in digital agriculture, continuously improved and supported by verified outcomes."
+   },
+   "gate": false,
+   "max_age": 2,
+   "rubric_status": "Anchored rubric - validate through panel scoring",
+   "calibration_note": "Score through a multi-stakeholder evidence panel; require documentary evidence and record dissent."
+  },
+  {
+   "id": "6.10",
+   "name": "Government grants/funding for agtech innovation (annual USD)",
+   "source_type": "Local",
+   "role": "Ecosystem",
+   "pillar": "E1",
+   "pillar_name": "E1: Innovation & private sector",
+   "method": "Anchored capability rubric",
+   "direction": "N/A",
+   "cuts": null,
+   "anchors": {
+    "L1": "No credible government grants/funding for agtech innovation capability, or isolated informal activity only.",
+    "L2": "Pilot or ad hoc government grants/funding for agtech innovation; narrow coverage, unclear ownership or donor dependence.",
+    "L3": "Operational government grants/funding for agtech innovation with defined ownership and partial coverage; adoption or interoperability gaps remain.",
+    "L4": "Scaled and funded government grants/funding for agtech innovation, with accountable governance, interoperability and broad use.",
+    "L5": "Institutionalized, inclusive and resilient government grants/funding for agtech innovation, continuously improved and supported by verified outcomes."
+   },
+   "gate": false,
+   "max_age": 2,
+   "rubric_status": "Anchored rubric - validate through panel scoring",
+   "calibration_note": "Score through a multi-stakeholder evidence panel; require documentary evidence and record dissent."
+  },
+  {
+   "id": "6.11",
+   "name": "Digital financial services platforms for agriculture",
+   "source_type": "Local",
+   "role": "Ecosystem",
+   "pillar": "E1",
+   "pillar_name": "E1: Innovation & private sector",
+   "method": "Anchored capability rubric",
+   "direction": "N/A",
+   "cuts": null,
+   "anchors": {
+    "L1": "No credible digital financial services platforms for agriculture capability, or isolated informal activity only.",
+    "L2": "Pilot or ad hoc digital financial services platforms for agriculture; narrow coverage, unclear ownership or donor dependence.",
+    "L3": "Operational digital financial services platforms for agriculture with defined ownership and partial coverage; adoption or interoperability gaps remain.",
+    "L4": "Scaled and funded digital financial services platforms for agriculture, with accountable governance, interoperability and broad use.",
+    "L5": "Institutionalized, inclusive and resilient digital financial services platforms for agriculture, continuously improved and supported by verified outcomes."
+   },
+   "gate": false,
+   "max_age": 2,
+   "rubric_status": "Anchored rubric - validate through panel scoring",
+   "calibration_note": "Score through a multi-stakeholder evidence panel; require documentary evidence and record dissent."
+  },
+  {
+   "id": "6.12",
+   "name": "Digital public goods adopted in agriculture",
+   "source_type": "Local",
+   "role": "Ecosystem",
+   "pillar": "E1",
+   "pillar_name": "E1: Innovation & private sector",
+   "method": "Anchored capability rubric",
+   "direction": "N/A",
+   "cuts": null,
+   "anchors": {
+    "L1": "No credible digital public goods adopted in agriculture capability, or isolated informal activity only.",
+    "L2": "Pilot or ad hoc digital public goods adopted in agriculture; narrow coverage, unclear ownership or donor dependence.",
+    "L3": "Operational digital public goods adopted in agriculture with defined ownership and partial coverage; adoption or interoperability gaps remain.",
+    "L4": "Scaled and funded digital public goods adopted in agriculture, with accountable governance, interoperability and broad use.",
+    "L5": "Institutionalized, inclusive and resilient digital public goods adopted in agriculture, continuously improved and supported by verified outcomes."
+   },
+   "gate": false,
+   "max_age": 2,
+   "rubric_status": "Anchored rubric - validate through panel scoring",
+   "calibration_note": "Score through a multi-stakeholder evidence panel; require documentary evidence and record dissent."
+  },
+  {
+   "id": "6.13",
+   "name": "SME access to digital agriculture tools/platforms (%)",
+   "source_type": "Local",
+   "role": "Ecosystem",
+   "pillar": "E1",
+   "pillar_name": "E1: Innovation & private sector",
+   "method": "Quantitative threshold",
+   "direction": "Higher",
+   "cuts": [
+    10,
+    25,
+    50,
+    75
+   ],
+   "anchors": {
+    "L1": "< 10",
+    "L2": "10 to < 25",
+    "L3": "25 to < 50",
+    "L4": "50 to < 75",
+    "L5": ">= 75"
+   },
+   "gate": false,
+   "max_age": 2,
+   "rubric_status": "PROVISIONAL - calibrate against peer distribution",
+   "calibration_note": "Use the suggested level as a starting point only; document any override and recalibrate cut-offs using peer distributions."
+  },
+  {
+   "id": "7.1",
+   "name": "AI-related scientific publications per million population",
+   "source_type": "Global",
+   "role": "Ecosystem",
+   "pillar": "E2",
+   "pillar_name": "E2: Responsible AI & emerging tech",
+   "method": "Quantitative threshold",
+   "direction": "Higher",
+   "cuts": [
+    1,
+    5,
+    20,
+    50
+   ],
+   "anchors": {
+    "L1": "< 1",
+    "L2": "1 to < 5",
+    "L3": "5 to < 20",
+    "L4": "20 to < 50",
+    "L5": ">= 50"
+   },
+   "gate": false,
+   "max_age": 3,
+   "rubric_status": "PROVISIONAL - calibrate against peer distribution",
+   "calibration_note": "Use the suggested level as a starting point only; document any override and recalibrate cut-offs using peer distributions."
+  },
+  {
+   "id": "7.2",
+   "name": "AI systems deployed in public agricultural sector",
+   "source_type": "Local",
+   "role": "Ecosystem",
+   "pillar": "E2",
+   "pillar_name": "E2: Responsible AI & emerging tech",
+   "method": "Anchored capability rubric",
+   "direction": "N/A",
+   "cuts": null,
+   "anchors": {
+    "L1": "No credible ai systems deployed in public agricultural sector capability, or isolated informal activity only.",
+    "L2": "Pilot or ad hoc ai systems deployed in public agricultural sector; narrow coverage, unclear ownership or donor dependence.",
+    "L3": "Operational ai systems deployed in public agricultural sector with defined ownership and partial coverage; adoption or interoperability gaps remain.",
+    "L4": "Scaled and funded ai systems deployed in public agricultural sector, with accountable governance, interoperability and broad use.",
+    "L5": "Institutionalized, inclusive and resilient ai systems deployed in public agricultural sector, continuously improved and supported by verified outcomes."
+   },
+   "gate": false,
+   "max_age": 2,
+   "rubric_status": "Anchored rubric - validate through panel scoring",
+   "calibration_note": "Score through a multi-stakeholder evidence panel; require documentary evidence and record dissent."
+  },
+  {
+   "id": "7.3",
+   "name": "AI-enabled advisory services (farmer reach %)",
+   "source_type": "Local",
+   "role": "Ecosystem",
+   "pillar": "E2",
+   "pillar_name": "E2: Responsible AI & emerging tech",
+   "method": "Quantitative threshold",
+   "direction": "Higher",
+   "cuts": [
+    2,
+    10,
+    25,
+    50
+   ],
+   "anchors": {
+    "L1": "< 2",
+    "L2": "2 to < 10",
+    "L3": "10 to < 25",
+    "L4": "25 to < 50",
+    "L5": ">= 50"
+   },
+   "gate": false,
+   "max_age": 2,
+   "rubric_status": "PROVISIONAL - calibrate against peer distribution",
+   "calibration_note": "Use the suggested level as a starting point only; document any override and recalibrate cut-offs using peer distributions."
+  },
+  {
+   "id": "7.4",
+   "name": "AI for crop/pest/disease detection and monitoring",
+   "source_type": "Local",
+   "role": "Ecosystem",
+   "pillar": "E2",
+   "pillar_name": "E2: Responsible AI & emerging tech",
+   "method": "Quantitative threshold",
+   "direction": "Higher",
+   "cuts": [
+    10,
+    25,
+    50,
+    75
+   ],
+   "anchors": {
+    "L1": "< 10",
+    "L2": "10 to < 25",
+    "L3": "25 to < 50",
+    "L4": "50 to < 75",
+    "L5": ">= 75"
+   },
+   "gate": false,
+   "max_age": 2,
+   "rubric_status": "PROVISIONAL - calibrate against peer distribution",
+   "calibration_note": "Use the suggested level as a starting point only; document any override and recalibrate cut-offs using peer distributions."
+  },
+  {
+   "id": "7.5",
+   "name": "AI in agricultural finance (credit scoring, insurance)",
+   "source_type": "Local",
+   "role": "Ecosystem",
+   "pillar": "E2",
+   "pillar_name": "E2: Responsible AI & emerging tech",
+   "method": "Quantitative threshold",
+   "direction": "Higher",
+   "cuts": [
+    10,
+    25,
+    50,
+    75
+   ],
+   "anchors": {
+    "L1": "< 10",
+    "L2": "10 to < 25",
+    "L3": "25 to < 50",
+    "L4": "50 to < 75",
+    "L5": ">= 75"
+   },
+   "gate": false,
+   "max_age": 2,
+   "rubric_status": "PROVISIONAL - calibrate against peer distribution",
+   "calibration_note": "Use the suggested level as a starting point only; document any override and recalibrate cut-offs using peer distributions."
+  },
+  {
+   "id": "7.6",
+   "name": "AI for supply chain optimization and traceability",
+   "source_type": "Local",
+   "role": "Ecosystem",
+   "pillar": "E2",
+   "pillar_name": "E2: Responsible AI & emerging tech",
+   "method": "Quantitative threshold",
+   "direction": "Higher",
+   "cuts": [
+    10,
+    25,
+    50,
+    75
+   ],
+   "anchors": {
+    "L1": "< 10",
+    "L2": "10 to < 25",
+    "L3": "25 to < 50",
+    "L4": "50 to < 75",
+    "L5": ">= 75"
+   },
+   "gate": false,
+   "max_age": 2,
+   "rubric_status": "PROVISIONAL - calibrate against peer distribution",
+   "calibration_note": "Use the suggested level as a starting point only; document any override and recalibrate cut-offs using peer distributions."
+  },
+  {
+   "id": "7.7",
+   "name": "AI for climate forecasting and agricultural risk management",
+   "source_type": "Local",
+   "role": "Ecosystem",
+   "pillar": "E2",
+   "pillar_name": "E2: Responsible AI & emerging tech",
+   "method": "Quantitative threshold",
+   "direction": "Higher",
+   "cuts": [
+    10,
+    25,
+    50,
+    75
+   ],
+   "anchors": {
+    "L1": "< 10",
+    "L2": "10 to < 25",
+    "L3": "25 to < 50",
+    "L4": "50 to < 75",
+    "L5": ">= 75"
+   },
+   "gate": false,
+   "max_age": 2,
+   "rubric_status": "PROVISIONAL - calibrate against peer distribution",
+   "calibration_note": "Use the suggested level as a starting point only; document any override and recalibrate cut-offs using peer distributions."
+  },
+  {
+   "id": "7.8",
+   "name": "AI talent in agriculture sector",
+   "source_type": "Local",
+   "role": "Ecosystem",
+   "pillar": "E2",
+   "pillar_name": "E2: Responsible AI & emerging tech",
+   "method": "Anchored capability rubric",
+   "direction": "N/A",
+   "cuts": null,
+   "anchors": {
+    "L1": "No credible ai talent in agriculture sector capability, or isolated informal activity only.",
+    "L2": "Pilot or ad hoc ai talent in agriculture sector; narrow coverage, unclear ownership or donor dependence.",
+    "L3": "Operational ai talent in agriculture sector with defined ownership and partial coverage; adoption or interoperability gaps remain.",
+    "L4": "Scaled and funded ai talent in agriculture sector, with accountable governance, interoperability and broad use.",
+    "L5": "Institutionalized, inclusive and resilient ai talent in agriculture sector, continuously improved and supported by verified outcomes."
+   },
+   "gate": false,
+   "max_age": 2,
+   "rubric_status": "Anchored rubric - validate through panel scoring",
+   "calibration_note": "Score through a multi-stakeholder evidence panel; require documentary evidence and record dissent."
+  },
+  {
+   "id": "7.9",
+   "name": "Cybersecurity of agricultural digital systems",
+   "source_type": "Local",
+   "role": "Ecosystem",
+   "pillar": "E2",
+   "pillar_name": "E2: Responsible AI & emerging tech",
+   "method": "Anchored capability rubric",
+   "direction": "N/A",
+   "cuts": null,
+   "anchors": {
+    "L1": "No security ownership, policy or incident response for agricultural digital systems; national CERT does not cover the sector.",
+    "L2": "Generic national framework exists on paper; no agricultural system has a completed security assessment or a named security owner.",
+    "L3": "Major agricultural systems have named security owners and at least one completed assessment or audit; incident response remains ad hoc; farmer-data systems are not prioritized.",
+    "L4": "Sector systems are covered by CERT / incident-response arrangements, periodic audits and access controls; tested backups and a breach-notification duty are evidenced.",
+    "L5": "Institutionalized sector security programme: recurring audits, monitored incidents with recorded lessons, farmer-data systems classified as protected assets, funded security budget."
+   },
+   "gate": true,
+   "max_age": 2,
+   "rubric_status": "Anchored rubric - validate through panel scoring",
+   "calibration_note": "v1.3 recast: replaces the national GCI proxy. If only the national index is available, import it as context and record a Data Gap here."
+  },
+  {
+   "id": "7.10",
+   "name": "Explainability and transparency of AI systems in agriculture",
+   "source_type": "Local",
+   "role": "Ecosystem",
+   "pillar": "E2",
+   "pillar_name": "E2: Responsible AI & emerging tech",
+   "method": "Anchored capability rubric",
+   "direction": "N/A",
+   "cuts": null,
+   "anchors": {
+    "L1": "No disclosure that AI is used in farmer-facing services; no documentation exists.",
+    "L2": "AI use is acknowledged but there is no farmer-facing explanation and no documentation of model purpose or limits.",
+    "L3": "Major AI services publish plain-language descriptions of purpose, inputs and limitations; no independent review has occurred.",
+    "L4": "Documented model descriptions exist for deployed systems; advisories flag uncertainty; at least one independent review has been performed.",
+    "L5": "A sector standard requires explainability for farmer-affecting AI decisions, with audited compliance and accessible explanations in local languages."
+   },
+   "gate": false,
+   "max_age": 2,
+   "rubric_status": "Anchored rubric - validate through panel scoring",
+   "calibration_note": "v1.3 recast: replaces the pseudo-quantified 0-100 score."
+  },
+  {
+   "id": "7.11",
+   "name": "Bias monitoring and mitigation in agricultural AI",
+   "source_type": "Local",
+   "role": "Ecosystem",
+   "pillar": "E2",
+   "pillar_name": "E2: Responsible AI & emerging tech",
+   "method": "Anchored capability rubric",
+   "direction": "N/A",
+   "cuts": null,
+   "anchors": {
+    "L1": "No consideration of bias or exclusion in agricultural AI or digital targeting systems.",
+    "L2": "Bias is acknowledged as a risk; nothing is measured.",
+    "L3": "At least one deployed system has been tested for differential accuracy or coverage across regions, gender or farm types, with findings documented.",
+    "L4": "Routine disaggregated performance monitoring for major systems, with corrective actions recorded.",
+    "L5": "Mandatory pre-deployment bias assessment plus ongoing monitoring with published results and redress where harm is found."
+   },
+   "gate": false,
+   "max_age": 2,
+   "rubric_status": "Anchored rubric - validate through panel scoring",
+   "calibration_note": "v1.3 recast: replaces the pseudo-quantified 0-100 score."
+  },
+  {
+   "id": "7.12",
+   "name": "Farmer consent and data rights in AI systems",
+   "source_type": "Local",
+   "role": "Ecosystem",
+   "pillar": "E2",
+   "pillar_name": "E2: Responsible AI & emerging tech",
+   "method": "Anchored capability rubric",
+   "direction": "N/A",
+   "cuts": null,
+   "anchors": {
+    "L1": "Farmer data is used without a consent basis; no data-rights framework exists.",
+    "L2": "Consent is collected pro forma (unexplained tick-box); access, correction or deletion rights do not work in practice.",
+    "L3": "Clear consent at registration for stated purposes; farmers can access their records; rights are partly exercised in practice.",
+    "L4": "Purpose limitation, consent management, and working access / correction / portability channels are evidenced by usage records.",
+    "L5": "Enforceable farmer data rights with independent oversight, audited consent practices, and demonstrated remedies."
+   },
+   "gate": true,
+   "max_age": 2,
+   "rubric_status": "Anchored rubric - validate through panel scoring",
+   "calibration_note": "v1.3 recast: replaces the pseudo-quantified 0-100 score. Core gate - anchor quality is priority 1."
+  },
+  {
+   "id": "8.1",
+   "name": "Prevalence of undernourishment (% of population)",
+   "source_type": "Global",
+   "role": "Outcome",
+   "pillar": "O1",
+   "pillar_name": "O1: Inclusion, sustainability & outcomes",
+   "method": "Quantitative threshold",
+   "direction": "Lower",
+   "cuts": [
+    25,
+    15,
+    7.5,
+    2.5
+   ],
+   "anchors": {
+    "L1": "> 25",
+    "L2": "> 15 to <= 25",
+    "L3": "> 7.5 to <= 15",
+    "L4": "> 2.5 to <= 7.5",
+    "L5": "<= 2.5"
+   },
+   "gate": false,
+   "max_age": 3,
+   "rubric_status": "PROVISIONAL - calibrate against peer distribution",
+   "calibration_note": "Use the suggested level as a starting point only; document any override and recalibrate cut-offs using peer distributions."
+  },
+  {
+   "id": "8.2",
+   "name": "Account ownership, female (% age 15+)",
+   "source_type": "Global",
+   "role": "Outcome",
+   "pillar": "O1",
+   "pillar_name": "O1: Inclusion, sustainability & outcomes",
+   "method": "Quantitative threshold",
+   "direction": "Higher",
+   "cuts": [
+    20,
+    40,
+    60,
+    80
+   ],
+   "anchors": {
+    "L1": "< 20",
+    "L2": "20 to < 40",
+    "L3": "40 to < 60",
+    "L4": "60 to < 80",
+    "L5": ">= 80"
+   },
+   "gate": false,
+   "max_age": 3,
+   "rubric_status": "PROVISIONAL - calibrate against peer distribution",
+   "calibration_note": "Use the suggested level as a starting point only; document any override and recalibrate cut-offs using peer distributions."
+  },
+  {
+   "id": "8.3",
+   "name": "Gender gap in account ownership (male % minus female %)",
+   "source_type": "Global",
+   "role": "Outcome",
+   "pillar": "O1",
+   "pillar_name": "O1: Inclusion, sustainability & outcomes",
+   "method": "Quantitative threshold",
+   "direction": "Lower",
+   "cuts": [
+    25,
+    15,
+    8,
+    3
+   ],
+   "anchors": {
+    "L1": "> 25",
+    "L2": "> 15 to <= 25",
+    "L3": "> 8 to <= 15",
+    "L4": "> 3 to <= 8",
+    "L5": "<= 3"
+   },
+   "gate": false,
+   "max_age": 3,
+   "rubric_status": "PROVISIONAL - calibrate against peer distribution",
+   "calibration_note": "Use the suggested level as a starting point only; document any override and recalibrate cut-offs using peer distributions."
+  },
+  {
+   "id": "8.4",
+   "name": "Mobile money account (% age 15+)",
+   "source_type": "Global",
+   "role": "Outcome",
+   "pillar": "O1",
+   "pillar_name": "O1: Inclusion, sustainability & outcomes",
+   "method": "Quantitative threshold",
+   "direction": "Higher",
+   "cuts": [
+    10,
+    25,
+    50,
+    75
+   ],
+   "anchors": {
+    "L1": "< 10",
+    "L2": "10 to < 25",
+    "L3": "25 to < 50",
+    "L4": "50 to < 75",
+    "L5": ">= 75"
+   },
+   "gate": false,
+   "max_age": 3,
+   "rubric_status": "PROVISIONAL - calibrate against peer distribution",
+   "calibration_note": "Use the suggested level as a starting point only; document any override and recalibrate cut-offs using peer distributions."
+  },
+  {
+   "id": "8.5",
+   "name": "Women who own land (% of agricultural holders)",
+   "source_type": "Global",
+   "role": "Outcome",
+   "pillar": "O1",
+   "pillar_name": "O1: Inclusion, sustainability & outcomes",
+   "method": "Quantitative threshold",
+   "direction": "Higher",
+   "cuts": [
+    10,
+    25,
+    40,
+    50
+   ],
+   "anchors": {
+    "L1": "< 10",
+    "L2": "10 to < 25",
+    "L3": "25 to < 40",
+    "L4": "40 to < 50",
+    "L5": ">= 50"
+   },
+   "gate": false,
+   "max_age": 3,
+   "rubric_status": "PROVISIONAL - calibrate against peer distribution",
+   "calibration_note": "Use the suggested level as a starting point only; document any override and recalibrate cut-offs using peer distributions."
+  },
+  {
+   "id": "8.6",
+   "name": "Gender gap in mobile phone ownership (percentage points)",
+   "source_type": "Local",
+   "role": "Outcome",
+   "pillar": "O1",
+   "pillar_name": "O1: Inclusion, sustainability & outcomes",
+   "method": "Quantitative threshold",
+   "direction": "Lower",
+   "cuts": [
+    20,
+    10,
+    5,
+    2
+   ],
+   "anchors": {
+    "L1": "> 20",
+    "L2": "> 10 to <= 20",
+    "L3": "> 5 to <= 10",
+    "L4": "> 2 to <= 5",
+    "L5": "<= 2"
+   },
+   "gate": false,
+   "max_age": 3,
+   "rubric_status": "PROVISIONAL - calibrate against peer distribution",
+   "calibration_note": "Use the suggested level as a starting point only; document any override and recalibrate cut-offs using peer distributions."
+  },
+  {
+   "id": "8.7",
+   "name": "Women using digital agricultural services (% of women farmers)",
+   "source_type": "Local",
+   "role": "Outcome",
+   "pillar": "O1",
+   "pillar_name": "O1: Inclusion, sustainability & outcomes",
+   "method": "Quantitative threshold",
+   "direction": "Higher",
+   "cuts": [
+    10,
+    25,
+    50,
+    75
+   ],
+   "anchors": {
+    "L1": "< 10",
+    "L2": "10 to < 25",
+    "L3": "25 to < 50",
+    "L4": "50 to < 75",
+    "L5": ">= 75"
+   },
+   "gate": false,
+   "max_age": 3,
+   "rubric_status": "PROVISIONAL - calibrate against peer distribution",
+   "calibration_note": "Use the suggested level as a starting point only; document any override and recalibrate cut-offs using peer distributions."
+  },
+  {
+   "id": "8.8",
+   "name": "Youth (under 35) using digital agricultural services (%)",
+   "source_type": "Local",
+   "role": "Outcome",
+   "pillar": "O1",
+   "pillar_name": "O1: Inclusion, sustainability & outcomes",
+   "method": "Quantitative threshold",
+   "direction": "Higher",
+   "cuts": [
+    10,
+    25,
+    50,
+    75
+   ],
+   "anchors": {
+    "L1": "< 10",
+    "L2": "10 to < 25",
+    "L3": "25 to < 50",
+    "L4": "50 to < 75",
+    "L5": ">= 75"
+   },
+   "gate": false,
+   "max_age": 3,
+   "rubric_status": "PROVISIONAL - calibrate against peer distribution",
+   "calibration_note": "Use the suggested level as a starting point only; document any override and recalibrate cut-offs using peer distributions."
+  },
+  {
+   "id": "8.9",
+   "name": "Smallholder farmers reached by digital services (% of total)",
+   "source_type": "Local",
+   "role": "Outcome",
+   "pillar": "O1",
+   "pillar_name": "O1: Inclusion, sustainability & outcomes",
+   "method": "Quantitative threshold",
+   "direction": "Higher",
+   "cuts": [
+    10,
+    25,
+    50,
+    75
+   ],
+   "anchors": {
+    "L1": "< 10",
+    "L2": "10 to < 25",
+    "L3": "25 to < 50",
+    "L4": "50 to < 75",
+    "L5": ">= 75"
+   },
+   "gate": false,
+   "max_age": 3,
+   "rubric_status": "PROVISIONAL - calibrate against peer distribution",
+   "calibration_note": "Use the suggested level as a starting point only; document any override and recalibrate cut-offs using peer distributions."
+  },
+  {
+   "id": "8.10",
+   "name": "Affordability of digital agriculture services for poorest quintile",
+   "source_type": "Local",
+   "role": "Outcome",
+   "pillar": "O1",
+   "pillar_name": "O1: Inclusion, sustainability & outcomes",
+   "method": "Quantitative threshold",
+   "direction": "Higher",
+   "cuts": [
+    20,
+    40,
+    60,
+    80
+   ],
+   "anchors": {
+    "L1": "< 20",
+    "L2": "20 to < 40",
+    "L3": "40 to < 60",
+    "L4": "60 to < 80",
+    "L5": ">= 80"
+   },
+   "gate": false,
+   "max_age": 3,
+   "rubric_status": "PROVISIONAL - calibrate against peer distribution",
+   "calibration_note": "v1.3 defined method: share of bottom-quintile rural households for whom the defined digital-agriculture service basket (device amortization + data + service fees) costs no more than 5% of household expenditure. Populate from FDUS / household survey."
+  },
+  {
+   "id": "8.11",
+   "name": "Services available in local languages (% of major platforms)",
+   "source_type": "Local",
+   "role": "Outcome",
+   "pillar": "O1",
+   "pillar_name": "O1: Inclusion, sustainability & outcomes",
+   "method": "Quantitative threshold",
+   "direction": "Higher",
+   "cuts": [
+    25,
+    50,
+    75,
+    90
+   ],
+   "anchors": {
+    "L1": "< 25",
+    "L2": "25 to < 50",
+    "L3": "50 to < 75",
+    "L4": "75 to < 90",
+    "L5": ">= 90"
+   },
+   "gate": false,
+   "max_age": 3,
+   "rubric_status": "PROVISIONAL - calibrate against peer distribution",
+   "calibration_note": "Use the suggested level as a starting point only; document any override and recalibrate cut-offs using peer distributions."
+  },
+  {
+   "id": "8.12",
+   "name": "Documented yield improvement from digital tools (%)",
+   "source_type": "Local",
+   "role": "Outcome",
+   "pillar": "O1",
+   "pillar_name": "O1: Inclusion, sustainability & outcomes",
+   "method": "Anchored evidence-quality rubric",
+   "direction": "N/A",
+   "cuts": null,
+   "anchors": {
+    "L1": "No evidence of yield effects from digital tools.",
+    "L2": "Vendor or self-reported claims only.",
+    "L3": "Independent descriptive study (before/after or cross-section) without a counterfactual.",
+    "L4": "Credible quasi-experimental or contribution analysis for at least one major service.",
+    "L5": "Counterfactual evidence replicated across seasons, regions or multiple services."
+   },
+   "gate": false,
+   "max_age": 3,
+   "rubric_status": "Anchored rubric - validate through panel scoring",
+   "calibration_note": "v1.3 recast: scores the QUALITY of impact evidence, not the size of claimed impact - prevents rewarding larger unverified numbers."
+  },
+  {
+   "id": "8.13",
+   "name": "Documented income improvement from digital tools (%)",
+   "source_type": "Local",
+   "role": "Outcome",
+   "pillar": "O1",
+   "pillar_name": "O1: Inclusion, sustainability & outcomes",
+   "method": "Anchored evidence-quality rubric",
+   "direction": "N/A",
+   "cuts": null,
+   "anchors": {
+    "L1": "No evidence of income effects from digital tools.",
+    "L2": "Vendor or self-reported claims only.",
+    "L3": "Independent descriptive study (before/after or cross-section) without a counterfactual.",
+    "L4": "Credible quasi-experimental or contribution analysis for at least one major service.",
+    "L5": "Counterfactual evidence replicated across seasons, regions or multiple services."
+   },
+   "gate": false,
+   "max_age": 3,
+   "rubric_status": "Anchored rubric - validate through panel scoring",
+   "calibration_note": "v1.3 recast: scores the QUALITY of impact evidence, not the size of claimed impact."
+  },
+  {
+   "id": "8.14",
+   "name": "Farmers using digital climate services (%)",
+   "source_type": "Local",
+   "role": "Outcome",
+   "pillar": "O1",
+   "pillar_name": "O1: Inclusion, sustainability & outcomes",
+   "method": "Quantitative threshold",
+   "direction": "Higher",
+   "cuts": [
+    10,
+    25,
+    50,
+    75
+   ],
+   "anchors": {
+    "L1": "< 10",
+    "L2": "10 to < 25",
+    "L3": "25 to < 50",
+    "L4": "50 to < 75",
+    "L5": ">= 75"
+   },
+   "gate": false,
+   "max_age": 3,
+   "rubric_status": "PROVISIONAL - calibrate against peer distribution",
+   "calibration_note": "Use the suggested level as a starting point only; document any override and recalibrate cut-offs using peer distributions."
+  },
+  {
+   "id": "8.15",
+   "name": "Environmental sustainability of digital agriculture systems",
+   "source_type": "Local",
+   "role": "Outcome",
+   "pillar": "O1",
+   "pillar_name": "O1: Inclusion, sustainability & outcomes",
+   "method": "Quantitative threshold",
+   "direction": "Higher",
+   "cuts": [
+    20,
+    40,
+    60,
+    80
+   ],
+   "anchors": {
+    "L1": "< 20",
+    "L2": "20 to < 40",
+    "L3": "40 to < 60",
+    "L4": "60 to < 80",
+    "L5": ">= 80"
+   },
+   "gate": false,
+   "max_age": 3,
+   "rubric_status": "PROVISIONAL - calibrate against peer distribution",
+   "calibration_note": "Use the suggested level as a starting point only; document any override and recalibrate cut-offs using peer distributions."
+  }
+ ],
+ "ladder": [
+  {
+   "rung": "T0",
+   "step": 1,
+   "name": "Automated diagnostic",
+   "decider": "machine",
+   "decision": null,
+   "guidance": "The machine collects public evidence and routes named gaps to data stewards. Nothing here claims a maturity stage - it is an engagement package assembled for your Step 2 decision."
+  },
+  {
+   "rung": "D1",
+   "step": 2,
+   "name": "Engage / mode / budget",
+   "decider": "TTL",
+   "decision": "Engage or defer; assessment mode; budget and team",
+   "options": [
+    {
+     "name": "Defer",
+     "means": "No assessment now; the desk pack is archived and revisited when the country context or the lending pipeline changes.",
+     "cost": "No budget; no counterpart time.",
+     "suits": "Weak government demand, no mandate prospect, or a crowded pipeline."
+    },
+    {
+     "name": "Rapid assessment",
+     "means": "Desk evidence plus a short remote validation with the digital authority and the statistics office; core gates only.",
+     "cost": "Lowest cost and counterpart burden; a narrower evidence base.",
+     "suits": "A decision needed quickly, or a country where the desk already covers most core gates."
+    },
+    {
+     "name": "Standard assessment",
+     "means": "Full indicator set with a mission, an evidence panel and a validation workshop - the mode the methodology is calibrated for.",
+     "cost": "Highest counterpart burden; the only mode that supports a validated stage across all pillars.",
+     "suits": "A live or imminent operation where the roadmap will inform financing."
+    },
+    {
+     "name": "Standard with farmer demand survey",
+     "means": "Standard, plus the farmer demand and use survey attached to the evidence plan.",
+     "cost": "Adds survey cost and time to the Standard mode.",
+     "suits": "Where adoption risk is the central question and demand-side evidence is thin."
+    }
+   ],
+   "guidance": "Decide whether to engage, in what assessment mode, and with what budget and team. The machine drafts the memo and frames the options; the decision - including the rejected alternatives - is yours and is recorded."
+  },
+  {
+   "rung": "D2",
+   "step": 3,
+   "name": "Targeting hypotheses",
+   "decider": "TTL",
+   "decision": "Chain shortlist and segmentation to propose to government",
+   "guidance": "Shortlist the value chains and segmentation to propose to government. Use the M1 targeting module in the exported workbook for the analysis; record the shortlist (and the chains you rejected) as the Step 3 decision."
+  },
+  {
+   "rung": "D3",
+   "step": 4,
+   "name": "Evidence plan & mission design",
+   "decider": "TTL / management",
+   "decision": "Evidence plan and mission design",
+   "guidance": "Plan how every unmeasured core gate and stale item will be evidenced, and design the mission. Each named gap already carries an authoritative steward route from Step 1."
+  },
+  {
+   "rung": "G",
+   "step": 5,
+   "name": "Government gates",
+   "decider": "Government",
+   "decision": "Mandate letter; steering committee; endorsed chain selection",
+   "guidance": "Government decides: mandate letter, steering committee, endorsed chain selection. Nothing before this step carries a stage - the engagement-package rule holds until the mandate exists."
+  },
+  {
+   "rung": "D4",
+   "step": 6,
+   "name": "Validated read-outs",
+   "decider": "Evidence panel / steering committee",
+   "decision": "Validated read-outs to the workshop",
+   "guidance": "The evidence panel validates the read-outs. Setting an assessor level converts machine imports to human-validated evidence; every core gate must be measured before a stage can be read out to the workshop."
+  },
+  {
+   "rung": "D5",
+   "step": 7,
+   "name": "Portfolio scenario",
+   "decider": "Steering committee (finance sign-off)",
+   "decision": "Portfolio scenario and envelope",
+   "guidance": "Assemble the portfolio scenario and envelope with finance sign-off, using the workbook's investment appraisal (unit costs, inclusion and DPI gates)."
+  },
+  {
+   "rung": "D6",
+   "step": 8,
+   "name": "Adopt & disclose",
+   "decider": "Decision authority / government",
+   "decision": "Adopt, disclose and version",
+   "guidance": "Adopt the DAR, disclose it, and version the record. Export and archive the final workbook as the auditable artefact."
+  }
+ ],
+ "roles": [
+  "TTL",
+  "Assessment lead",
+  "Evidence panel",
+  "Digital authority",
+  "Finance seat",
+  "Statistics office",
+  "Private-sector panel",
+  "Farmer representative",
+  "Independent challenger",
+  "Steering committee",
+  "Model steward"
+ ],
+ "dar_outline": [
+  {
+   "n": "1",
+   "title": "Country and sector context",
+   "content": "Agricultural structure, need and climate risk; national digital context",
+   "produced_by": "C0 profile + M9 hazard profile + M5 imports",
+   "ready_at": 1,
+   "inputs": [
+    1
+   ],
+   "note": "The Step 1 diagnostic assembles the context and hazard profile; the M5 prior-diagnostics imports still need steward verification at their registration gate."
+  },
+  {
+   "n": "2",
+   "title": "Where the country stands",
+   "content": "CMS/EMS/OES with coverage, confidence and uncertainty; stage; pathway; momentum; solution stack; core-gate status",
+   "produced_by": "Scoring core (v1.2.1 read-outs)",
+   "ready_at": 6,
+   "inputs": [
+    1,
+    4,
+    6
+   ],
+   "needs_decisions": [
+    "G"
+   ],
+   "note": "Provisional from Step 1, but no stage is claimable until the government mandate exists and the read-outs are validated at Step 6."
+  },
+  {
+   "n": "3",
+   "title": "Vision, targeting and beneficiaries",
+   "content": "Priority value chains, regions and farmer segments; digital bind per chain; demand evidence",
+   "produced_by": "M1 + FDUS",
+   "ready_at": 7,
+   "inputs": [
+    3,
+    5,
+    7
+   ],
+   "needs_decisions": [
+    "G"
+   ],
+   "note": "Shortlisted at Step 3 as a proposal and endorsed by government at Step 5; the regional re-projection and the farmer demand evidence arrive with the Step 7 analysis."
+  },
+  {
+   "n": "4",
+   "title": "The investment program",
+   "content": "Sequenced candidates with screen results, E&S class, DPI reuse decisions, dependencies and implementation owners",
+   "produced_by": "Screen + M6 + M7 + M10",
+   "ready_at": 7,
+   "inputs": [
+    6,
+    7
+   ],
+   "note": "Needs validated read-outs before candidates can be screened."
+  },
+  {
+   "n": "5",
+   "title": "Costs and financing",
+   "content": "Costed program under envelope scenarios; fiscal-headroom statement; instrument routing; donor consolidation plan",
+   "produced_by": "M2 + M3",
+   "ready_at": 7,
+   "inputs": [
+    1,
+    7
+   ],
+   "note": "The Step 7 portfolio scenario and envelope, with finance sign-off."
+  },
+  {
+   "n": "6",
+   "title": "Policy and regulatory actions",
+   "content": "C3-derived reform actions routed to DPF/PforR instruments; legal drafting needs",
+   "produced_by": "Screen + M3",
+   "ready_at": 7,
+   "inputs": [
+    6,
+    7
+   ],
+   "note": "Built on C3 evidence validated at Step 6, then routed to instruments with the Step 7 scenario."
+  },
+  {
+   "n": "7",
+   "title": "Delivery and governance",
+   "content": "Mandate and ownership matrix; steering arrangements; adoption instrument and timeline",
+   "produced_by": "M7 + M8",
+   "ready_at": 8,
+   "inputs": [
+    5,
+    7,
+    8
+   ],
+   "needs_decisions": [
+    "G"
+   ],
+   "note": "The mandate letter and steering committee come from the Step 5 government gates; the ownership matrix and the adoption instrument follow at Steps 7-8."
+  },
+  {
+   "n": "8",
+   "title": "Climate alignment",
+   "content": "NDC/CCDR crosswalk; Paris-alignment tags; climate-finance routes",
+   "produced_by": "M9",
+   "ready_at": 7,
+   "inputs": [
+    1,
+    7
+   ],
+   "note": "Hazard profile arrives with the Step 1 context; financing routes follow the Step 7 scenario."
+  },
+  {
+   "n": "9",
+   "title": "Results and learning",
+   "content": "Results chains with baselines; sentinel monitoring set; measurement gap register and ASA plan; evaluation strategy",
+   "produced_by": "M4",
+   "ready_at": 8,
+   "inputs": [
+    4,
+    6,
+    8
+   ],
+   "note": "The evidence plan at Step 4 identifies the gaps; the measurement gap register is seeded from the scored census in the Step 6 evidence rounds and finalised for adoption."
+  },
+  {
+   "n": "10",
+   "title": "Risks and safeguards",
+   "content": "E&S pre-screening; data rights, consent and redress; political-economy risks and mitigations; communications plan",
+   "produced_by": "M8 + M10 + annexes",
+   "ready_at": 8,
+   "inputs": [
+    7,
+    8
+   ],
+   "note": "E&S and data-rights screening come with the Step 7 appraisal; the political-economy and communications material is assembled at Step 8."
+  },
+  {
+   "n": "A",
+   "title": "Annexes",
+   "content": "Full indicator evidence base; dissent record; response to farmer evidence; version and configuration record",
+   "produced_by": "Workbook + M10 + section 10",
+   "ready_at": 8,
+   "inputs": [
+    1,
+    6,
+    8
+   ],
+   "note": "The evidence base and audit trail export straight from this app."
+  }
+ ],
+ "methodology": {
+  "purpose": "DAR Studio is a working prototype of the DAMM v1.3 methodology - the diagnostic that underpins a World Bank Digital Agriculture Roadmap. It assembles what public evidence can tell us about a country's digital-agriculture readiness, shows plainly what it cannot tell us, and carries a task team through the decisions that turn a diagnostic into a roadmap.",
+  "not": "It is not an official World Bank system, not a country ranking, and not a scoring service. It produces a structured basis for professional judgement; it does not replace it. Every stage it displays is provisional until a human validates the evidence behind it.",
+  "rules": [
+   {
+    "title": "Machines compute, humans gate",
+    "text": "Everything mechanical - fetching public indicators, applying threshold rules, recomputing read-outs, drafting memo narratives - is automated. Everything consequential - whether to engage, which chains to target, what the evidence means, whether to adopt - is a human decision, recorded with the role that made it. Step 1 is the machine's own step and hands over to you when it finishes; from Step 2 onwards the ladder moves only when a human records the decision."
+   },
+   {
+    "title": "Three read-outs, never one number",
+    "text": "Capability, ecosystem and outcomes are reported separately and never averaged into a single index. A country can build strong systems before outcomes move, and a composite would hide exactly that gap - which is usually the finding that matters most for sequencing investment."
+   },
+   {
+    "title": "Foundations are not tradeable",
+    "text": "Thirteen core-gate indicators are treated as prerequisites, not as points. A core gate at Level 1 caps the overall stage regardless of strength elsewhere, because no amount of innovation activity compensates for absent rural connectivity or a missing farmer registry."
+   },
+   {
+    "title": "Silence beats a confident guess",
+    "text": "Where evidence is too thin, the model suppresses the score rather than computing one. A pillar below its coverage gate reads Not rated, and any composite containing it is suppressed too. An unmeasured core gate suppresses the stage entirely - so a gap can never be hidden by simply not measuring it."
+   },
+   {
+    "title": "Evidence carries its provenance and its age",
+    "text": "Every value records where it came from. Imported readings carry their source and observation year and are marked provisional until an assessor validates them; assessor judgements record the acting role and the time they were made. Where an observation year is present and older than this model allows for that indicator, the value is flagged stale until it is refreshed."
+   },
+   {
+    "title": "Nothing before the mandate is an assessment",
+    "text": "Work assembled before the government mandate is an engagement package - preparatory material for a Bank decision, not a judgement about the country. No maturity stage is claimable from it, however complete the evidence looks."
+   }
+  ],
+  "chain": [
+   {
+    "step": "Indicator",
+    "text": "Each of the indicators carries a rubric: either numeric thresholds or a written anchor per level."
+   },
+   {
+    "step": "Level",
+    "text": "Evidence yields a level from 1 to 5 - machine-suggested from a threshold, or set by an assessor, who always wins. An indicator marked as a data gap contributes nothing."
+   },
+   {
+    "step": "Pillar",
+    "text": "A pillar score is the plain mean of the levels assigned within it - but only if enough of its indicators are levelled to clear the coverage gate."
+   },
+   {
+    "step": "Composite",
+    "text": "Capability combines its four pillar scores using the weights below; ecosystem combines its two; outcomes is a single pillar. If any member pillar is unrated, the composite is unrated."
+   },
+   {
+    "step": "Stage",
+    "text": "A non-compensatory cascade turns the three read-outs into one stage, applying the gate rules and coverage thresholds first - which is why a stage can be withheld even when scores exist."
+   }
+  ],
+  "provenance": "The methodology is defined in the DAMM v1.3 draft package (Framework Specification, Operator Guide, Workbook, and a Red Team & Stress Test report that returned a conditional pass for pilot preparation). The app reads it from one versioned configuration file rather than scattering it through the code. The indicator census, rubrics, pillar weights, coverage gates and confidence weights are extracted directly from the workbook's cells; the level bands and stage thresholds are transcribed from it; and the decision ladder, the prohibitions and the wording on this page are authored in that same configuration. The non-compensatory stage cascade itself lives in the scoring engine, which is regression-tested against the Bhutan worked example - that test pins the worked example and the gate behaviours, not every possible combination."
+ },
+ "glossary": [
+  {
+   "term": "CMS",
+   "name": "Capability Maturity Score",
+   "short": "Capability",
+   "text": "Government capability, on the 1-5 level scale. Each of the four capability pillars (connectivity; data and DPI; policy and governance; human capacity) is the plain mean of the levels assigned within it, and CMS combines those four pillar scores using the pillar weights. It is reported only when every one of the four pillars has at least 60% of its indicators levelled; if any pillar falls short, CMS reads Not rated rather than being computed from a partial picture."
+  },
+  {
+   "term": "EMS",
+   "name": "Ecosystem Maturity Score",
+   "short": "Ecosystem",
+   "text": "The same calculation over the two ecosystem pillars (innovation and private sector; responsible AI and emerging tech), describing the market and innovation environment around government capability. It too is suppressed unless both of its pillars clear 60% coverage."
+  },
+  {
+   "term": "OES",
+   "name": "Outcome & Equity Score",
+   "short": "Outcomes",
+   "text": "The read-out for the single outcomes pillar - inclusion, sustainability and realised results - so it is that pillar's own mean level, not a weighted blend. It is deliberately kept separate from capability: a country can build systems without yet moving outcomes, and the model refuses to average that away."
+  },
+  {
+   "term": "Stage",
+   "name": "Maturity stage",
+   "short": "Overall stage",
+   "text": "The single overall read-out, running from Stage 1 (Foundation constrained) through Stage 2 (Capability building), Stage 3 (Ecosystem scaling) and Stage 4 (Integrated scale) to Stage 5 (Transformative & inclusive). It is derived from CMS, EMS and OES together and is non-compensatory: a core gate at Level 1 caps it at Stage 1, an unmeasured core gate or thin capability evidence suppresses it entirely, and no stage is valid until human validation. Strength in one area cannot buy off a foundational weakness in another."
+  },
+  {
+   "term": "Core gates",
+   "name": "Core gate indicators",
+   "short": "Foundational checks",
+   "text": "Thirteen foundational indicators - such as rural connectivity, a national farmer registry and cybersecurity capability - that the model treats as prerequisites rather than as points to be traded off. Any one of them at Level 1 caps the stage at Stage 1; any one left unmeasured means no stage can be claimed at all."
+  },
+  {
+   "term": "Stale items",
+   "name": "Stale evidence",
+   "short": "Past their vintage",
+   "text": "Levelled indicators whose observation year is older than the maximum age this model allows for them - two years for most, three for the slower-moving ones. The count spans every pillar, including the C0 context profile. Each stale item needs a refresh or a recorded exception before the read-outs can be relied on."
+  },
+  {
+   "term": "Coverage",
+   "name": "Coverage gate",
+   "short": "Evidence sufficiency",
+   "text": "The share of a pillar's indicators that carry an assigned level. Below 60% the pillar score is suppressed instead of computed, and any composite containing that pillar is suppressed with it - so a confident-looking number is never produced from thin evidence. A separate 70% capability-coverage threshold governs whether an overall stage may be issued at all."
+  },
+  {
+   "term": "Provisional",
+   "name": "Provisional level",
+   "short": "Machine-suggested",
+   "text": "A level the machine derived from a threshold rule, not yet confirmed by an assessor. Provisional levels do feed the scores you see - in a Step 1 pack they are the only input - which is precisely why no stage is claimable until a human sets the assessor level at Step 6 and the reading becomes validated evidence."
+  },
+  {
+   "term": "Engagement package",
+   "name": "Engagement-package rule",
+   "short": "Pre-mandate status",
+   "text": "Everything assembled before the government mandate (Step 5) is preparatory material for a Bank decision, not an assessment of the country. No maturity stage is claimable from it, however complete the evidence looks."
+  }
+ ],
+ "core_gates": [
+  "2.1",
+  "2.5",
+  "2.9",
+  "3.3",
+  "3.11",
+  "4.1",
+  "4.2",
+  "4.5",
+  "4.9",
+  "5.5",
+  "5.7",
+  "7.9",
+  "7.12"
+ ]
+}

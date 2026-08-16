@@ -1,0 +1,9 @@
+﻿pillar_id,pillar_name,role,indicators,core_gates,egypt_values_captured_by_app
+C0,Agricultural context & need,Context (not scored),8,0,4
+C1,Connectivity & affordable access,Capability,11,3,6
+C2,Data infrastructure & DPI,Capability,12,2,1
+C3,"Policy, governance & safeguards",Capability,13,4,1
+C4,Human & institutional capacity,Capability,13,2,3
+E1,Innovation & private sector,Ecosystem,13,0,1
+E2,Responsible AI & emerging tech,Ecosystem,12,2,0
+O1,"Inclusion, sustainability & outcomes",Outcome,15,0,5
