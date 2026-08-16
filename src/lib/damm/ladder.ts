@@ -1,4 +1,5 @@
 import type { ChapterReadiness, DammModel, RecordedDecision } from "./types.ts";
+import { DAR_OUTLINE } from "./outline.ts";
 
 function stepNum(step: number | string): number {
   return Number(step);
@@ -39,37 +40,37 @@ export function chapterReadiness(
   const recorded = new Set(decisions.map((d) => stepNum(d.step)));
   const reached = step1Done ? Math.max(1, ...decisions.map((d) => stepNum(d.step)), 1) : 0;
 
-  return model.dar_outline.map((ch) => {
+  return DAR_OUTLINE.map((ch) => {
     const blockers: string[] = [];
-    const needs = ch.needs_decisions ?? [];
+    const needs = ch.needsDecisions ?? [];
     if (needs.includes("G") && !recorded.has(5)) {
       blockers.push("Government gates (Step 5) have not been recorded.");
     }
-    const lastInput = Math.max(...ch.inputs, ch.ready_at);
+    const lastInput = Math.max(...ch.inputs, ch.readyAt);
     if (!step1Done && lastInput >= 1) {
       blockers.push("Step 1 automated diagnostic has not finished.");
     }
     for (const inputStep of ch.inputs) {
       if (inputStep === 1) continue;
-      if (!recorded.has(inputStep) && inputStep <= ch.ready_at) {
+      if (!recorded.has(inputStep) && inputStep <= ch.readyAt) {
         const rung = model.ladder.find((r) => r.step === inputStep);
         blockers.push(
           `Step ${inputStep}${rung ? ` (${rung.name})` : ""} has not been recorded.`,
         );
       }
     }
-    if (reached < ch.ready_at && !recorded.has(ch.ready_at) && ch.ready_at !== 1) {
-      const rung = model.ladder.find((r) => r.step === ch.ready_at);
-      if (!blockers.some((b) => b.includes(`Step ${ch.ready_at}`))) {
+    if (reached < ch.readyAt && !recorded.has(ch.readyAt) && ch.readyAt !== 1) {
+      const rung = model.ladder.find((r) => r.step === ch.readyAt);
+      if (!blockers.some((b) => b.includes(`Step ${ch.readyAt}`))) {
         blockers.push(
-          `Chapter is produced at Step ${ch.ready_at}${rung ? ` — ${rung.name}` : ""}.`,
+          `Chapter is produced at Step ${ch.readyAt}${rung ? ` — ${rung.name}` : ""}.`,
         );
       }
     }
 
-    // Chapter 1 is the diagnostic pack. Chapter 2 is a provisional standings
-    // note from Step 1 — the claim policy, not readiness, withholds the stage.
-    const provisional = step1Done && (ch.n === "1" || ch.n === "2");
+    // The agrifood and ecosystem diagnostics are provisional from Step 1 — the
+    // claim policy, not readiness, is what withholds a maturity stage.
+    const provisional = step1Done && (ch.n === "2" || ch.n === "3");
 
     let status: ChapterReadiness["status"] = "not_started";
     if (blockers.length === 0 || provisional) status = "inputs_ready";
@@ -80,9 +81,9 @@ export function chapterReadiness(
       title: ch.title,
       status,
       blockers: provisional ? blockers.filter((b) => !b.includes("Step 1 automated")) : blockers,
-      readyAt: ch.ready_at,
-      producedBy: ch.produced_by,
-      note: ch.note,
+      readyAt: ch.readyAt,
+      producedBy: ch.producedBy,
+      note: ch.note ?? "",
     };
   });
 }

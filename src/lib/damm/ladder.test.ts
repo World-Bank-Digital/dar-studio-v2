@@ -30,11 +30,15 @@ describe("ladder", () => {
     assert.equal(currentOpenStep(decisions, true), 4);
   });
 
-  it("makes chapter 2 draftable after the diagnostic", () => {
+  it("makes the diagnostic chapters draftable after Step 1, but not the executive summary", () => {
     const chapters = chapterReadiness(model, [], true);
-    assert.equal(chapters.find((c) => c.n === "1")?.status, "inputs_ready");
+    // Ch.2 agrifood diagnostic and Ch.3 ecosystem assessment are provisional from Step 1.
     assert.equal(chapters.find((c) => c.n === "2")?.status, "inputs_ready");
-    assert.notEqual(chapters.find((c) => c.n === "3")?.status, "inputs_ready");
+    assert.equal(chapters.find((c) => c.n === "3")?.status, "inputs_ready");
+    // Ch.1 is the executive summary; it is written last, at Step 8.
+    assert.notEqual(chapters.find((c) => c.n === "1")?.status, "inputs_ready");
+    // Ch.15 sequences the roadmap and cannot precede the portfolio scenario.
+    assert.notEqual(chapters.find((c) => c.n === "15")?.status, "inputs_ready");
   });
 
   it("unlocks later chapters once the ladder is complete", () => {

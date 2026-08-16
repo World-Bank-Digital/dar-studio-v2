@@ -1,4 +1,7 @@
+// NOTE: written for the pre-2026-08-17 flat-tab UI; the workspace now uses
+// grouped navigation. qa-delivery.mjs and qa-auth.mjs are the canonical loops.
 import { chromium } from "playwright";
+import { shotPath } from "./qa-paths.mjs";
 
 const base = process.argv[2] || "http://127.0.0.1:8080";
 const browser = await chromium.launch({ headless: true });
@@ -15,7 +18,7 @@ page.on("console", (m) => {
 });
 
 async function shot(name) {
-  await page.screenshot({ path: `/workspace/screenshots/${name}.png`, fullPage: true });
+  await page.screenshot({ path: shotPath(name), fullPage: true });
 }
 
 function realErrors() {

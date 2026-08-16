@@ -37,26 +37,159 @@ export interface DossierHit {
 /** Dossier rows never write evidence.value / assessor_level. Enforced at persist. */
 export const DOSSIER_CANNOT_WRITE_EVIDENCE = true;
 
+/**
+ * Build a dossier lead straight from a search result.
+ *
+ * The dossier collects *documents*, not figures, so a real search provider
+ * answers it completely — there is nothing for a language model to add, and
+ * asking one to recall URLs is how unreachable links got in. Title, URL, year
+ * and excerpt all come from the provider's own response.
+ */
+export function dossierHitFromSearch(
+  hit: { title: string; url: string; snippet: string; text: string; publishedYear: number | null },
+  informs: DossierInforms = "named-lead",
+): DossierHit | null {
+  if (!isHttpUrl(hit.url) || isBlockedHost(hit.url)) return null;
+  const host = hostOf(hit.url);
+  if (!host) return null;
+  const excerpt = (hit.snippet || hit.text).replace(/\s+/g, " ").trim();
+  if (!hit.title.trim() && !excerpt) return null;
+  return {
+    title: (hit.title.trim() || host).slice(0, 300),
+    summary: excerpt.slice(0, 600),
+    year: hit.publishedYear,
+    // The publisher is the host until a human names it. `classifySource` reads
+    // the URL, so credibility grading is unaffected by this placeholder.
+    sourceName: host,
+    sourceUrl: hit.url,
+    quote: excerpt ? excerpt.slice(0, 400) : null,
+    informs,
+    relatedIndicator: null,
+  };
+}
+
 const INFORMS: DossierInforms[] = ["chapter-1", "chapter-2", "named-lead", "research-task"];
 
-export function dossierTopics(countryName: string, iso3: string, chains: string[] = []): string[] {
+/** The assessment domains the roadmap method requires evidence for. */
+export type DossierDomain =
+  | "agrifood-diagnostic"
+  | "digital-ecosystem"
+  | "farmer-registry"
+  | "dpi-interoperability"
+  | "inclusion"
+  | "institutions"
+  | "technology-ai"
+  | "foresight"
+  | "legal-governance"
+  | "investment-financing";
+
+export interface DossierTopicSpec {
+  query: string;
+  /** Where a hit on this topic is most likely to be useful. */
+  informs: DossierInforms;
+  domain: DossierDomain;
+  /**
+   * Whether to confine this query to the national statistical domains.
+   *
+   * Only statistical questions belong there. Laws live in the gazette,
+   * mandates in ministry sites, AI strategies with the digital authority, and
+   * programme evaluations with the international institutions — scoping those
+   * to the statistics office returns its front page instead of the document,
+   * which is how a first live sweep came back with four fifths of its results
+   * from a single host.
+   */
+  preferNationalStats: boolean;
+}
+
+/**
+ * The dossier's search agenda.
+ *
+ * Derived from the roadmap method's assessment domains rather than assembled ad
+ * hoc, so the sweep is auditable against the method: every domain the roadmap
+ * must form a view on has at least one query pointed at it, and a domain that
+ * returns nothing is visible as a gap rather than as an absence nobody noticed.
+ *
+ * These are retrieval queries, not instructions to a model. The dossier collects
+ * citable documents and never writes evidence values or prose — the discipline
+ * about what may be concluded from a document lives in the scoring and drafting
+ * layers, not here.
+ */
+export function dossierTopicSpecs(
+  countryName: string,
+  iso3: string,
+  chains: string[] = [],
+): DossierTopicSpec[] {
+  const c = countryName;
   const chain = chains.length ? chains.slice(0, 4).join(", ") : "priority agricultural value chains";
-  const nso = nsoDomainsFor(iso3);
-  const site = nso.length ? ` Prefer site:${nso.join(" OR site:")}.` : "";
+
+  const t = (
+    query: string,
+    informs: DossierInforms,
+    domain: DossierDomain,
+    preferNationalStats = false,
+  ): DossierTopicSpec => ({ query, informs, domain, preferNationalStats });
+
   return [
-    `${countryName} national digital agriculture strategy OR e-agriculture policy official${site}`,
-    `${countryName} data protection privacy law agriculture personal data official gazette`,
-    `${countryName} national AI strategy agriculture water food official`,
-    `${countryName} farmer registry database MALR ministry of agriculture official`,
-    `${countryName} rural mobile coverage 3G 4G telecom regulator official`,
-    `${countryName} digital agricultural extension advisory platform official OR FAO`,
-    `${countryName} agtech agri-fintech digital finance farmers official OR donor`,
-    `${countryName} agricultural census statistics office ${chain}`,
-    `${countryName} FAO World Bank IFAD digital agriculture programme evaluation`,
-    `${countryName} inter-ministerial digital agriculture coordination mechanism official`,
-    `${countryName} agricultural data governance interoperability standards official`,
-    `${countryName} cybersecurity agricultural digital systems ministry official`,
+    // Agrifood structure — the sector the roadmap serves.
+    t(`${c} agricultural census holdings smallholder farm size statistics office`, "chapter-1", "agrifood-diagnostic", true),
+    t(`${c} agriculture employment GDP share national accounts official`, "chapter-1", "agrifood-diagnostic", true),
+    t(`${c} land tenure tenancy sharecropping agricultural holdings official`, "chapter-1", "agrifood-diagnostic", true),
+    t(`${c} ${chain} value chain production marketing official report`, "chapter-1", "agrifood-diagnostic"),
+    t(`${c} agricultural credit insurance smallholder finance central bank`, "chapter-1", "agrifood-diagnostic"),
+
+    // Existing digital systems and their actual use.
+    t(`${c} national digital agriculture strategy OR e-agriculture policy official`, "chapter-2", "digital-ecosystem"),
+    t(`${c} digital agricultural extension advisory platform official OR FAO`, "chapter-2", "digital-ecosystem"),
+    t(`${c} agricultural market information system prices platform official`, "chapter-2", "digital-ecosystem"),
+    t(`${c} agricultural traceability export certification system official`, "chapter-2", "digital-ecosystem"),
+    t(`${c} agtech agri-fintech private sector digital services farmers`, "named-lead", "digital-ecosystem"),
+
+    // The registry, treated as a strategic object in its own right.
+    t(`${c} farmer registry database ministry of agriculture official`, "chapter-2", "farmer-registry"),
+    t(`${c} farmer registration coverage enrolment numbers official report`, "research-task", "farmer-registry"),
+    t(`${c} agricultural subsidy payment beneficiary database official`, "chapter-2", "farmer-registry"),
+
+    // What agriculture could reuse instead of rebuilding.
+    t(`${c} national digital identity coverage authority official`, "chapter-2", "dpi-interoperability"),
+    t(`${c} digital payments interoperability national switch central bank`, "chapter-2", "dpi-interoperability"),
+    t(`${c} government data exchange interoperability framework API standards official`, "named-lead", "dpi-interoperability"),
+    t(`${c} national geospatial data infrastructure cadastre land records official`, "chapter-2", "dpi-interoperability"),
+    t(`${c} government cloud data centre hosting policy official`, "named-lead", "dpi-interoperability"),
+
+    // Who is actually reached, and who is not.
+    t(`${c} rural mobile coverage 3G 4G broadband telecom regulator official`, "chapter-2", "inclusion"),
+    t(`${c} women farmers land ownership access to services statistics`, "chapter-1", "inclusion", true),
+    t(`${c} rural digital literacy mobile phone ownership gender gap survey`, "chapter-2", "inclusion", true),
+    t(`${c} smallholder tenant landless livestock keepers access agricultural services`, "research-task", "inclusion"),
+
+    // Institutions by function, not title.
+    t(`${c} ministry of agriculture organizational structure mandate digital unit official`, "named-lead", "institutions"),
+    t(`${c} inter-ministerial digital agriculture coordination mechanism decree official`, "named-lead", "institutions"),
+    t(`${c} agricultural extension service staffing capacity official report`, "chapter-2", "institutions"),
+    t(`${c} FAO World Bank IFAD digital agriculture programme evaluation lessons`, "research-task", "institutions"),
+
+    // Technology direction and its authorisation.
+    t(`${c} national AI strategy agriculture water food official`, "named-lead", "technology-ai"),
+    t(`${c} remote sensing crop monitoring earth observation agriculture official`, "chapter-2", "technology-ai"),
+
+    // Drivers that could invalidate the roadmap.
+    t(`${c} climate change agriculture water scarcity adaptation plan official`, "research-task", "foresight"),
+    t(`${c} agricultural subsidy reform food security policy official`, "research-task", "foresight"),
+
+    // The legal basis for anything that shares data.
+    t(`${c} data protection privacy law personal data official gazette`, "named-lead", "legal-governance"),
+    t(`${c} agricultural data governance sharing framework official`, "named-lead", "legal-governance"),
+    t(`${c} cybersecurity law critical infrastructure national agency official`, "named-lead", "legal-governance"),
+
+    // Who might pay.
+    t(`${c} agriculture public expenditure budget digital investment official`, "research-task", "investment-financing"),
+    t(`${c} World Bank agriculture project appraisal document digital component`, "research-task", "investment-financing"),
   ];
+}
+
+/** Query strings only. Retained for the legacy model-search path. */
+export function dossierTopics(countryName: string, iso3: string, chains: string[] = []): string[] {
+  return dossierTopicSpecs(countryName, iso3, chains).map((s) => s.query);
 }
 
 export function scoreDossierItem(input: {

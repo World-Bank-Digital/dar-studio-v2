@@ -7,6 +7,7 @@ import type {
 } from "./types.ts";
 import { claimableStage, formatObserved, formatPct, formatScore } from "./scoring.ts";
 import { disclaimer } from "./model.ts";
+import { DAR_OUTLINE, isPrescriptive } from "./outline.ts";
 
 export interface DraftPayload {
   countryName: string;
@@ -152,9 +153,9 @@ function cite(e: DraftPayload["evidence"][number]): string {
 export function assembleDeterministicDraft(model: DammModel, payload: DraftPayload): DraftDocument {
   const draftedAt = payload.generatedAt;
   const modelName = "deterministic-assembler";
-  const chapters: DraftChapter[] = model.dar_outline.map((outline) => {
+  const chapters: DraftChapter[] = DAR_OUTLINE.map((outline) => {
     const ready = payload.chapters.find((c) => String(c.n) === String(outline.n));
-    const policyLocked = payload.gauntletPassed === false && ["4", "5", "6"].includes(outline.n);
+    const policyLocked = payload.gauntletPassed === false && isPrescriptive(outline.n);
     const isReady = !policyLocked && (ready?.status === "inputs_ready" || (ready != null && ready.blockers.length === 0));
     if ((!isReady && ready) || policyLocked) {
       return {
@@ -168,10 +169,10 @@ export function assembleDeterministicDraft(model: DammModel, payload: DraftPaylo
           n: outline.n,
           title: outline.title,
           status: "inputs_forming",
-          blockers: ["Evidence gauntlet has not passed — policy chapters stay locked."],
-          readyAt: outline.ready_at,
-          producedBy: outline.produced_by,
-          note: outline.note,
+          blockers: ["Evidence gauntlet has not passed — chapters that prescribe action stay locked."],
+          readyAt: outline.readyAt,
+          producedBy: outline.producedBy,
+          note: outline.note ?? "",
         }, payload.gauntletSummary),
       };
     }
@@ -198,7 +199,8 @@ export function assembleDeterministicDraft(model: DammModel, payload: DraftPaylo
 function assembleChapter(n: string, p: DraftPayload): string {
   const s = p.scorecard;
   switch (n) {
-    case "1": {
+    // Ch.2 — Country and Agrifood Diagnostic (the C0 context pillar).
+    case "2": {
       const ctx = p.evidence.filter((e) => e.pillar === "C0");
       const lines = [
         `This chapter profiles agricultural structure and need for ${p.countryName}. Context indicators are not aggregated into any maturity score.`,
@@ -226,7 +228,8 @@ function assembleChapter(n: string, p: DraftPayload): string {
       }
       return lines.join("\n");
     }
-    case "2": {
+    // Ch.3 — Digital Agriculture Ecosystem Assessment carries the maturity read-out.
+    case "3": {
       const lines = [
         `Where ${p.countryName} stands is reported as three read-outs, never a single index.`,
         "",
@@ -275,7 +278,8 @@ function assembleChapter(n: string, p: DraftPayload): string {
       }
       return lines.join("\n");
     }
-    case "3": {
+    // Ch.10 — Priority Opportunity Portfolio inherits the Step 3 targeting record.
+    case "10": {
       const t = p.targeting;
       const lines = [
         "Vision, targeting and beneficiaries are taken from the recorded Step 3 decision and any government endorsement at Step 5.",
@@ -321,21 +325,53 @@ function assembleChapter(n: string, p: DraftPayload): string {
         }
       }
       lines.push("");
-      lines.push("This draft does not recommend a vendor, technology, financing instrument or option. It restates what has been recorded.");
+      lines.push(
+        isPrescriptive(n)
+          ? "Recommendations in this chapter must carry an owner, a payer, a legal basis and a delivery channel, or stand as an explicit hypothesis with its decision gate."
+          : "This chapter restates what has been recorded and does not prescribe an option.",
+      );
       return lines.join("\n");
     }
   }
 }
 
-export function draftSystemPrompt(): string {
-  return [
-    "You write connective prose for a World Bank Digital Agriculture Roadmap first draft.",
-    "You may not introduce any figure, date, country claim, stage, score, count or recommendation that is not in the payload.",
-    "If the payload says a stage is not claimable, you must say so in those terms. Never write around a suppressed score.",
-    "Never recommend an option, vendor, technology or financing path.",
-    "Cite figures with their source and observation year. Flag PROXY and STALE in place.",
+/**
+ * The drafting brief.
+ *
+ * The earlier version forbade recommendations outright, which made the tool an
+ * evidence assembler rather than a strategy product. It now recommends — under
+ * the discipline the method imposes: a recommendation whose evidence is thin
+ * must be written as a hypothesis with the gate that would confirm it, and
+ * observed figures stay bounded by the evidence base. That bound is enforced
+ * downstream by the fidelity check, not requested here — a prompt is not an
+ * enforcement mechanism.
+ */
+export function draftSystemPrompt(kind: "diagnostic" | "prescriptive" = "diagnostic"): string {
+  const shared = [
+    "You are a senior digital-development strategist drafting a national Digital Agriculture Roadmap for government decision-makers and an international development institution.",
+    "Write for a minister: conclusions first, then why they matter. Calm institutional English, no ranking language, no cross-country comparison.",
+    "Never invent a statistic, budget figure, law, institutional mandate, implementation status or programme result.",
+    "Cite every observed figure with its source and observation year. Flag PROXY and STALE in place.",
+    "If the payload says no maturity stage is claimable, say so in those terms. Never write around a suppressed score.",
+    "Distinguish what is verified, what is reported but unverified, what is inferred, and what is unknown. Do not fill an evidence gap to make the chapter look complete.",
     "Label the section as machine-drafted and for human rewriting.",
-    "Write in calm institutional English. No ranking language. No cross-country comparison.",
+  ];
+
+  if (kind === "diagnostic") {
+    return [
+      ...shared,
+      "This chapter reports evidence. Describe what is known and what is missing; leave prioritisation, sequencing and investment to the prescriptive chapters.",
+      "The existence of a system is not evidence of its effectiveness. Registration is not an inclusion outcome. A minister is not an implementation owner.",
+    ].join(" ");
+  }
+
+  return [
+    ...shared,
+    "This chapter prescribes. Recommend, prioritise and sequence — but every consequential recommendation must name its owner, its payer, its legal basis and its delivery channel, or be downgraded to a hypothesis.",
+    "Where evidence is insufficient for a firm recommendation, write it as: strategic hypothesis, evidence required, decision gate, action if validated, alternative if rejected.",
+    "State entry conditions, success criteria, stop conditions and fallback pathways for each major initiative, and include explicit do-not-do items where the evidence warrants them.",
+    "Use cost classes — Low, Moderate, High, Very High — and name what drives the cost. Do not invent precise costs.",
+    "Phase boundaries are gates, not dates. Do not assert calendar commitments the payload does not contain.",
   ].join(" ");
 }
 

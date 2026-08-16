@@ -1,4 +1,7 @@
+// NOTE: written for the pre-2026-08-17 flat-tab UI; the workspace now uses
+// grouped navigation. qa-delivery.mjs and qa-auth.mjs are the canonical loops.
 import { chromium } from "playwright";
+import { shotPath } from "./qa-paths.mjs";
 
 const base = process.argv[2] || "http://127.0.0.1:8080";
 const browser = await chromium.launch({ headless: true });
@@ -33,10 +36,10 @@ try {
   await page.getByRole("heading", { name: /Not cleared|Cleared/i }).waitFor({ timeout: 15000 });
   await page.getByText("2.1", { exact: true }).first().waitFor();
   await page.getByText("7.12", { exact: true }).first().waitFor();
-  await page.screenshot({ path: "/workspace/screenshots/egypt-gauntlet.png", fullPage: true });
+  await page.screenshot({ path: shotPath("egypt-gauntlet"), fullPage: true });
 
   await page.setViewportSize({ width: 390, height: 844 });
-  await page.screenshot({ path: "/workspace/screenshots/egypt-gauntlet-mobile.png", fullPage: true });
+  await page.screenshot({ path: shotPath("egypt-gauntlet-mobile"), fullPage: true });
   const overflow = await page.evaluate(
     () => document.documentElement.scrollWidth > document.documentElement.clientWidth + 2,
   );
@@ -49,7 +52,7 @@ try {
   console.log(JSON.stringify({ locked, hasTasks, overflow, leftover, email }, null, 2));
   if (!locked || !hasTasks || leftover.length || overflow) process.exit(2);
 } catch (e) {
-  await page.screenshot({ path: "/workspace/screenshots/egypt-gauntlet-fail.png", fullPage: true }).catch(() => null);
+  await page.screenshot({ path: shotPath("egypt-gauntlet-fail"), fullPage: true }).catch(() => null);
   console.error(e);
   process.exit(1);
 } finally {

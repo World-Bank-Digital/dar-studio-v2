@@ -1,7 +1,7 @@
 import { createServerFn } from "@tanstack/react-start";
 import { authMiddleware } from "@/lib/auth/middleware";
 import { getSql } from "@/lib/db";
-import { uid, fingerprint } from "@/lib/utils";
+import { uid, mapLimit } from "@/lib/utils";
 import { model, disclaimer } from "./model";
 import { claimableStage, finalLevel, formatScore, isStale, scoreAssessment, suggestedLevel } from "./scoring";
 import { chapterReadiness, currentOpenStep, canRecordStep } from "./ladder";
@@ -14,11 +14,20 @@ import { credibilityFor } from "./credibility";
 import { evaluateGauntlet, POLICY_CHAPTERS, type GauntletResult } from "./gauntlet";
 import { groupByPillar, searchPublicReadings } from "./websearch";
 import { sourceFor } from "./sources";
-import { regressionRows } from "./fixture";
+import { demoPackRows } from "./fixture";
+import { decryptSecret, encryptSecret, encryptionAvailable, fingerprintSecret, isEncrypted } from "./crypto";
+import { PROVIDER_IDS, defaultModelFor, providerDef, verifyProviderKey } from "./providers";
+import { SEARCH_PROVIDER_IDS, isSearchProviderId, searchProviderDef, verifySearchKey } from "./search";
+import { retrieveVerifiedReadings } from "./retrieval";
+import { checkProseFidelity } from "./fidelity";
+import { isPrescriptive, shouldProse } from "./outline";
 import type { Confidence, EvidenceRow, RecordedDecision, Scorecard } from "./types";
+import { nsoDomainsFor } from "./nso";
 import {
   DOSSIER_CANNOT_WRITE_EVIDENCE,
   chunkTopics,
+  dossierHitFromSearch,
+  dossierTopicSpecs,
   dossierTopics,
   searchDossierBatch,
   toDossierItem,
@@ -239,6 +248,8 @@ export type Workspace = {
   gauntlet: GauntletResult;
   dossier: DossierItem[];
   dossierJob: DossierJob;
+  /** How many drafts have been assembled — lets the Guide show real progress. */
+  draftCount: number;
 };
 
 async function loadWorkspaceFor(
@@ -308,6 +319,9 @@ async function loadWorkspaceFor(
     gauntlet,
     dossier: await loadDossier(c.id),
     dossierJob: dossierJobFor(c.id),
+    draftCount: Number(
+      (await sql<{ n: string }>`select count(*) as n from drafts where country_id = ${c.id} and user_id = ${userId}`)[0]?.n ?? 0,
+    ),
   };
   if (c.ingest_status === "running" && !ingestLocks.has(c.id)) {
     kickIngest(c.id, userId, c.iso3, { role: "TTL", name: "system" });
@@ -468,12 +482,62 @@ async function persistIngestResult(
     where id = ${rowId} and user_id = ${userId}`;
 }
 
-async function resolveSearchKey(userId: string): Promise<string | null> {
-  if (process.env.XAI_API_KEY) return process.env.XAI_API_KEY;
+/** A stored credential, decrypted, with the model id the operator chose. */
+interface ResolvedKey {
+  provider: string;
+  key: string;
+  modelName: string;
+}
+
+async function loadStoredKey(userId: string, provider: string, kind: "llm" | "search"): Promise<ResolvedKey | null> {
   const sql = await getSql();
-  const keys = await sql<{ key_value: string }>`
-    select key_value from api_keys where user_id = ${userId} and provider = ${"xai"} limit 1`;
-  return keys[0]?.key_value ?? null;
+  const rows = await sql<{ provider: string; key_value: string; model_name: string }>`
+    select provider, key_value, model_name from api_keys
+    where user_id = ${userId} and provider = ${provider} and kind = ${kind} limit 1`;
+  const row = rows[0];
+  if (!row) return null;
+  try {
+    return { provider: row.provider, key: decryptSecret(row.key_value), modelName: row.model_name };
+  } catch {
+    // A key encrypted under a master secret this environment no longer has is
+    // unusable. Surfacing it as "absent" is correct; the operator re-enters it.
+    return null;
+  }
+}
+
+/**
+ * The web-search credential.
+ *
+ * Previously this looked only for an xAI key, so a user who had configured
+ * Claude or Gemini got no search at all and no explanation. Search now has its
+ * own provider selection, independent of the drafting model.
+ */
+async function resolveSearchProvider(userId: string): Promise<ResolvedKey | null> {
+  const sql = await getSql();
+  const settings = await sql<{ active_search_provider: string | null }>`
+    select active_search_provider from user_settings where user_id = ${userId}`;
+  const active = settings[0]?.active_search_provider;
+  if (active && isSearchProviderId(active)) {
+    const stored = await loadStoredKey(userId, active, "search");
+    if (stored) return stored;
+  }
+  // No explicit choice: use whichever search key exists.
+  for (const id of SEARCH_PROVIDER_IDS) {
+    const stored = await loadStoredKey(userId, id, "search");
+    if (stored) return stored;
+  }
+  return null;
+}
+
+/**
+ * Legacy xAI-native search: the model's own web_search tool, with no page text
+ * to check the result against. Kept only for an environment that has a platform
+ * xAI key and no search provider configured, and reported as unverified.
+ */
+async function resolveLegacyXaiKey(userId: string): Promise<string | null> {
+  if (process.env.XAI_API_KEY) return process.env.XAI_API_KEY;
+  const stored = await loadStoredKey(userId, "xai", "llm");
+  return stored?.key ?? null;
 }
 
 async function persistWebReading(
@@ -489,6 +553,7 @@ async function persistWebReading(
     isProxy: boolean;
     proxyNote: string | null;
   },
+  confidence: Confidence = "Medium",
 ) {
   const sql = await getSql();
   const spec = sourceFor(reading.id);
@@ -500,7 +565,7 @@ async function persistWebReading(
     observation_year = ${reading.year},
     source_name = ${reading.sourceName},
     source_url = ${reading.sourceUrl},
-    confidence = ${"Medium"},
+    confidence = ${confidence},
     provenance = ${"machine-imported"},
     is_proxy = ${reading.isProxy},
     proxy_note = ${reading.proxyNote},
@@ -512,15 +577,38 @@ async function persistWebReading(
   void spec;
 }
 
+/** How many indicators go into one retrieval batch. Bounded by prompt size, not policy. */
+const SEARCH_BATCH_SIZE = 6;
+/** Ceiling on batches per run, so one country cannot exhaust an operator's search quota. */
+const MAX_SEARCH_BATCHES = 8;
+
+async function setIngestMessage(countryId: string, message: string) {
+  const sql = await getSql();
+  await sql`update countries set ingest_message = ${message} where id = ${countryId}`;
+}
+
+/**
+ * Fill remaining quantitative gaps from the public web.
+ *
+ * Preferred path: a search provider (Exa or Jina) fetches page text, and the
+ * drafting model extracts figures from that text only, with every quotation
+ * checked against the page before the reading is stored.
+ *
+ * Fallback path: an xAI key alone, using the model's own search tool. Those
+ * readings cannot be verified against retrieved text, so they are recorded with
+ * lower confidence and the run says so.
+ *
+ * Coverage is always reported. A capped run that silently skipped two thirds of
+ * the searchable indicators reads as "nothing more was findable", which is the
+ * one conclusion the operator must not draw.
+ */
 async function runWebSearchPass(
   countryId: string,
   userId: string,
   iso3: string,
   countryName: string,
-  _actor: { role: string; name: string },
+  actor: { role: string; name: string },
 ) {
-  const key = await resolveSearchKey(userId);
-  if (!key) return;
   const sql = await getSql();
   const open = await sql<{ indicator_id: string }>`
     select indicator_id from evidence
@@ -528,11 +616,117 @@ async function runWebSearchPass(
   const openIds = new Set(open.map((r) => r.indicator_id));
   const candidates = webSearchableIndicators().filter((i) => openIds.has(i.id));
   if (!candidates.length) return;
+
+  const searchCfg = await resolveSearchProvider(userId);
+  const modelCfg = await resolveDraftModel(userId);
+
+  if (!searchCfg) {
+    const legacyKey = await resolveLegacyXaiKey(userId);
+    if (!legacyKey) {
+      await writeAudit(
+        userId,
+        countryId,
+        actor.role,
+        actor.name,
+        "web_search_skipped",
+        `No web-search key configured. ${candidates.length} quantitative gaps remain for a steward.`,
+      );
+      await setIngestMessage(
+        countryId,
+        `No search key configured — ${candidates.length} gaps left named. Add an Exa or Jina key in Settings.`,
+      );
+      return;
+    }
+    await runLegacySearchPass(countryId, userId, iso3, countryName, actor, legacyKey, candidates);
+    return;
+  }
+
+  if (!modelCfg) {
+    await writeAudit(
+      userId,
+      countryId,
+      actor.role,
+      actor.name,
+      "web_search_skipped",
+      "A search key is configured but no drafting model is active. Extraction needs a model to read the retrieved pages.",
+    );
+    await setIngestMessage(countryId, "Search key found, but no active model to read the retrieved pages. Choose one in Settings.");
+    return;
+  }
+
   const grouped = groupByPillar(candidates);
-  let done = 0;
+  const batches: Array<Array<(typeof candidates)[number]>> = [];
   for (const [, inds] of grouped) {
-    if (done >= 4) break;
-    done += 1;
+    for (let i = 0; i < inds.length; i += SEARCH_BATCH_SIZE) {
+      batches.push(inds.slice(i, i + SEARCH_BATCH_SIZE));
+    }
+  }
+  const running = batches.slice(0, MAX_SEARCH_BATCHES);
+  const skipped = batches.slice(MAX_SEARCH_BATCHES).flat();
+
+  let accepted = 0;
+  let rejected = 0;
+  let documents = 0;
+  const errors: string[] = [];
+
+  for (const [index, batch] of running.entries()) {
+    await setIngestMessage(countryId, `Searching official sources — batch ${index + 1} of ${running.length}…`);
+    const outcome = await retrieveVerifiedReadings({
+      search: { providerId: searchCfg.provider, key: searchCfg.key },
+      model: { providerId: modelCfg.provider, key: modelCfg.key, modelName: modelCfg.modelName },
+      countryName,
+      iso3,
+      assessmentYear: model.assessment_year,
+      indicators: batch.map((i) => {
+        const spec = sourceFor(i.id);
+        return { id: i.id, name: i.name, anchors: i.anchors, preferredSource: spec?.sourceName, gapNote: spec?.gapNote };
+      }),
+    });
+    documents += outcome.documentsRead;
+    rejected += outcome.rejected.length;
+    if (outcome.error) errors.push(outcome.error);
+    for (const reading of outcome.readings) {
+      await persistWebReading(userId, countryId, reading, "High");
+      accepted += 1;
+    }
+    for (const drop of outcome.rejected.slice(0, 3)) {
+      await writeAudit(
+        userId,
+        countryId,
+        actor.role,
+        actor.name,
+        "web_reading_rejected",
+        `${drop.indicatorId}: ${drop.reason}${drop.sourceUrl ? ` (${drop.sourceUrl})` : ""}`,
+      );
+    }
+  }
+
+  const summary =
+    `Verified search via ${searchCfg.provider}: ${accepted} readings accepted, ${rejected} rejected as uncheckable, ` +
+    `${documents} documents read across ${running.length} batches` +
+    (skipped.length ? `; ${skipped.length} indicators not searched this run (batch ceiling reached)` : "") +
+    (errors.length ? `; errors: ${Array.from(new Set(errors)).slice(0, 2).join(" | ")}` : "");
+
+  await writeAudit(userId, countryId, actor.role, actor.name, "web_search_pass", summary);
+  await setIngestMessage(countryId, summary);
+}
+
+/** xAI's built-in search tool. Unverifiable, so readings land at Low confidence. */
+async function runLegacySearchPass(
+  countryId: string,
+  userId: string,
+  iso3: string,
+  countryName: string,
+  actor: { role: string; name: string },
+  key: string,
+  candidates: ReturnType<typeof webSearchableIndicators>,
+) {
+  const grouped = groupByPillar(candidates);
+  let accepted = 0;
+  let batches = 0;
+  for (const [, inds] of grouped) {
+    if (batches >= MAX_SEARCH_BATCHES) break;
+    batches += 1;
     const batch = inds.slice(0, 8).map((i) => {
       const spec = sourceFor(i.id);
       return { id: i.id, name: i.name, anchors: i.anchors, preferredSource: spec?.sourceName, gapNote: spec?.gapNote };
@@ -545,9 +739,15 @@ async function runWebSearchPass(
       indicators: batch,
     });
     for (const reading of readings) {
-      await persistWebReading(userId, countryId, reading);
+      await persistWebReading(userId, countryId, reading, "Low/Estimated");
+      accepted += 1;
     }
   }
+  const summary =
+    `Unverified search (xAI built-in tool): ${accepted} readings imported at low confidence. ` +
+    "Add an Exa or Jina key in Settings to check figures against the source page before they are stored.";
+  await writeAudit(userId, countryId, actor.role, actor.name, "web_search_pass_unverified", summary);
+  await setIngestMessage(countryId, summary);
 }
 
 async function runCountryIngest(countryId: string, userId: string, iso3: string, actor: { role: string; name: string }) {
@@ -657,7 +857,7 @@ export const loadDemoPack = createServerFn({ method: "POST" })
     const id = uid();
     await sql`insert into countries (id, user_id, name, iso3, ingest_status, ingest_progress, ingest_total, ingest_message, step1_completed_at, current_step)
       values (${id}, ${context.userId}, ${"Bhutan"}, ${"BTN"}, ${"done"}, ${0}, ${0}, ${"Demonstration pack loaded — public fetch skipped."}, now(), ${2})`;
-    const rows = regressionRows(model);
+    const rows = demoPackRows(model);
     for (const r of rows) {
       await sql`insert into evidence (
         id, user_id, country_id, indicator_id, value, observation_year, source_name, source_url,
@@ -723,14 +923,20 @@ export const runDossierSearch = createServerFn({ method: "POST" })
     }
     const ws = await loadWorkspaceFor(context.userId, data.countryId);
     if (!ws.ok) return { ok: false as const, error: ws.error, added: 0 };
-    const key = await resolveSearchKey(context.userId);
-    if (!key) {
-      return { ok: false as const, error: "Add an xAI key in Settings before running the country dossier.", added: 0 };
+
+    const searchCfg = await resolveSearchProvider(context.userId);
+    const legacyKey = searchCfg ? null : await resolveLegacyXaiKey(context.userId);
+    if (!searchCfg && !legacyKey) {
+      return {
+        ok: false as const,
+        error: "Add an Exa or Jina search key in Settings before running the country dossier.",
+        added: 0,
+      };
     }
     if (dossierLocks.has(data.countryId)) {
       return { ok: true as const, added: dossierJobFor(data.countryId).added, started: true as const };
     }
-    kickDossier(data.countryId, context.userId, key, ws.workspace, data.role, data.actorName);
+    kickDossier(data.countryId, context.userId, searchCfg, legacyKey, ws.workspace, data.role, data.actorName);
     return { ok: true as const, added: 0, started: true as const };
   });
 
@@ -770,30 +976,62 @@ async function persistDossierHit(
 async function runDossierJob(
   countryId: string,
   userId: string,
-  apiKey: string,
+  searchCfg: ResolvedKey | null,
+  legacyKey: string | null,
   workspace: Workspace,
   role: string,
   actorName: string,
 ) {
   if (dossierLocks.has(countryId)) return;
   dossierLocks.add(countryId);
-  const topics = dossierTopics(workspace.name, workspace.iso3, workspace.targeting?.chains ?? []);
-  const batches = chunkTopics(topics, 3);
-  dossierJobs.set(countryId, { status: "running", message: `Searching 1 of ${batches.length}…`, added: 0, total: batches.length });
+  const specs = dossierTopicSpecs(workspace.name, workspace.iso3, workspace.targeting?.chains ?? []);
+  const topics = specs.map((s) => s.query);
+  // A real search provider takes one topic per query; the legacy model path
+  // batched three topics into a single prompt to save calls.
+  const units: string[][] = searchCfg ? topics.map((t) => [t]) : chunkTopics(topics, 3);
+  dossierJobs.set(countryId, { status: "running", message: `Searching 1 of ${units.length}…`, added: 0, total: units.length });
   const before = await loadEvidence(countryId);
   let added = 0;
   try {
     let i = 0;
-    for (const batch of batches) {
+    for (const batch of units) {
       i += 1;
       dossierJobs.set(countryId, {
         status: "running",
-        message: `Searching public sources ${i} of ${batches.length}…`,
+        message: `Searching public sources ${i} of ${units.length}…`,
         added,
-        total: batches.length,
+        total: units.length,
       });
+
+      if (searchCfg) {
+        const provider = searchProviderDef(searchCfg.provider);
+        if (!provider) break;
+        // Only statistical topics are confined to the statistics office; a legal
+        // or institutional question scoped there returns the wrong site entirely.
+        const spec = specs[i - 1];
+        const nso = spec?.preferNationalStats ? nsoDomainsFor(workspace.iso3) : [];
+        const res = await provider.search({
+          key: searchCfg.key,
+          query: batch[0],
+          numResults: 6,
+          includeDomains: nso.length
+            ? provider.domainFilterLimit === "all"
+              ? nso
+              : nso.slice(0, provider.domainFilterLimit)
+            : undefined,
+          withText: true,
+        });
+        // Tag the hit with what this topic was asked to inform, so the dossier
+        // is browsable by assessment domain rather than one undifferentiated list.
+        for (const raw of res.hits) {
+          const hit = dossierHitFromSearch(raw, spec?.informs ?? "named-lead");
+          if (hit && (await persistDossierHit(userId, countryId, workspace.name, hit))) added += 1;
+        }
+        continue;
+      }
+
       const part = await searchDossierBatch({
-        apiKey,
+        apiKey: legacyKey!,
         countryName: workspace.name,
         iso3: workspace.iso3,
         assessmentYear: model.assessment_year,
@@ -812,7 +1050,7 @@ async function runDossierJob(
         status: "error",
         message: "Stopped: dossier must not write the evidence table.",
         added,
-        total: batches.length,
+        total: units.length,
       });
       return;
     }
@@ -828,22 +1066,30 @@ async function runDossierJob(
       status: "done",
       message: added ? `Stored ${added} cited items. None written to the diagnostic.` : "Search finished. No citable items found.",
       added,
-      total: batches.length,
+      total: units.length,
     });
   } catch (err) {
     dossierJobs.set(countryId, {
       status: "error",
       message: err instanceof Error ? err.message : "Dossier search failed",
       added,
-      total: batches.length,
+      total: units.length,
     });
   } finally {
     dossierLocks.delete(countryId);
   }
 }
 
-function kickDossier(countryId: string, userId: string, apiKey: string, workspace: Workspace, role: string, actorName: string) {
-  void runDossierJob(countryId, userId, apiKey, workspace, role, actorName);
+function kickDossier(
+  countryId: string,
+  userId: string,
+  searchCfg: ResolvedKey | null,
+  legacyKey: string | null,
+  workspace: Workspace,
+  role: string,
+  actorName: string,
+) {
+  void runDossierJob(countryId, userId, searchCfg, legacyKey, workspace, role, actorName);
 }
 
 export const updateEvidence = createServerFn({ method: "POST" })
@@ -990,53 +1236,150 @@ export const getSettings = createServerFn({ method: "GET" })
   .middleware([authMiddleware])
   .handler(async ({ context }) => {
     const sql = await getSql();
-    const rows = await sql<{ acting_role: string; actor_name: string | null; active_provider: string | null }>`
-      select acting_role, actor_name, active_provider from user_settings where user_id = ${context.userId}`;
+    const rows = await sql<{
+      acting_role: string;
+      actor_name: string | null;
+      active_provider: string | null;
+      active_search_provider: string | null;
+    }>`select acting_role, actor_name, active_provider, active_search_provider
+       from user_settings where user_id = ${context.userId}`;
     const keys = await sql<{
       id: string;
       provider: string;
+      kind: string;
       fingerprint: string;
       last4: string;
       model_name: string;
+      encrypted: boolean;
       last_test_ok: boolean | null;
-    }>`select id, provider, fingerprint, last4, model_name, last_test_ok from api_keys where user_id = ${context.userId}`;
+    }>`select id, provider, kind, fingerprint, last4, model_name, encrypted, last_test_ok
+       from api_keys where user_id = ${context.userId} order by kind, provider`;
     return {
       role: rows[0]?.acting_role ?? "TTL",
       actorName: rows[0]?.actor_name ?? "",
       activeProvider: rows[0]?.active_provider ?? null,
+      activeSearchProvider: rows[0]?.active_search_provider ?? null,
       platformXai: Boolean(process.env.XAI_API_KEY),
+      /** False when DAR_KEY_SECRET is unset — the interface must say so plainly. */
+      encryptionAvailable: encryptionAvailable(),
+      /** Any key written before encryption was switched on, so it can be re-saved. */
+      plaintextKeyCount: keys.filter((k) => !k.encrypted).length,
       keys,
     };
   });
 
 export const saveSettings = createServerFn({ method: "POST" })
   .middleware([authMiddleware])
-  .validator((input: { role: string; actorName: string; activeProvider?: string | null }) => input)
+  .validator(
+    (input: {
+      role: string;
+      actorName: string;
+      activeProvider?: string | null;
+      activeSearchProvider?: string | null;
+    }) => input,
+  )
   .handler(async ({ context, data }) => {
     const sql = await getSql();
-    const existing = await sql<{ active_provider: string | null }>`
-      select active_provider from user_settings where user_id = ${context.userId}`;
+    const existing = await sql<{ active_provider: string | null; active_search_provider: string | null }>`
+      select active_provider, active_search_provider from user_settings where user_id = ${context.userId}`;
     const provider = data.activeProvider !== undefined ? data.activeProvider : (existing[0]?.active_provider ?? null);
-    await sql`insert into user_settings (user_id, acting_role, actor_name, active_provider)
-      values (${context.userId}, ${data.role}, ${data.actorName}, ${provider})
-      on conflict (user_id) do update set acting_role = excluded.acting_role, actor_name = excluded.actor_name, active_provider = excluded.active_provider`;
+    const search =
+      data.activeSearchProvider !== undefined ? data.activeSearchProvider : (existing[0]?.active_search_provider ?? null);
+    await sql`insert into user_settings (user_id, acting_role, actor_name, active_provider, active_search_provider)
+      values (${context.userId}, ${data.role}, ${data.actorName}, ${provider}, ${search})
+      on conflict (user_id) do update set
+        acting_role = excluded.acting_role,
+        actor_name = excluded.actor_name,
+        active_provider = excluded.active_provider,
+        active_search_provider = excluded.active_search_provider`;
     return { ok: true as const };
   });
 
+/** Provider and search-provider catalogues, for the Settings form. */
+export const listProviders = createServerFn({ method: "GET" }).handler(async () => {
+  const models = PROVIDER_IDS.map((id) => {
+    const def = providerDef(id)!;
+    return { id: def.id, label: def.label, defaultModel: def.defaultModel, consoleUrl: def.consoleUrl };
+  });
+  const search = SEARCH_PROVIDER_IDS.map((id) => {
+    const def = { exa: { label: "Exa", console: "https://dashboard.exa.ai/api-keys" }, jina: { label: "Jina", console: "https://jina.ai/api-dashboard/" } }[id];
+    return { id, label: def.label, consoleUrl: def.console };
+  });
+  return { models, search };
+});
+
 export const saveApiKey = createServerFn({ method: "POST" })
   .middleware([authMiddleware])
-  .validator((input: { provider: string; key: string; modelName: string }) => input)
+  .validator((input: { provider: string; key: string; modelName?: string; kind?: "llm" | "search" }) => input)
   .handler(async ({ context, data }) => {
     const key = data.key.trim();
     if (key.length < 8) return { ok: false as const, error: "Key looks too short." };
+
+    const kind = data.kind ?? "llm";
+    if (kind === "llm" && !providerDef(data.provider)) {
+      return { ok: false as const, error: `Unknown model provider “${data.provider}”.` };
+    }
+    if (kind === "search" && !isSearchProviderId(data.provider)) {
+      return { ok: false as const, error: `Unknown search provider “${data.provider}”.` };
+    }
+
     const sql = await getSql();
-    await sql`delete from api_keys where user_id = ${context.userId} and provider = ${data.provider}`;
-    const modelName =
-      data.modelName.trim() ||
-      (data.provider === "openai" ? "gpt-4.1-mini" : data.provider === "anthropic" ? "claude-sonnet-4-5" : "grok-4.5");
-    await sql`insert into api_keys (id, user_id, provider, key_value, fingerprint, last4, model_name)
-      values (${uid()}, ${context.userId}, ${data.provider}, ${key}, ${fingerprint(key)}, ${key.slice(-4)}, ${modelName})`;
-    return { ok: true as const };
+    await sql`delete from api_keys where user_id = ${context.userId} and provider = ${data.provider} and kind = ${kind}`;
+    const modelName = kind === "search" ? "" : (data.modelName?.trim() || defaultModelFor(data.provider));
+    const stored = encryptSecret(key);
+    await sql`insert into api_keys (id, user_id, provider, kind, key_value, fingerprint, last4, model_name, encrypted)
+      values (${uid()}, ${context.userId}, ${data.provider}, ${kind}, ${stored},
+        ${fingerprintSecret(key)}, ${key.slice(-4)}, ${modelName}, ${isEncrypted(stored)})`;
+
+    // Verify at save time, not only when Test is pressed. A first live run
+    // shipped a mistyped model id that every later call would have 404'd on;
+    // the catalogue check that catches it costs one request and belongs here.
+    const warnings: string[] = [];
+    if (!isEncrypted(stored)) {
+      warnings.push("Stored without encryption — set DAR_KEY_SECRET in the environment to protect keys at rest.");
+    }
+    let verified: boolean | null = null;
+    if (kind === "llm") {
+      const check = await verifyProviderKey(data.provider, key, modelName);
+      verified = check.ok;
+      if (!check.ok && check.error) warnings.push(check.error);
+      if (check.warning) warnings.push(check.warning);
+      await sql`update api_keys set last_tested_at = now(), last_test_ok = ${check.ok}
+        where user_id = ${context.userId} and provider = ${data.provider} and kind = ${kind}`;
+    }
+
+    // Storing a key is a statement of intent: if nothing is active yet, this
+    // key becomes active. A stored-but-never-selected key silently disables
+    // the whole model path, which is how a configured drafter ran as "none".
+    const settings = await sql<{ active_provider: string | null; active_search_provider: string | null }>`
+      select active_provider, active_search_provider from user_settings where user_id = ${context.userId}`;
+    const cur = settings[0];
+    const activate =
+      kind === "llm"
+        ? { column: "active_provider" as const, empty: !cur?.active_provider }
+        : { column: "active_search_provider" as const, empty: !cur?.active_search_provider };
+    let activated = false;
+    if (activate.empty) {
+      if (!cur) {
+        await sql`insert into user_settings (user_id, acting_role, actor_name, active_provider, active_search_provider)
+          values (${context.userId}, ${"TTL"}, ${""},
+            ${kind === "llm" ? data.provider : null}, ${kind === "search" ? data.provider : null})
+          on conflict (user_id) do nothing`;
+      } else if (kind === "llm") {
+        await sql`update user_settings set active_provider = ${data.provider} where user_id = ${context.userId}`;
+      } else {
+        await sql`update user_settings set active_search_provider = ${data.provider} where user_id = ${context.userId}`;
+      }
+      activated = true;
+    }
+
+    return {
+      ok: true as const,
+      encrypted: isEncrypted(stored),
+      verified,
+      activated,
+      warning: warnings.length ? warnings.join(" ") : undefined,
+    };
   });
 
 export const deleteApiKey = createServerFn({ method: "POST" })
@@ -1048,53 +1391,40 @@ export const deleteApiKey = createServerFn({ method: "POST" })
     return { ok: true as const };
   });
 
-function providerEndpoint(provider: string) {
-  if (provider === "openai") return "https://api.openai.com/v1/models";
-  if (provider === "anthropic") return "https://api.anthropic.com/v1/models";
-  if (provider === "xai") return "https://api.x.ai/v1/models";
-  return null;
-}
-
 export const testApiKey = createServerFn({ method: "POST" })
   .middleware([authMiddleware])
   .validator((input: { id: string }) => input)
   .handler(async ({ context, data }) => {
     const sql = await getSql();
-    const keys = await sql<{ provider: string; key_value: string; model_name: string }>`
-      select provider, key_value, model_name from api_keys where id = ${data.id} and user_id = ${context.userId}`;
-    const key = keys[0];
-    if (!key) return { ok: false as const, error: "Key not found" };
-    const url = providerEndpoint(key.provider);
-    if (!url) return { ok: false as const, error: "Unknown provider" };
+    const rows = await sql<{ provider: string; kind: string; key_value: string; model_name: string }>`
+      select provider, kind, key_value, model_name from api_keys where id = ${data.id} and user_id = ${context.userId}`;
+    const row = rows[0];
+    if (!row) return { ok: false as const, error: "Key not found" };
+
+    let plain: string;
     try {
-      const headers: Record<string, string> = { Authorization: `Bearer ${key.key_value}` };
-      if (key.provider === "anthropic") {
-        headers["x-api-key"] = key.key_value;
-        headers["anthropic-version"] = "2023-06-01";
-        delete headers.Authorization;
-      }
-      const res = await fetch(url, { headers, signal: AbortSignal.timeout(15000) });
-      const ok = res.ok;
-      let modelOk = true;
-      if (ok) {
-        try {
-          const body = (await res.json()) as { data?: Array<{ id: string }> };
-          if (Array.isArray(body.data) && key.model_name) modelOk = body.data.some((m) => m.id === key.model_name);
-        } catch {
-          /* ignore */
-        }
-      }
-      await sql`update api_keys set last_tested_at = now(), last_test_ok = ${ok && modelOk} where id = ${data.id}`;
-      if (!ok) return { ok: false as const, error: `Provider returned ${res.status}` };
-      if (!modelOk) return { ok: false as const, error: `Key works but model “${key.model_name}” was not in the provider list.` };
-      return { ok: true as const };
+      plain = decryptSecret(row.key_value);
     } catch (err) {
-      await sql`update api_keys set last_tested_at = now(), last_test_ok = ${false} where id = ${data.id}`;
-      return { ok: false as const, error: err instanceof Error ? err.message : "Test failed" };
+      return { ok: false as const, error: err instanceof Error ? err.message : "Stored key could not be read." };
     }
+
+    const result: { ok: boolean; error?: string; warning?: string } =
+      row.kind === "search"
+        ? await verifySearchKey(row.provider, plain)
+        : await verifyProviderKey(row.provider, plain, row.model_name);
+
+    await sql`update api_keys set last_tested_at = now(), last_test_ok = ${result.ok} where id = ${data.id}`;
+    if (!result.ok) return { ok: false as const, error: result.error ?? "Test failed" };
+    return { ok: true as const, warning: result.warning ?? null };
   });
 
-async function resolveDraftModel(userId: string) {
+/**
+ * The active drafting model, decrypted and ready to call.
+ *
+ * `platform-xai` remains available where the deployment injects `XAI_API_KEY`,
+ * so an environment that already had one keeps working without re-entry.
+ */
+async function resolveDraftModel(userId: string): Promise<ResolvedKey | null> {
   const sql = await getSql();
   const settings = await sql<{ active_provider: string | null }>`
     select active_provider from user_settings where user_id = ${userId}`;
@@ -1104,55 +1434,31 @@ async function resolveDraftModel(userId: string) {
     if (!process.env.XAI_API_KEY) return null;
     return { provider: "xai", key: process.env.XAI_API_KEY, modelName: "grok-4.5" };
   }
-  const keys = await sql<{ key_value: string; model_name: string; provider: string }>`
-    select key_value, model_name, provider from api_keys where user_id = ${userId} and provider = ${active}`;
-  if (keys[0]) return { provider: keys[0].provider, key: keys[0].key_value, modelName: keys[0].model_name };
-  return null;
+  return loadStoredKey(userId, active, "llm");
 }
 
-async function llmProse(cfg: { provider: string; key: string; modelName: string }, system: string, user: string) {
-  try {
-    if (cfg.provider === "anthropic") {
-      const res = await fetch("https://api.anthropic.com/v1/messages", {
-        method: "POST",
-        headers: {
-          "content-type": "application/json",
-          "x-api-key": cfg.key,
-          "anthropic-version": "2023-06-01",
-        },
-        body: JSON.stringify({
-          model: cfg.modelName,
-          max_tokens: 1200,
-          system,
-          messages: [{ role: "user", content: user }],
-        }),
-        signal: AbortSignal.timeout(40000),
-      });
-      if (!res.ok) return null;
-      const body = (await res.json()) as { content?: Array<{ text?: string }> };
-      return body.content?.[0]?.text ?? null;
-    }
-    const base = cfg.provider === "openai" ? "https://api.openai.com/v1/chat/completions" : "https://api.x.ai/v1/chat/completions";
-    const res = await fetch(base, {
-      method: "POST",
-      headers: { "content-type": "application/json", Authorization: `Bearer ${cfg.key}` },
-      body: JSON.stringify({
-        model: cfg.modelName,
-        max_tokens: 1200,
-        temperature: 0.2,
-        messages: [
-          { role: "system", content: system },
-          { role: "user", content: user },
-        ],
-      }),
-      signal: AbortSignal.timeout(40000),
-    });
-    if (!res.ok) return null;
-    const body = (await res.json()) as { choices?: Array<{ message?: { content?: string } }> };
-    return body.choices?.[0]?.message?.content ?? null;
-  } catch {
-    return null;
-  }
+/**
+ * One prose call through the active provider.
+ *
+ * Returns the error rather than null-on-everything: a rate limit, a bad key and
+ * a genuinely empty completion produce very different advice, and the caller
+ * needs to tell the user which happened instead of silently falling back to the
+ * deterministic text.
+ */
+async function llmProse(
+  cfg: ResolvedKey,
+  system: string,
+  user: string,
+): Promise<{ text: string | null; error?: string }> {
+  const def = providerDef(cfg.provider);
+  if (!def) return { text: null, error: `Unknown provider “${cfg.provider}”.` };
+  // Chapter prose is a long completion over a large facts block. At the 60s
+  // adapter default, 16 of 17 calls in the first live draft timed out and the
+  // whole pass silently fell back to deterministic text (LEARNINGS L13).
+  // 24k: a reasoning model needs the budget to cover its chain of thought AND
+  // the chapter. At 4k DeepSeek burned everything reasoning (L14); at 12k the
+  // heavyweight prescriptive chapters (portfolio, policy, financing) still did.
+  return def.chat({ key: cfg.key, model: cfg.modelName, system, user, maxTokens: 24_000, temperature: 0.2, timeoutMs: 360_000 });
 }
 
 export const generateDraft = createServerFn({ method: "POST" })
@@ -1220,27 +1526,73 @@ export const generateDraft = createServerFn({ method: "POST" })
       };
       const doc = assembleDeterministicDraft(model, payload);
       const cfg = await resolveDraftModel(context.userId);
+
+      /** Chapters where model prose was rejected or the call failed. */
+      const rejections: string[] = [];
+      let modelErrors = 0;
+
       if (cfg) {
         const facts = payloadForPrompt(payload);
-        for (const ch of doc.chapters) {
-          if (!ch.ready) continue;
-          const prose = await llmProse(
+        const stageClaimable = Boolean(payload.claim?.claimable);
+        // Prose only for numbered chapters — annexes are the evidence record and
+        // stay verbatim. A bounded pool keeps a 17-chapter pass to a few waves
+        // without hammering the provider's rate limits.
+        const proseTargets = doc.chapters.filter((ch) => ch.ready && shouldProse(ch.n));
+        await mapLimit(proseTargets, 4, async (ch) => {
+          const kind = isPrescriptive(ch.n) ? "prescriptive" : "diagnostic";
+          const { text: prose, error } = await llmProse(
             cfg,
-            draftSystemPrompt(),
-            `Write connective prose for chapter ${ch.n} ${ch.title}. Use only these facts:\n\n${facts}\n\nDeterministic skeleton:\n${ch.body}`,
+            draftSystemPrompt(kind),
+            `Write chapter ${ch.n} ${ch.title}. Use only these facts:\n\n${facts}\n\nDeterministic skeleton:\n${ch.body}`,
           );
-          if (prose) {
-            ch.body = prose;
-            ch.modelName = `${cfg.provider}:${cfg.modelName}`;
+          if (error) {
+            modelErrors += 1;
+            rejections.push(`Chapter ${ch.n}: model call failed — ${error}`);
+            return;
           }
-        }
-        doc.modelName = `${cfg.provider}:${cfg.modelName}`;
+          if (!prose) return;
+
+          // The promise that no figure is invented has to be enforced here, not
+          // in the prompt. Prose carrying a number the engine never produced is
+          // discarded and the deterministic skeleton stands.
+          const check = checkProseFidelity(prose, { facts, payload }, {
+            stageClaimable,
+            kind,
+            assessmentYear: model.assessment_year,
+          });
+          if (!check.ok) {
+            rejections.push(`Chapter ${ch.n}: ${check.reason}`);
+            ch.body = `${ch.body}\n\n[Model prose for this chapter was rejected by the fidelity check and discarded. ${check.reason}]`;
+            return;
+          }
+          ch.body = prose;
+          ch.modelName = `${cfg.provider}:${cfg.modelName}`;
+        });
+        doc.modelName =
+          proseTargets.length > 0 && rejections.length === proseTargets.length
+            ? "deterministic-assembler"
+            : `${cfg.provider}:${cfg.modelName}`;
       }
+
       const sql = await getSql();
       await sql`insert into drafts (id, user_id, country_id, kind, body, model_name)
         values (${uid()}, ${context.userId}, ${data.countryId}, ${"dar"}, ${JSON.stringify(doc)}, ${doc.modelName})`;
-      await writeAudit(context.userId, data.countryId, data.role, data.actorName, "generate_draft", `Draft via ${doc.modelName}`);
-      return { ok: true as const, doc, usedModel: doc.modelName };
+      await writeAudit(
+        context.userId,
+        data.countryId,
+        data.role,
+        data.actorName,
+        "generate_draft",
+        `Draft via ${doc.modelName}` +
+          (rejections.length ? ` — ${rejections.length} chapter(s) kept deterministic: ${rejections.slice(0, 3).join("; ")}` : ""),
+      );
+      return {
+        ok: true as const,
+        doc,
+        usedModel: doc.modelName,
+        fidelityRejections: rejections,
+        modelErrors,
+      };
     } catch (err) {
       return {
         ok: false as const,
@@ -1271,7 +1623,11 @@ export const generateMemo = createServerFn({ method: "POST" })
       });
       const cfg = await resolveDraftModel(context.userId);
       if (cfg) {
-        const prose = await llmProse(cfg, draftSystemPrompt() + " Write a short decision memo. Do not pick an option.", text);
+        const { text: prose } = await llmProse(
+          cfg,
+          draftSystemPrompt() + " Write a short decision memo. Do not pick an option.",
+          text,
+        );
         if (prose) text = prose;
       }
       return { ok: true as const, text };

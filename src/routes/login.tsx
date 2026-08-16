@@ -8,6 +8,17 @@ import { disclaimer } from "@/lib/damm/model";
 
 export const Route = createFileRoute("/login")({ component: Login });
 
+/**
+ * The Google/X buttons federate through the Grok auth broker, whose preview
+ * client only accepts `*.grok-sandbox.com` redirect URIs — on localhost the
+ * broker answers "Invalid redirect URI" (verified live). Deployed apps get
+ * their own broker client, so the buttons stay everywhere except loopback.
+ */
+function brokerAvailable(): boolean {
+  if (typeof window === "undefined") return true;
+  return !["localhost", "127.0.0.1", "[::1]"].includes(window.location.hostname);
+}
+
 function Login() {
   const nav = useNavigate();
   const [email, setEmail] = useState("");
@@ -16,6 +27,24 @@ function Login() {
   const [mode, setMode] = useState<"in" | "up">("in");
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+
+  async function onPasskey() {
+    setBusy(true);
+    setError(null);
+    try {
+      const res = await authClient.signIn.passkey();
+      if (res?.error) throw new Error(res.error.message ?? "Passkey sign-in failed");
+      // Full navigation, not the SPA router: the passkey plugin sets the session
+      // cookie but does not update the client session store, so a soft nav
+      // renders the signed-out shell until something refetches. A reload
+      // re-reads the session server-side (same pattern as signOut).
+      window.location.href = "/";
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Passkey sign-in failed");
+    } finally {
+      setBusy(false);
+    }
+  }
 
   async function onEmail(e: React.FormEvent) {
     e.preventDefault();
@@ -47,11 +76,20 @@ function Login() {
         </p>
         {authEnabled ? (
           <div className="mt-6 space-y-2">
-            {GROK_PROVIDERS.map((p) => (
+            {brokerAvailable() ? GROK_PROVIDERS.map((p) => (
               <Button key={p.providerId} variant="outline" className="w-full" onClick={() => signIn(p.providerId, { callbackURL: "/" })}>
                 Continue with {p.label}
               </Button>
-            ))}
+            )) : (
+              <p className="rounded-sm border border-border bg-moss/30 px-3 py-2 text-xs text-muted">
+                Google and X sign-in run through the Grok auth broker, which does not accept
+                localhost callbacks ("Invalid redirect URI"). When running locally, use email,
+                a password, or a passkey below.
+              </p>
+            )}
+            <Button variant="outline" className="w-full" disabled={busy} onClick={onPasskey}>
+              Sign in with a passkey
+            </Button>
           </div>
         ) : (
           <p className="mt-4 text-sm text-muted">Sign-in is disabled.</p>

@@ -6,6 +6,8 @@ import { chapterReadiness } from "./ladder.ts";
 import { claimableStage, scoreAssessment } from "./scoring.ts";
 import { model } from "./model.ts";
 import {
+  dossierTopicSpecs,
+  dossierTopics,
   DOSSIER_CANNOT_WRITE_EVIDENCE,
   parseDossierHits,
   scoreDossierItem,
@@ -93,7 +95,7 @@ describe("country dossier", () => {
     assert.notEqual(item.score, undefined);
   });
 
-  it("feeds chapters 1–2 without changing CMS or unlocking policy chapters", () => {
+  it("feeds the diagnostic chapters without changing CMS or unlocking prescriptive chapters", () => {
     const rows = emptyEvidenceRows(model);
     const card = scoreAssessment(model, rows);
     const chapters = chapterReadiness(model, [], true);
@@ -167,11 +169,86 @@ describe("country dossier", () => {
       gauntletPassed: false,
       dossier,
     });
-    const ch1 = withDossier.chapters.find((c) => c.n === "1")?.body ?? "";
+    // Ch.2 is the agrifood diagnostic, where chapter-1 dossier leads surface.
+    const ch1 = withDossier.chapters.find((c) => c.n === "2")?.body ?? "";
     const ch4 = withDossier.chapters.find((c) => c.n === "4")?.body ?? "";
     assert.match(ch1, /Country dossier \(not scored\)/i);
     assert.match(ch1, /Egypt National AI Strategy/);
     assert.match(ch4, /not drafted|gauntlet has not passed/i);
-    assert.equal(without.chapters.find((c) => c.n === "2")?.body.includes("CMS"), withDossier.chapters.find((c) => c.n === "2")?.body.includes("CMS"));
+    assert.equal(without.chapters.find((c) => c.n === "3")?.body.includes("CMS"), withDossier.chapters.find((c) => c.n === "3")?.body.includes("CMS"));
+  });
+});
+
+describe("dossier search agenda", () => {
+  const specs = dossierTopicSpecs("Egypt, Arab Rep.", "EGY", ["Wheat", "Cotton"]);
+
+  it("covers every assessment domain the roadmap must form a view on", () => {
+    const covered = new Set(specs.map((s) => s.domain));
+    const required: Array<(typeof specs)[number]["domain"]> = [
+      "agrifood-diagnostic",
+      "digital-ecosystem",
+      "farmer-registry",
+      "dpi-interoperability",
+      "inclusion",
+      "institutions",
+      "technology-ai",
+      "foresight",
+      "legal-governance",
+      "investment-financing",
+    ];
+    for (const domain of required) {
+      assert.ok(covered.has(domain), `no query covers ${domain}`);
+    }
+  });
+
+  it("names the country in every query", () => {
+    for (const s of specs) assert.match(s.query, /Egypt/);
+  });
+
+  it("folds the chosen value chains into the diagnostic sweep", () => {
+    assert.ok(specs.some((s) => /Wheat/.test(s.query)));
+  });
+
+  it("treats the farmer registry as its own line of enquiry", () => {
+    const registry = specs.filter((s) => s.domain === "farmer-registry");
+    assert.ok(registry.length >= 3, "registry needs coverage, enrolment and payments queries");
+  });
+
+  it("keeps the legacy string form in step with the specs", () => {
+    const strings = dossierTopics("Egypt, Arab Rep.", "EGY", ["Wheat", "Cotton"]);
+    assert.deepEqual(strings, specs.map((s) => s.query));
+  });
+
+  it("assigns every topic a usable informs tag", () => {
+    for (const s of specs) {
+      assert.ok(["chapter-1", "chapter-2", "named-lead", "research-task"].includes(s.informs));
+    }
+  });
+});
+
+describe("dossier site scoping", () => {
+  const specs = dossierTopicSpecs("Egypt, Arab Rep.", "EGY");
+
+  it("confines only statistical topics to the statistics office", () => {
+    const scoped = specs.filter((s) => s.preferNationalStats);
+    assert.ok(scoped.length > 0, "some statistical topics should be scoped");
+    for (const s of scoped) {
+      assert.ok(
+        ["agrifood-diagnostic", "inclusion"].includes(s.domain),
+        `${s.domain} should not be confined to the statistics office`,
+      );
+    }
+  });
+
+  it("leaves legal, institutional and AI topics unscoped", () => {
+    for (const s of specs) {
+      if (["legal-governance", "institutions", "technology-ai", "investment-financing"].includes(s.domain)) {
+        assert.equal(s.preferNationalStats, false, `${s.query} must not be pinned to the statistics office`);
+      }
+    }
+  });
+
+  it("no longer embeds a site: operator in the query text", () => {
+    for (const s of specs) assert.doesNotMatch(s.query, /site:/);
   });
 });

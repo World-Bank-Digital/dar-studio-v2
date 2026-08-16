@@ -1,0 +1,48 @@
+{
+  "startedAt": "2026-08-16T17:12:27.620Z",
+  "base": "http://127.0.0.1:8080",
+  "phases": {
+    "signin": {
+      "at": "2026-08-16T17:12:31.708Z",
+      "email": "dbcheck@example.com"
+    },
+    "country": {
+      "at": "2026-08-16T17:12:34.440Z",
+      "countryUrl": "http://127.0.0.1:8080/c/767cb45e-d997-49e1-ab3e-5901655c126e"
+    },
+    "ingest": {
+      "at": "2026-08-16T17:14:22.936Z",
+      "minutes": 1.8
+    },
+    "gatesBefore": {
+      "failing": 9,
+      "ids": [
+        "3.3",
+        "3.11",
+        "4.1",
+        "4.5",
+        "4.9",
+        "5.5",
+        "5.7",
+        "7.9",
+        "7.12"
+      ]
+    }
+  },
+  "ok": false,
+  "error": "locator.waitFor: Timeout 10000ms exceeded.\nCall log:\n  - waiting for getByText(/Assessor level \\(wins over the machine\\)/i) to be visible\n",
+  "finishedAt": "2026-08-16T17:14:36.455Z",
+  "log": [
+    "17:12:27 1. sign in as the key-holding account",
+    "17:12:31 ✔ signin {\"email\":\"dbcheck@example.com\"}",
+    "17:12:31 2. create a fresh Egypt workspace",
+    "17:12:34 ✔ country {\"countryUrl\":\"http://127.0.0.1:8080/c/767cb45e-d997-49e1-ab3e-5901655c126e\"}",
+    "17:12:34 3. launch the Step 1 diagnostic (official cascade + verified web search)",
+    "17:14:22 ✔ ingest {\"minutes\":1.8}",
+    "17:14:22 4. gauntlet: read the failing gates, then clear them as the human",
+    "17:14:23    clearing 3.3 — Unmeasured — machine named gap is not an accounted reading.",
+    "17:14:24    clearing 3.11 — Unmeasured — machine named gap is not an accounted reading.",
+    "17:14:25    clearing 4.1 — Unmeasured — machine named gap is not an accounted reading."
+  ],
+  "errors": []
+}

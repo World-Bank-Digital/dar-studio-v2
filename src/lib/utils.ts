@@ -26,3 +26,28 @@ export function escapeHtml(value: string): string {
     .replaceAll('"', "&" + "quot;")
     .replaceAll("'", "&#39;");
 }
+
+/**
+ * Map with bounded concurrency, preserving order.
+ *
+ * The 17-chapter draft made sequential prose generation untenable: one HTTP
+ * request serially awaiting up to 17 model calls at up to a minute each. Full
+ * parallelism would trade that for rate-limit failures, so drafting runs a
+ * small worker pool instead.
+ */
+export async function mapLimit<T, R>(
+  items: T[],
+  limit: number,
+  fn: (item: T, index: number) => Promise<R>,
+): Promise<R[]> {
+  const results = new Array<R>(items.length);
+  let next = 0;
+  const workers = Array.from({ length: Math.max(1, Math.min(limit, items.length)) }, async () => {
+    while (next < items.length) {
+      const i = next++;
+      results[i] = await fn(items[i], i);
+    }
+  });
+  await Promise.all(workers);
+  return results;
+}

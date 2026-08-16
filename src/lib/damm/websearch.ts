@@ -31,7 +31,9 @@ const BLOCKED_HOSTS = [
   "substack.com",
   "youtube.com",
   "instagram.com",
-  "tiktok.com",
+  // Professional-network posts are self-published commentary, not citable
+  // publications; a live sweep surfaced them alongside FAO and World Bank docs.
+  "linkedin.com",
 ];
 
 export function hostOf(url: string): string {

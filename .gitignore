@@ -21,3 +21,4 @@ vendor/
 pglite-debug.log
 *.pem
 *.key
+.claude/

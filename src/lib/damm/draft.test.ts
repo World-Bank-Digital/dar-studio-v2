@@ -72,7 +72,7 @@ describe("draft honesty", () => {
     const card = scoreAssessment(model, rows);
     const chapters = chapterReadiness(model, [], true);
     chapters.forEach((c) => {
-      if (c.n === "1" || c.n === "A") c.status = "inputs_ready";
+      if (c.n === "2" || c.n === "A") c.status = "inputs_ready";
     });
     const claim = claimableStage(card, { currentStep: 1, mandateRecorded: false, validationRecorded: false });
     const doc = assembleDeterministicDraft(model, {
@@ -121,7 +121,7 @@ describe("draft honesty", () => {
     assert.match(annex, /STALE/);
   });
 
-  it("after Step 1, chapter 2 is a provisional standings draft, not a not-started gap", () => {
+  it("after Step 1, the ecosystem chapter is a provisional standings draft, not a not-started gap", () => {
     const rows = emptyEvidenceRows(model);
     const card = scoreAssessment(model, rows);
     const decisions = [2, 3, 4, 5, 6, 7, 8].map((step) => ({
@@ -135,8 +135,9 @@ describe("draft honesty", () => {
       payload: null,
     }));
     const chapters = chapterReadiness(model, decisions, true);
-    const ch2 = chapters.find((c) => c.n === "2");
-    assert.equal(ch2?.status, "inputs_ready");
+    // Ch.3 (ecosystem assessment) carries the maturity read-out.
+    const standings = chapters.find((c) => c.n === "3");
+    assert.equal(standings?.status, "inputs_ready");
     const claim = claimableStage(card, { currentStep: 8, mandateRecorded: true, validationRecorded: true });
     const doc = assembleDeterministicDraft(model, {
       countryName: "Egypt, Arab Rep.",
@@ -174,11 +175,11 @@ describe("draft honesty", () => {
       })),
       targeting: { chains: ["Wheat", "Cotton"], rejected: ["Rice"], notes: null },
     });
-    const body2 = doc.chapters.find((c) => c.n === "2")?.body ?? "";
-    assert.equal(doc.chapters.find((c) => c.n === "2")?.ready, true);
+    const body2 = doc.chapters.find((c) => c.n === "3")?.body ?? "";
+    assert.equal(doc.chapters.find((c) => c.n === "3")?.ready, true);
     assert.match(body2, /CMS \(capability\)/);
     assert.doesNotMatch(body2, /is not drafted/);
-    const body3 = doc.chapters.find((c) => c.n === "3")?.body ?? "";
+    const body3 = doc.chapters.find((c) => c.n === "10")?.body ?? "";
     assert.match(body3, /Wheat/);
   });
 });

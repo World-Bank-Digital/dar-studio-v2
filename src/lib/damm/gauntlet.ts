@@ -225,4 +225,11 @@ export function evaluateGauntlet(rows: EvidenceRow[], iso3 = "XXX"): GauntletRes
   };
 }
 
-export const POLICY_CHAPTERS = new Set(["4", "5", "6"]);
+/**
+ * Chapters withheld until the evidence gauntlet clears.
+ *
+ * Re-exported from the outline rather than hard-coded: these are exactly the
+ * chapters that prescribe action, so a new prescriptive chapter is gated the
+ * moment it is added instead of when someone remembers to update a list here.
+ */
+export { PRESCRIPTIVE_CHAPTERS as POLICY_CHAPTERS } from "./outline.ts";

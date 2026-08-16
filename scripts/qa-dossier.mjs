@@ -1,4 +1,7 @@
+// NOTE: written for the pre-2026-08-17 flat-tab UI; the workspace now uses
+// grouped navigation. qa-delivery.mjs and qa-auth.mjs are the canonical loops.
 import { chromium } from "playwright";
+import { shotPath } from "./qa-paths.mjs";
 
 const base = process.argv[2] || "http://127.0.0.1:8080";
 const browser = await chromium.launch({ headless: true });
@@ -28,7 +31,7 @@ try {
   await page.getByRole("heading", { name: /Country dossier/i }).waitFor({ timeout: 10000 });
   await page.getByText(/cannot write an indicator|never write the evidence/i).first().waitFor();
   await page.getByRole("button", { name: /Build country dossier/i }).waitFor();
-  await page.screenshot({ path: "/workspace/screenshots/dossier-empty.png", fullPage: true });
+  await page.screenshot({ path: shotPath("dossier-empty"), fullPage: true });
 
   await page.getByRole("button", { name: /^gauntlet$/i }).click();
   await page.getByRole("heading", { name: /Not cleared|Cleared/i }).waitFor({ timeout: 10000 });
@@ -37,7 +40,7 @@ try {
   console.log(JSON.stringify({ ok: leftover.length === 0, leftover, email }, null, 2));
   if (leftover.length) process.exit(2);
 } catch (e) {
-  await page.screenshot({ path: "/workspace/screenshots/dossier-fail.png", fullPage: true }).catch(() => null);
+  await page.screenshot({ path: shotPath("dossier-fail"), fullPage: true }).catch(() => null);
   console.error(e);
   process.exit(1);
 } finally {

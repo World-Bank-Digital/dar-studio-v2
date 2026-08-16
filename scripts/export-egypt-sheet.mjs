@@ -1,4 +1,6 @@
 import { mkdirSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
+import { projectRoot } from "./qa-paths.mjs";
 import { ingestIndicator, ingestQueue } from "../src/lib/damm/ingest.ts";
 import { model } from "../src/lib/damm/model.ts";
 import { registryEntry } from "../src/lib/damm/registry.ts";
@@ -93,8 +95,8 @@ for (const row of rows) {
   lines.push(headers.map((h) => csvCell(row[h])).join(","));
 }
 
-mkdirSync("/workspace/exports", { recursive: true });
-const csvPath = "/workspace/exports/DAR_Egypt_indicator_comparison.csv";
+mkdirSync(join(projectRoot, "exports"), { recursive: true });
+const csvPath = join(projectRoot, "exports", "DAR_Egypt_indicator_comparison.csv");
 writeFileSync(csvPath, "\uFEFF" + lines.join("\n"), "utf8");
 
 const captured = rows.filter((r) => r.app_status !== "missing").length;

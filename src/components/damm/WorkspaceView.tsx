@@ -37,27 +37,65 @@ import type { Confidence } from "@/lib/damm/types";
 import type { DraftDocument as DraftDoc } from "@/lib/damm/draft";
 import { escapeHtml } from "@/lib/utils";
 
-const TABS = [
-  "overview",
-  "gauntlet",
-  "dossier",
-  "steps",
-  "outline",
+const TAB_IDS = [
+  "guide",
   "evidence",
-  "visuals",
+  "gauntlet",
   "gates",
+  "dossier",
+  "visuals",
+  "steps",
   "memo",
-  "audit",
   "exports",
+  "outline",
+  "audit",
 ] as const;
 
-type Tab = (typeof TABS)[number];
+type Tab = (typeof TAB_IDS)[number];
+
+/**
+ * Eleven flat tabs overwhelmed first-time TTLs, so the workspace now has four
+ * groups. Internal tab ids are unchanged — only the navigation and the visible
+ * labels moved. "Readiness" is the gate formerly labelled "Gauntlet".
+ */
+const NAV_GROUPS: Array<{ name: string; tabs: Array<{ id: Tab; label: string }> }> = [
+  { name: "Guide", tabs: [{ id: "guide", label: "Guide" }] },
+  {
+    name: "Evidence",
+    tabs: [
+      { id: "evidence", label: "Indicators" },
+      { id: "gauntlet", label: "Readiness" },
+      { id: "gates", label: "Core gates" },
+      { id: "dossier", label: "Documents" },
+      { id: "visuals", label: "Charts" },
+    ],
+  },
+  {
+    name: "Decisions",
+    tabs: [
+      { id: "steps", label: "Steps 2–8" },
+      { id: "memo", label: "Memo" },
+    ],
+  },
+  {
+    name: "Outputs",
+    tabs: [
+      { id: "exports", label: "Draft & exports" },
+      { id: "outline", label: "Outline" },
+      { id: "audit", label: "Audit" },
+    ],
+  },
+];
+
+function groupOf(tab: Tab) {
+  return NAV_GROUPS.find((g) => g.tabs.some((t) => t.id === tab)) ?? NAV_GROUPS[0];
+}
 
 export function WorkspaceView({ id }: { id: string }) {
   const { role, actorName } = useSessionRole();
   const [ws, setWs] = useState<Workspace | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [tab, setTab] = useState<Tab>("overview");
+  const [tab, setTab] = useState<Tab>("guide");
   const [launching, setLaunching] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
 
@@ -164,20 +202,34 @@ export function WorkspaceView({ id }: { id: string }) {
       {ws.ingestMessage ? <p className="mt-2 text-xs text-subtle">{ws.ingestMessage}</p> : null}
 
       <div className="mt-4 flex gap-1 overflow-x-auto pb-1">
-        {TABS.map((t) => (
+        {NAV_GROUPS.map((g) => (
           <button
-            key={t}
+            key={g.name}
             type="button"
-            onClick={() => setTab(t)}
-            className={`min-h-11 shrink-0 rounded-sm px-3 text-sm capitalize ${tab === t ? "bg-forest text-forest-fg" : "text-muted hover:bg-moss"}`}
+            onClick={() => setTab(g.tabs[0].id)}
+            className={`min-h-11 shrink-0 rounded-sm px-4 text-sm font-medium ${groupOf(tab).name === g.name ? "bg-forest text-forest-fg" : "text-muted hover:bg-moss"}`}
           >
-            {t}
+            {g.name}
           </button>
         ))}
       </div>
+      {groupOf(tab).tabs.length > 1 ? (
+        <div className="mt-1 flex gap-1 overflow-x-auto border-b border-border pb-1">
+          {groupOf(tab).tabs.map((t) => (
+            <button
+              key={t.id}
+              type="button"
+              onClick={() => setTab(t.id)}
+              className={`min-h-9 shrink-0 rounded-sm px-3 text-sm ${tab === t.id ? "bg-moss font-medium" : "text-muted hover:bg-moss/50"}`}
+            >
+              {t.label}
+            </button>
+          ))}
+        </div>
+      ) : null}
 
       <div className="mt-5">
-        {tab === "overview" ? <Overview ws={ws} onLaunch={onLaunch} launching={launching} /> : null}
+        {tab === "guide" ? <GuideTab ws={ws} setTab={setTab} onLaunch={onLaunch} launching={launching} /> : null}
         {tab === "gauntlet" ? <GauntletTab ws={ws} /> : null}
         {tab === "dossier" ? <DossierTab ws={ws} onChange={refresh} /> : null}
         {tab === "steps" ? <Steps ws={ws} onChange={refresh} /> : null}
@@ -188,6 +240,154 @@ export function WorkspaceView({ id }: { id: string }) {
         {tab === "memo" ? <MemoTab ws={ws} /> : null}
         {tab === "audit" ? <AuditTab id={ws.id} /> : null}
         {tab === "exports" ? <Exports ws={ws} /> : null}
+      </div>
+    </div>
+  );
+}
+
+/**
+ * The Guide: the seven-step path to a roadmap as a live checklist.
+ *
+ * Each item derives its state from the workspace, so the checklist is never
+ * out of step with reality, and exactly one item carries the primary
+ * "Do this next" action at any time. The scorecard overview renders beneath —
+ * the Guide is the landing view, not an extra tab to discover.
+ */
+function GuideTab({
+  ws,
+  setTab,
+  onLaunch,
+  launching,
+}: {
+  ws: Workspace;
+  setTab: (t: Tab) => void;
+  onLaunch: () => void | Promise<void>;
+  launching: boolean;
+}) {
+  const failing = ws.gauntlet.lines.filter((l) => l.failReason).length;
+  const recorded = new Set(ws.decisions.map((d) => Number(d.step)));
+  const laddered = [2, 3, 4, 5, 6, 7, 8].filter((n) => recorded.has(n)).length;
+
+  type Item = {
+    title: string;
+    detail: string;
+    done: boolean;
+    optional?: boolean;
+    actionLabel: string;
+    action: () => void | Promise<void>;
+    busy?: boolean;
+  };
+
+  const items: Item[] = [
+    {
+      title: "Run the Step 1 diagnostic",
+      detail:
+        ws.ingestStatus === "running"
+          ? `The machine is collecting — ${ws.ingestProgress}/${ws.ingestTotal} series done. This takes ~15 minutes; you can leave.`
+          : "The machine pulls official statistics, runs verified web search, and names every gap it cannot fill. About 15 minutes, unattended.",
+      done: ws.step1Done,
+      actionLabel: ws.ingestStatus === "running" ? "Collecting…" : "Launch the diagnostic",
+      action: onLaunch,
+      busy: launching || ws.ingestStatus === "running",
+    },
+    {
+      title: "Clear the evidence readiness gate",
+      detail: ws.gauntlet.passed
+        ? `Cleared — ${ws.gauntlet.populated} of ${ws.gauntlet.mandatory} core gates populated.`
+        : `${ws.gauntlet.populated} of ${ws.gauntlet.mandatory} core gates populated; ${failing} need a human: set an assessor level with a document citation, or mark an explicit data gap.`,
+      done: ws.gauntlet.passed,
+      actionLabel: "Open Readiness",
+      action: () => setTab("gauntlet"),
+    },
+    {
+      title: "Skim the country document library",
+      detail: ws.dossier.length
+        ? `${ws.dossier.length} cited documents collected — useful leads for validating the gates above.`
+        : "Optional but recommended: collect cited national strategies, laws and evaluations as leads for gate validation.",
+      done: ws.dossier.length > 0,
+      optional: true,
+      actionLabel: "Open Documents",
+      action: () => setTab("dossier"),
+    },
+    {
+      title: "Record the decisions, Steps 2\u20138",
+      detail:
+        laddered >= 7
+          ? "All seven decisions recorded. The record is adopted."
+          : `${laddered} of 7 recorded. One short form per rung — engagement mode, targeting, evidence plan, government gates, validation, portfolio, adoption. The ladder cannot skip.`,
+      done: laddered >= 7,
+      actionLabel: "Open Steps",
+      action: () => setTab("steps"),
+    },
+    {
+      title: "Assemble and export the draft",
+      detail:
+        ws.draftCount > 0
+          ? `${ws.draftCount} draft${ws.draftCount === 1 ? "" : "s"} assembled — 17 chapters and 11 annexes, every figure cited.`
+          : "The assembler writes all 17 chapters and 11 annexes from the evidence base. Chapters that prescribe stay locked until the readiness gate clears.",
+      done: ws.draftCount > 0,
+      actionLabel: "Open Draft & exports",
+      action: () => setTab("exports"),
+    },
+  ];
+
+  const nextIdx = items.findIndex((i) => !i.done && !i.optional);
+
+  return (
+    <div>
+      <Card>
+        <div className="flex items-baseline justify-between gap-3">
+          <h2 className="font-display text-xl">The path to a roadmap</h2>
+          <span className="text-xs text-subtle">
+            {items.filter((i) => i.done).length} of {items.length} done
+          </span>
+        </div>
+        <ol className="mt-4 space-y-3">
+          {items.map((item, idx) => {
+            const isNext = idx === nextIdx;
+            return (
+              <li
+                key={item.title}
+                className={`flex flex-wrap items-center gap-3 rounded-lg border px-4 py-3 ${
+                  isNext ? "border-forest bg-moss/40" : "border-border/70"
+                } ${item.done ? "opacity-80" : ""}`}
+              >
+                <span
+                  aria-hidden
+                  className={`grid h-7 w-7 shrink-0 place-items-center rounded-full text-sm font-semibold ${
+                    item.done ? "bg-forest text-forest-fg" : isNext ? "bg-surface shadow-[var(--shadow-border)]" : "bg-moss/60 text-muted"
+                  }`}
+                >
+                  {item.done ? "\u2713" : idx + 1}
+                </span>
+                <div className="min-w-0 flex-1 basis-64">
+                  <p className="text-sm font-medium">
+                    {item.title}
+                    {item.optional ? <span className="ml-2 text-xs font-normal text-subtle">optional</span> : null}
+                  </p>
+                  <p className="mt-0.5 text-xs text-muted">{item.detail}</p>
+                </div>
+                <Button
+                  size="sm"
+                  variant={isNext ? "default" : "outline"}
+                  disabled={Boolean(item.busy) || (item.done && idx === 0)}
+                  onClick={item.action}
+                >
+                  {isNext && !item.busy ? `Do this next: ${item.actionLabel}` : item.actionLabel}
+                </Button>
+              </li>
+            );
+          })}
+        </ol>
+        {nextIdx === -1 ? (
+          <p className="mt-4 text-sm text-muted">
+            Every step is done. Export the draft and the evidence workbook from Draft &amp; exports — the result is a
+            first-draft DAR, fully cited and ready for human rewriting and consultation.
+          </p>
+        ) : null}
+      </Card>
+      <div className="mt-5">
+        <Overview ws={ws} onLaunch={async () => { await onLaunch(); }} launching={launching} />
       </div>
     </div>
   );

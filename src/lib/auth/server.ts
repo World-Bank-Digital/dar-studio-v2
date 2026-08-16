@@ -30,12 +30,14 @@
  */
 import { betterAuth } from "better-auth";
 import { bearer, genericOAuth } from "better-auth/plugins";
+import { passkey } from "@better-auth/passkey";
 import { tanstackStartCookies } from "better-auth/tanstack-start";
 import { getCookie } from "@tanstack/react-start/server";
 import { randomBytes } from "node:crypto";
 import { Pool } from "pg";
 import { ensureDbReady, getPglite } from "../db";
 import { emailAndPasswordEnabled } from "./email-password";
+import { buildSignInNotification, buildVerificationMail, sendAuthMail } from "./mailer";
 import { GROK_PROVIDERS } from "./providers";
 import { pgliteDialect } from "./pglite-dialect";
 import {
@@ -145,6 +147,13 @@ const database = databaseUrl
 /** Session token cookie name — also read by the live-preview popup completion page. */
 export const SESSION_TOKEN_COOKIE = "__Host-grok-auth.session_token";
 
+// WebAuthn relying-party identity. Locally the rpID is "localhost" (the spec's
+// dev carve-out); deployed, it must be the site's registrable hostname, derived
+// from BETTER_AUTH_URL. Note: passkeys registered on localhost are scoped to
+// localhost — they do not follow the app to a deployed domain.
+const passkeyRpId = explicitBaseURL ? new URL(explicitBaseURL).hostname : "localhost";
+const passkeyOrigins: string[] = explicitBaseURL ? [explicitBaseURL] : [...LOCAL_DEV_ORIGINS];
+
 // Built separately so the `betterAuth({...})` call stays easy to edit without
 // breaking brackets (models often trip on the conditional plugin spread).
 const grokOAuthPlugin = authConfigured
@@ -207,6 +216,51 @@ export const auth = betterAuth({
   // Local email/password — toggled only via `./email-password` (not a plugin).
   ...(emailAndPasswordEnabled ? { emailAndPassword: { enabled: true } } : {}),
 
+  // Verification email on sign-up. Delivery is Resend when RESEND_API_KEY is
+  // set, else a visible dev-mode console log (see ./mailer). Verification is
+  // deliberately NOT required to sign in: requiring it would lock out every
+  // pre-existing account and the QA seed, and this is a prototype — the email
+  // proves the plumbing, it does not gate access.
+  emailVerification: {
+    sendOnSignUp: true,
+    autoSignInAfterVerification: true,
+    async sendVerificationEmail({ user, url }) {
+      await sendAuthMail(buildVerificationMail({ email: user.email, name: user.name, url }));
+    },
+  },
+
+  // Sign-in notification: every new session sends (or dev-logs) an alert.
+  // Fire-and-forget — a mail failure must never fail the sign-in itself.
+  databaseHooks: {
+    session: {
+      create: {
+        async after(session) {
+          void (async () => {
+            try {
+              const { getSql } = await import("../db");
+              const sql = await getSql();
+              const rows = await sql<{ email: string; name: string | null }>`
+                select "email", "name" from "user" where "id" = ${session.userId}`;
+              const u = rows[0];
+              if (!u?.email) return;
+              await sendAuthMail(
+                buildSignInNotification({
+                  email: u.email,
+                  name: u.name,
+                  at: new Date(),
+                  ipAddress: session.ipAddress ?? null,
+                  userAgent: session.userAgent ?? null,
+                }),
+              );
+            } catch (err) {
+              console.error("[mailer] sign-in notification failed:", err instanceof Error ? err.message : err);
+            }
+          })();
+        },
+      },
+    },
+  },
+
   // `__Host-` prefixed cookies: the browser REFUSES any same-named cookie that
   // carries a `Domain` attribute, so a sibling `*.grok.me` app cannot "toss" a
   // `Domain=.grok.me` session cookie onto this app. `__Host-` requires Secure +
@@ -229,6 +283,14 @@ export const auth = betterAuth({
     // One genericOAuth provider per upstream (when auth is on), all federating
     // to the broker with the SAME client and differing only by the `idp` hint.
     ...(grokOAuthPlugin ? [grokOAuthPlugin] : []),
+
+    // WebAuthn passkeys (register in Settings, sign in from the login page).
+    // rpID/origins above; the passkey table ships in migrations/0005_passkey.sql.
+    passkey({
+      rpID: passkeyRpId,
+      rpName: "DAR Studio",
+      origin: passkeyOrigins,
+    }),
 
     // Accept `Authorization: Bearer <session-token>` as an alternative to the
     // cookie. Needed for the LIVE PREVIEW: the app runs in an embedded iframe
