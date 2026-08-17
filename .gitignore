@@ -22,3 +22,7 @@ pglite-debug.log
 *.pem
 *.key
 .claude/
+
+# Generated decks — rebuild with scripts/build-methodology-deck.mjs
+*.pptx
+*.pdf
