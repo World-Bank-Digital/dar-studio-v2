@@ -1,25 +1,36 @@
 # HANDOFF — DAR Studio v2
 
-*Session handoff, updated 2026-08-18 (early morning). Read this top to bottom
+*Session handoff, updated 2026-08-18 (morning). Read this top to bottom
 before changing anything; read [LEARNINGS.md](LEARNINGS.md) before touching
 the retrieval, scoring or drafting layers.*
 
 ## What this is
 
 A working prototype of the DAMM v1.3 methodology that produces a Digital
-Agriculture Roadmap: 97 indicators, three read-outs (CMS/EMS/OES), 13 core
-gates, an 8-step decision ladder, a 17-chapter + 11-annex draft. Originally
-generated in Grok's App Builder sandbox, substantially rebuilt since.
-`docs/TTL-GUIDE.md` is the user-facing field guide; `LEARNINGS.md` is the
-defect ledger (L1–L18 + design shifts D1/D2); the methodology deck regenerates
-via `node scripts/build-methodology-deck.mjs`.
+Agriculture Roadmap. The run pipeline (design shift D3, user-directed
+2026-08-18): explain the model (deterministic, computed from config) → collect
+all 97 indicators (each with source, year, credibility, level) → an
+opportunistic public-domain sweep (cited findings beyond the indicator
+structure) → practice research (past-year strategies, any country) → optional
+strategic-foresight uploads → a 17-chapter + 11-annex draft that opens with
+the model explanation and the evidence-health page. Originally generated in
+Grok's App Builder sandbox, substantially rebuilt since. `docs/TTL-GUIDE.md`
+is the user-facing field guide; `LEARNINGS.md` is the defect ledger (L1–L21 +
+design shifts D1–D3); the methodology deck regenerates via
+`node scripts/build-methodology-deck.mjs`.
 
 **Repo state:** branch `rebuild/byok-delivery-2026-08`, pushed to
 `github.com/rsudan/dar-studio-v2`. `main` still holds only the original
 import commit `84a0c9d` — merging is the user's call and has not been asked
-for. 275 unit tests, clean typecheck/lint/production build at HEAD. The
-ledger now runs L1–L21 (L19 round-3 funnel levers, L20 the catalogue crash,
-L21 the memory-quote diagnosis + foreign-government guard).
+for. 297 unit tests, clean typecheck/lint/production build at HEAD. The
+ledger runs L1–L21 + D1–D3 (L19 round-3 funnel levers, L20 the catalogue
+crash, L21 the memory-quote diagnosis + foreign-government guard, D3 the
+pipeline revision). Migration `0006_findings_uploads.sql` adds the
+`findings` and `uploads` tables. New deps: `pdf-parse` v2, `mammoth`.
+**Run 9 (DELIVERY PASS)** validated the revised pipeline end to end: 42/97
+machine-levelled, 19 rubric proposals (5 repair-recovered), 59 opportunistic
++ 11 practice findings, foresight upload cited by the draft, model page
+opening the document, ingest 34.9 min including both sweeps.
 
 ## Environment
 
@@ -103,9 +114,17 @@ the 9k quotable window plus one bounded repair call is what recovers them.
 1. **Fill rate** — pick a lever from the section above (Exa needs the
    user's go-ahead first; the Arabic-variant lever needs no key); 3.3
    farmer registry remains the acid test, now with honest diagnostics.
+   Note: the opportunistic sweep now often FINDS registry-adjacent public
+   material as findings (Annex B) even while the rubric stays unproposed —
+   check the findings list before assuming the web has nothing.
 2. **Chapters 11 (Target Architecture) and 13 (Governance/Delivery)** still
    use the generic decision-restating builder — they need bespoke builders.
    (13 is one of the two recurring fidelity rejections in every run.)
+3. **Sweep tuning** — the practice pass rejected 20 of 31 candidates on the
+   past-year window (working as designed, but query phrasing could target
+   fresher documents); the opportunistic sweep's 59 findings have not yet
+   been reviewed by a human for relevance quality — worth the user's eyes
+   on one workspace's Findings tab before tuning topics.
 3. **Contradiction ledger (master prompt §3)** — Annex J is scaffolded,
    nothing populates it (detect conflicting claims across dossier/evidence).
 4. **Merge to `main`** — user's call; suggest a PR when they're ready.

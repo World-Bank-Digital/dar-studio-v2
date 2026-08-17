@@ -274,6 +274,15 @@ labelled user-provided.
 `draft.test.ts` (model page first, Annex B inventory, comparator blocks,
 facts-block feeds), and the four new `qa-delivery.mjs` assertions (sweep
 findings visible, foresight upload cited, model page in the draft).
+**Validated (delivery run 9, DELIVERY PASS):** the full revised pipeline ran
+end to end against Egypt — explainer audit entry first, 42/97
+machine-levelled (19 rubric proposals, 5 repair-recovered — a new high),
+then 59 opportunistic + 11 practice findings stored (70 visible in the tab;
+the practice pass rejected 20 of 31 candidates on the past-year window,
+which is the window working), foresight fixture uploaded through the real UI
+and cited by the draft, model page opening the document, 17+11 intact, stage
+withheld throughout, zero console errors. Ingest 34.9 min including both
+sweeps — reasoning-off extraction keeps paying for the added work.
 
 ### D2 — Rubrics are researched, not skipped (user decision, same date)
 Anchored rubrics (42 indicators) and locally-sourced quantitative gaps (29) are
