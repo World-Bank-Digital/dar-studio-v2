@@ -757,6 +757,8 @@ async function runRubricResearchPass(
   if (!targets.length) return;
 
   let proposed = 0;
+  let repairedCount = 0;
+  let reattributedCount = 0;
   let rejectedCount = 0;
   let documents = 0;
   const errors: string[] = [];
@@ -764,13 +766,22 @@ async function runRubricResearchPass(
   let reported = 0;
 
   await mapLimit(targets, RUBRIC_CONCURRENCY, async (indicator) => {
-    const res = await researchRubric({
-      search: { providerId: searchCfg.provider, key: searchCfg.key },
-      model: { providerId: modelCfg.provider, key: modelCfg.key, modelName: modelCfg.modelName },
-      countryName,
-      iso3,
-      indicator,
-    });
+    let res: Awaited<ReturnType<typeof researchRubric>>;
+    try {
+      res = await researchRubric({
+        search: { providerId: searchCfg.provider, key: searchCfg.key },
+        model: { providerId: modelCfg.provider, key: modelCfg.key, modelName: modelCfg.modelName },
+        countryName,
+        iso3,
+        indicator,
+      });
+    } catch (err) {
+      // One rubric must never cost the other forty-one. A thrown worker
+      // rejects the whole mapLimit pool, so the pass died at "41 of 42" with
+      // no summary in a live run when one catalogue name broke the query
+      // builder. Contained here as an error the summary reports loudly.
+      res = { documentsRead: 0, error: `${indicator.id} crashed: ${err instanceof Error ? err.message : String(err)}` };
+    }
     documents += res.documentsRead;
     const current = ++done;
     // Concurrent workers' UPDATEs can commit out of order; only ever write a
@@ -785,7 +796,10 @@ async function runRubricResearchPass(
     }
     if (res.rejected) {
       rejectedCount += 1;
-      await writeAudit(userId, countryId, actor.role, actor.name, "rubric_rejected", `${res.rejected.indicatorId}: ${res.rejected.reason.slice(0, 160)}`);
+      // 300, not 160: quote-failure reasons carry the offending quote and the
+      // repair-attempt suffix at the end — truncation was eating the part
+      // that says whether the repair pass already had its shot.
+      await writeAudit(userId, countryId, actor.role, actor.name, "rubric_rejected", `${res.rejected.indicatorId}: ${res.rejected.reason.slice(0, 300)}`);
       return;
     }
     const p = res.proposal!;
@@ -801,11 +815,15 @@ async function runRubricResearchPass(
         and assessor_level is null and data_gap = false
         and value is null and suggested_level is null`;
     proposed += 1;
+    if (res.repaired) repairedCount += 1;
+    if (p.reattributions.length) reattributedCount += 1;
   });
 
   const summary =
-    `Rubric research via ${searchCfg.provider}+${modelCfg.provider}: ${proposed} provisional levels proposed, ` +
-    `${rejectedCount} rubrics left named (insufficient or unverifiable evidence), ${documents} documents read of ${targets.length} rubrics` +
+    `Rubric research via ${searchCfg.provider}+${modelCfg.provider}: ${proposed} provisional levels proposed` +
+    (repairedCount ? ` (${repairedCount} recovered by citation repair)` : "") +
+    (reattributedCount ? ` (${reattributedCount} with re-attributed citations)` : "") +
+    `, ${rejectedCount} rubrics left named (insufficient or unverifiable evidence), ${documents} documents read of ${targets.length} rubrics` +
     (errors.length ? `; errors: ${Array.from(new Set(errors)).slice(0, 2).join(" | ")}` : "");
   await writeAudit(userId, countryId, actor.role, actor.name, "rubric_research_pass", summary);
   await setIngestMessage(countryId, summary);

@@ -28,7 +28,7 @@ const base = process.argv[2] || "http://127.0.0.1:8080";
 const email = process.env.QA_EMAIL || "dbcheck@example.com";
 const password = process.env.QA_PASSWORD || "TestPass123!";
 
-const INGEST_DEADLINE_MS = 75 * 60 * 1000; // WB cascade + verified search + rubric research
+const INGEST_DEADLINE_MS = 90 * 60 * 1000; // WB cascade + verified search + rubric research (variants + citation repair add real minutes)
 const DRAFT_DEADLINE_MS = 30 * 60 * 1000; // 17 prose calls, pool of 4, reasoning-model worst case
 
 const report = {

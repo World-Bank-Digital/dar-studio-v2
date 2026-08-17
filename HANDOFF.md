@@ -1,8 +1,8 @@
 # HANDOFF — DAR Studio v2
 
-*Session handoff, updated 2026-08-17 (late). Read this top to bottom before
-changing anything; read [LEARNINGS.md](LEARNINGS.md) before touching the
-retrieval, scoring or drafting layers.*
+*Session handoff, updated 2026-08-18 (early morning). Read this top to bottom
+before changing anything; read [LEARNINGS.md](LEARNINGS.md) before touching
+the retrieval, scoring or drafting layers.*
 
 ## What this is
 
@@ -14,10 +14,12 @@ generated in Grok's App Builder sandbox, substantially rebuilt since.
 defect ledger (L1–L18 + design shifts D1/D2); the methodology deck regenerates
 via `node scripts/build-methodology-deck.mjs`.
 
-**Repo state:** branch `rebuild/byok-delivery-2026-08`, HEAD `c4e6d9c`, pushed
-to `github.com/rsudan/dar-studio-v2`. `main` still holds only the original
+**Repo state:** branch `rebuild/byok-delivery-2026-08`, pushed to
+`github.com/rsudan/dar-studio-v2`. `main` still holds only the original
 import commit `84a0c9d` — merging is the user's call and has not been asked
-for. 240 unit tests, clean typecheck/lint/production build at HEAD.
+for. 275 unit tests, clean typecheck/lint/production build at HEAD. The
+ledger now runs L1–L21 (L19 round-3 funnel levers, L20 the catalogue crash,
+L21 the memory-quote diagnosis + foreign-government guard).
 
 ## Environment
 
@@ -63,36 +65,47 @@ for. 240 unit tests, clean typecheck/lint/production build at HEAD.
 
 ## The open problem: machine fill rate
 
-Everything works end to end, but the machine still fills too little. Live
-Egypt runs: baseline 23/97 levelled → run 3: 28 (11 rubric proposals, 0
-quantitative) → run 4 (post-L18, stricter validation): 25 (7 proposals, 1
-quantitative accepted, 3 rejected — funnel finally instrumented). Diagnosed
-causes each round are in LEARNINGS L17/L18. Round-2 fixes are at HEAD:
-short country names in queries ("Egypt", not "Egypt, Arab Rep."), unstuffed
-2–5-word rubric queries, document labels that can't bleed into indicator ids,
-6 docs/rubric, anti-defensive prompt wording ("MUST propose if any document
-evidences L2+").
+The trajectory across live Egypt runs: baseline 23/97 → run 3: 28 → run 4:
+25 (funnel instrumented) → **run 5: 33** (round-2 query fixes) → run 6:
+aborted (L20 catalogue crash at rubric 41/42; quantitative 4 accepted before
+abort) → **run 7: 35** (round-3 levers: reasoning-off extraction, query
+variants, citation repair — repair recovered 0 at the 4.5k window) →
+**run 8: 43/97, DELIVERY PASS** (report
+`qa-reports/delivery-2026-08-17T19-23-03-249Z.json`): 17 rubric proposals
+(3 recovered by citation repair at the 9k window), 6 quantitative acceptances,
+22 rubrics left named (was 31), 15/17 chapters with model prose, fidelity
+gate active, stage withheld throughout. +87% over baseline.
 
-**Run 5 verdict: DELIVERY PASS** (report
-`qa-reports/delivery-2026-08-17T14-44-56-883Z.json`): 33/97 machine-levelled
-(+43% over baseline), 10 rubric proposals incl. three documentary core gates
-(4.1, 4.5, 5.7 at L3), 15/17 chapters with model prose, fidelity gate active,
-full 17+11 draft pre-human, stage withheld throughout. Quantitative extraction
-remains the weakest link (2 accepted / 9 batches) and 3.3 farmer registry
-still resists retrieval after three runs. The untested levers are:
-(a) **Exa instead of Jina** for retrieval (real `includeDomains` list, better
-content extraction — the user has no Exa key yet; ask before assuming);
-(b) a **non-reasoning extraction model** (DeepSeek burns budget on
-chain-of-thought and returns defensively; the audit's "reasoning tokens"
-diagnosis message identifies this); (c) two-pass rubric research (find docs →
-separate assess call per level clause).
+**What settled where (details in L19–L21):** extraction runs with
+chain-of-thought off (OpenRouter `reasoning: {enabled:false}`, visible
+fallback); rubric search is multi-variant, open-web (NSO scope was the third
+L4/L11 recurrence), foreign-government-filtered, with per-variant results
+interleaved by rank; failed quotes were model memory, not misattribution —
+the 9k quotable window plus one bounded repair call is what recovers them.
+
+**The remaining levers, in order:**
+1. **Exa key (user's call — ask, never assume).** Jina's ranking does not
+   surface Egypt's own Farmer's Card pages for English registry phrasings;
+   3.3 rejects honestly with a clean reading trail
+   (`scripts/probe-rubric.ts 3.3` shows it in two minutes). Exa's real
+   `includeDomains` (gov.eg, ministry hosts) plus neural ranking is the
+   designed fix for exactly this shape.
+2. **Official-language query variants.** The Farmer's Card is an Arabic-first
+   programme; every query we send is English. A per-country translated
+   variant (one cached model call to translate capability names) is generic
+   and would likely crack 3.3 without any new key.
+3. The residue: ~3 recurring memory-quotes (one case-study sentence the model
+   keeps reciting), and one upstream "finish reason: error" per run —
+   contained per-rubric, visible in pass summaries.
 
 ## Other open threads, in rough priority order
 
 1. **Fill rate** — pick a lever from the section above (Exa needs the
-   user's go-ahead first); 3.3 farmer registry is the acid test.
+   user's go-ahead first; the Arabic-variant lever needs no key); 3.3
+   farmer registry remains the acid test, now with honest diagnostics.
 2. **Chapters 11 (Target Architecture) and 13 (Governance/Delivery)** still
    use the generic decision-restating builder — they need bespoke builders.
+   (13 is one of the two recurring fidelity rejections in every run.)
 3. **Contradiction ledger (master prompt §3)** — Annex J is scaffolded,
    nothing populates it (detect conflicting claims across dossier/evidence).
 4. **Merge to `main`** — user's call; suggest a PR when they're ready.
@@ -131,3 +144,13 @@ needs an alarm (L13).
   published year (may be null); do not stamp run dates (L18).
 - The user prefers being asked before new external accounts/keys; keys are
   entered in the app's Settings UI, never pasted in chat.
+- **Single-rubric live probe:** `node --env-file=.env scripts/probe-rubric.ts
+  3.3` — two minutes, real keys, prints queries/hosts/proposal-or-rejection.
+  Use it before spending a 70-minute delivery run on a retrieval question.
+  It spends real Jina/OpenRouter quota; read-only against the DB.
+- The QA harness ingest deadline is 90 min (`INGEST_DEADLINE_MS`); variants
+  + repair lifted real ingest to ~47 min (run 8). If ingest architecture
+  changes again, re-time before trusting a FAIL.
+- QA workspaces are NOT auto-deleted by successor runs — soft-delete each
+  run's Egypt card after reading its funnel (`update countries set
+  deleted_at = now() where id = '…'`).

@@ -233,3 +233,108 @@ describe("search country names (round-2)", () => {
     assert.match(q, /^Egypt /);
   });
 });
+
+describe("extraction reasoning hint (round-3)", () => {
+  const params = { key: "k", model: "m", system: "s", user: "u" };
+
+  it("asks for no reasoning first and keeps the answer when it works", async () => {
+    const seen: Array<string | undefined> = [];
+    const { chatPreferringNoReasoning } = await import("./retrieval.ts");
+    const out = await chatPreferringNoReasoning(
+      { chat: async (i) => (seen.push(i.reasoning), { text: "[]" }) },
+      params,
+    );
+    assert.deepEqual(seen, ["none"]);
+    assert.equal(out.text, "[]");
+    assert.ok(!out.reasoningHintFellBack);
+  });
+
+  it("falls back to default reasoning when the hint is refused, and says so", async () => {
+    const seen: Array<string | undefined> = [];
+    const { chatPreferringNoReasoning } = await import("./retrieval.ts");
+    const out = await chatPreferringNoReasoning(
+      {
+        chat: async (i) => {
+          seen.push(i.reasoning);
+          if (i.reasoning === "none") return { text: null, error: "Provider returned 400: reasoning not supported" };
+          return { text: "[]" };
+        },
+      },
+      params,
+    );
+    assert.deepEqual(seen, ["none", undefined]);
+    assert.equal(out.text, "[]");
+    assert.equal(out.reasoningHintFellBack, true, "the fallback must be visible, not graceful (L13)");
+  });
+
+  it("reports the final error when both attempts fail", async () => {
+    const { chatPreferringNoReasoning } = await import("./retrieval.ts");
+    const out = await chatPreferringNoReasoning(
+      { chat: async () => ({ text: null, error: "boom" }) },
+      params,
+    );
+    assert.equal(out.error, "boom");
+  });
+});
+
+describe("unparseable extraction alarm (round-3)", () => {
+  it("is silent for parsed items and for an explicit empty array", async () => {
+    const { describeUnparseableExtraction } = await import("./retrieval.ts");
+    assert.equal(describeUnparseableExtraction('[{"id":"2.1"}]', 1), null);
+    assert.equal(describeUnparseableExtraction("[]", 0), null);
+    assert.equal(describeUnparseableExtraction("```json\n[ ]\n```", 0), null);
+  });
+
+  it("names a reply that parsed to nothing — a discarded answer is not an empty one (L14)", async () => {
+    const { describeUnparseableExtraction } = await import("./retrieval.ts");
+    const msg = describeUnparseableExtraction("I could not find any figures in these documents.", 0);
+    assert.ok(msg);
+    assert.match(msg, /no parseable JSON array/);
+    assert.match(msg, /could not find any figures/, "carries the reply head for diagnosis");
+  });
+});
+
+describe("extraction prompt obligation (round-3)", () => {
+  it("carries the positive obligation alongside the no-invention rules", () => {
+    const prompt = buildExtractionPrompt({
+      countryName: "Bhutan",
+      iso3: "BTN",
+      assessmentYear: YEAR,
+      indicators: [{ id: "2.1", name: "Rural 3G coverage", anchors: { L5: "full" } as never }],
+      docsByIndicator: new Map([["2.1", [DOC]]]),
+    });
+    assert.match(prompt, /MUST return that reading/, "the anti-defensive wording the rubric pass got (L11 siblings)");
+    assert.match(prompt, /Never estimate, interpolate, convert/);
+    assert.doesNotMatch(prompt, /Returning nothing is correct and expected/, "the defensive invitation is gone");
+  });
+});
+
+describe("retrieveVerifiedReadings wiring (round-3)", () => {
+  it("extracts with the no-reasoning hint and surfaces the fallback in the outcome error", async () => {
+    const { retrieveVerifiedReadings } = await import("./retrieval.ts");
+    const hints: Array<string | undefined> = [];
+    const outcome = await retrieveVerifiedReadings(
+      {
+        search: { providerId: "jina", key: "sk" },
+        model: { providerId: "openrouter", key: "mk", modelName: "m" },
+        countryName: "Bhutan",
+        iso3: "BTN",
+        assessmentYear: YEAR,
+        indicators: [{ id: "2.1", name: "Rural 3G coverage", anchors: { L5: "full" } as never }],
+      },
+      {
+        searcher: { domainFilterLimit: "all", search: async () => ({ hits: [DOC] }) },
+        extractor: {
+          chat: async (i) => {
+            hints.push(i.reasoning);
+            if (i.reasoning === "none") return { text: null, error: "reasoning unsupported" };
+            return { text: JSON.stringify([good()]) };
+          },
+        },
+      },
+    );
+    assert.deepEqual(hints, ["none", undefined]);
+    assert.equal(outcome.readings.length, 1, JSON.stringify(outcome));
+    assert.match(outcome.error ?? "", /refused the no-reasoning hint/, "full-burn batches must be visible in the audit");
+  });
+});

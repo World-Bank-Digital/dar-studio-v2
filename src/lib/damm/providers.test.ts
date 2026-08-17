@@ -82,3 +82,25 @@ describe("empty completions (LEARNINGS L14)", () => {
     assert.match(describeEmptyCompletion({ choices: [{ finish_reason: "length" }] }), /token limit/);
   });
 });
+
+describe("openrouter reasoning control (round-3)", () => {
+  it("maps the hint to the unified reasoning parameter and omits it by default", async () => {
+    const { PROVIDERS } = await import("./providers.ts");
+    const original = globalThis.fetch;
+    const bodies: Array<Record<string, unknown>> = [];
+    globalThis.fetch = (async (_url: unknown, init?: RequestInit) => {
+      bodies.push(JSON.parse(String(init?.body)));
+      return new Response(JSON.stringify({ choices: [{ message: { content: "ok" } }] }), { status: 200 });
+    }) as typeof fetch;
+    try {
+      await PROVIDERS.openrouter.chat({ key: "k", model: "m", system: "s", user: "u", reasoning: "none" });
+      await PROVIDERS.openrouter.chat({ key: "k", model: "m", system: "s", user: "u", reasoning: "low" });
+      await PROVIDERS.openrouter.chat({ key: "k", model: "m", system: "s", user: "u" });
+    } finally {
+      globalThis.fetch = original;
+    }
+    assert.deepEqual(bodies[0].reasoning, { enabled: false }, "extraction calls switch thinking off");
+    assert.deepEqual(bodies[1].reasoning, { effort: "low" });
+    assert.ok(!("reasoning" in bodies[2]), "prose calls keep the provider default");
+  });
+});

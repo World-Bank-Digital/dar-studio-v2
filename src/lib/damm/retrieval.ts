@@ -19,7 +19,7 @@ import { isHttpUrl } from "./citation.ts";
 import { nsoDomainsFor } from "./nso.ts";
 import { roundObserved } from "./scoring.ts";
 import { searchProviderDef, verifyQuote, type SearchHit, type SearchProviderDef } from "./search.ts";
-import { providerDef } from "./providers.ts";
+import { providerDef, type ChatInput, type ChatResult, type ProviderDef } from "./providers.ts";
 import { isBlockedHost, parseJsonArray, type SearchReading } from "./websearch.ts";
 import type { IndicatorDef } from "./types.ts";
 
@@ -111,7 +111,8 @@ export function buildExtractionPrompt(input: {
     "- Never estimate, interpolate, convert units or currencies, or combine numbers.",
     `- The observation year must be stated by the document and must not exceed ${input.assessmentYear}.`,
     "- If a document reports a close official proxy, set isProxy true and explain in proxyNote.",
-    "- Omit any indicator you cannot support. Returning nothing is correct and expected.",
+    "- Omit an indicator only when its documents contain no usable figure.",
+    "- If a document in an indicator's section DOES state a figure for it, you MUST return that reading. Leaving a supported figure unreported is as wrong as inventing one.",
     "",
     "Return ONLY a JSON array of objects with keys: id, value, year, sourceName, sourceUrl, quote, isProxy, proxyNote.",
     "The id field must be exactly the indicator id shown after 'Indicator' (e.g. 2.1) — never a document label.",
@@ -272,7 +273,39 @@ export async function collectDocuments(input: {
 const EXTRACTION_SYSTEM =
   "You extract statistics from supplied documents. You never search, recall, estimate or convert. " +
   "Every figure you return must appear verbatim in the document text you were given, and your quote is " +
-  "checked against that text. Omitting an indicator is always acceptable; inventing one never is.";
+  "checked against that text. Report every figure the documents do support; invent none they do not.";
+
+/**
+ * Call the extraction model with chain-of-thought suppressed, falling back to
+ * the provider's default when the hint itself is refused. Extraction is
+ * mechanical reading — the reasoning budget bought defensiveness, not accuracy
+ * (119 documents, 3 candidate readings in delivery run 5) — but a model that
+ * cannot switch thinking off must still be usable, so the fallback is one
+ * retry without the hint, and the outcome records that it happened.
+ */
+export async function chatPreferringNoReasoning(
+  extractor: Pick<ProviderDef, "chat">,
+  input: ChatInput,
+): Promise<ChatResult & { reasoningHintFellBack?: boolean }> {
+  const first = await extractor.chat({ ...input, reasoning: "none" });
+  if (!first.error) return first;
+  const second = await extractor.chat({ ...input, reasoning: undefined });
+  if (second.error) return second;
+  return { ...second, reasoningHintFellBack: true };
+}
+
+/**
+ * Distinguish "the model chose to report nothing" from "the model's output was
+ * not parseable". Both reach the caller as zero readings; only the first is a
+ * legitimate result. parseJsonArray returns [] for garbage too, and a silent
+ * [] was exactly how an earlier empty-completion failure stayed invisible for
+ * a whole run (LEARNINGS L14) — every non-artefact outcome must speak.
+ */
+export function describeUnparseableExtraction(text: string, itemCount: number): string | null {
+  if (itemCount > 0) return null;
+  if (/\[\s*\]/.test(text)) return null; // an explicit empty array is an answer
+  return `The extraction model replied with text but no parseable JSON array (starts: “${text.trim().slice(0, 120)}…”). Its answer was discarded, not empty.`;
+}
 
 /**
  * Collect verified readings for one batch of indicators.
@@ -281,21 +314,28 @@ const EXTRACTION_SYSTEM =
  * run Exa for retrieval and Claude for extraction, and neither needs to be the
  * other's vendor.
  */
-export async function retrieveVerifiedReadings(input: {
-  search: { providerId: string; key: string };
-  model: { providerId: string; key: string; modelName: string };
-  countryName: string;
-  iso3: string;
-  assessmentYear: number;
-  indicators: RetrievalIndicator[];
-  resultsPerIndicator?: number;
-}): Promise<RetrievalOutcome> {
+export async function retrieveVerifiedReadings(
+  input: {
+    search: { providerId: string; key: string };
+    model: { providerId: string; key: string; modelName: string };
+    countryName: string;
+    iso3: string;
+    assessmentYear: number;
+    indicators: RetrievalIndicator[];
+    resultsPerIndicator?: number;
+  },
+  /** Test seam: registry lookups are module constants, so stubs inject here. */
+  deps?: {
+    searcher?: Pick<SearchProviderDef, "search" | "domainFilterLimit">;
+    extractor?: Pick<ProviderDef, "chat">;
+  },
+): Promise<RetrievalOutcome> {
   if (!input.indicators.length) return { readings: [], rejected: [], documentsRead: 0 };
 
-  const searcher = searchProviderDef(input.search.providerId);
+  const searcher = deps?.searcher ?? searchProviderDef(input.search.providerId);
   if (!searcher) return { readings: [], rejected: [], documentsRead: 0, error: `Unknown search provider “${input.search.providerId}”.` };
 
-  const extractor = providerDef(input.model.providerId);
+  const extractor = deps?.extractor ?? providerDef(input.model.providerId);
   if (!extractor) return { readings: [], rejected: [], documentsRead: 0, error: `Unknown model provider “${input.model.providerId}”.` };
 
   const nsoDomains = nsoDomainsFor(input.iso3);
@@ -326,7 +366,7 @@ export async function retrieveVerifiedReadings(input: {
     docsByIndicator,
   });
 
-  const chat = await extractor.chat({
+  const chat = await chatPreferringNoReasoning(extractor, {
     key: input.model.key,
     model: input.model.modelName,
     system: EXTRACTION_SYSTEM,
@@ -334,7 +374,8 @@ export async function retrieveVerifiedReadings(input: {
     // 24k, not 3k: a reasoning model spends budget on chain-of-thought before
     // visible text — the 3k budget produced zero extractions with zero errors
     // in a live run (the sibling of LEARNINGS L14, found by its own diagnosis
-    // message in the audit).
+    // message in the audit). The budget stays high even with reasoning asked
+    // off, because the fallback path reasons at full burn.
     maxTokens: 24_000,
     temperature: 0,
     timeoutMs: 360_000,
@@ -349,7 +390,8 @@ export async function retrieveVerifiedReadings(input: {
   const rejected: RejectedReading[] = [];
   const takenIds = new Set<string>();
 
-  for (const item of parseJsonArray(chat.text)) {
+  const items = parseJsonArray(chat.text);
+  for (const item of items) {
     const outcome = validateAgainstDocuments(item, allowed, input.assessmentYear, documents);
     if ("rejected" in outcome) {
       rejected.push(outcome.rejected);
@@ -360,5 +402,11 @@ export async function retrieveVerifiedReadings(input: {
     readings.push(outcome.reading);
   }
 
-  return { readings, rejected, documentsRead: documents.length, error: searchError };
+  const alarms = [
+    searchError,
+    describeUnparseableExtraction(chat.text, items.length),
+    chat.reasoningHintFellBack ? "The model refused the no-reasoning hint; this batch ran at full reasoning burn." : null,
+  ].filter((s): s is string => Boolean(s));
+
+  return { readings, rejected, documentsRead: documents.length, error: alarms.length ? alarms.join(" | ") : undefined };
 }

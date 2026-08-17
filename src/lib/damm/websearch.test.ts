@@ -83,3 +83,26 @@ describe("national hosts", () => {
     assert.equal(isGovernmentHost("example.com"), false);
   });
 });
+
+describe("foreign government hosts (round-3b, the AgriStack catch)", () => {
+  it("flags another country's government portal for this country's assessment", async () => {
+    const { isForeignGovernmentHost } = await import("./websearch.ts");
+    assert.equal(isForeignGovernmentHost("https://mhfr.agristack.gov.in/page", "EG"), true);
+    assert.equal(isForeignGovernmentHost("https://www.moalr.gov.eg/farmers-card", "EG"), false);
+    assert.equal(isForeignGovernmentHost("https://kilimo.go.ke/registry", "EG"), true);
+    assert.equal(isForeignGovernmentHost("https://kilimo.go.ke/registry", "KE"), false);
+    assert.equal(isForeignGovernmentHost("https://agriculture.gouv.fr/plan", "EG"), true);
+  });
+
+  it("leaves intergovernmental and non-government hosts alone — secondary sources stay legitimate", async () => {
+    const { isForeignGovernmentHost } = await import("./websearch.ts");
+    assert.equal(isForeignGovernmentHost("https://www.fao.org/egypt/profile", "EG"), false);
+    assert.equal(isForeignGovernmentHost("https://www.worldbank.org/report", "EG"), false);
+    assert.equal(isForeignGovernmentHost("https://example.com/anything", "EG"), false);
+  });
+
+  it("never filters when the country code is unknown", async () => {
+    const { isForeignGovernmentHost } = await import("./websearch.ts");
+    assert.equal(isForeignGovernmentHost("https://mhfr.agristack.gov.in/page", ""), false);
+  });
+});

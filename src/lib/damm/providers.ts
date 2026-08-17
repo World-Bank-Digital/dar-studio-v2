@@ -22,6 +22,15 @@ export interface ChatInput {
   maxTokens?: number;
   temperature?: number;
   timeoutMs?: number;
+  /**
+   * Ask the provider to suppress ("none") or minimise ("low") chain-of-thought.
+   * Extraction calls set this: a reasoning model spends its budget thinking and
+   * then returns defensively — 119 documents produced 3 candidate readings in a
+   * live run. Only adapters with a documented control honour the hint
+   * (OpenRouter's unified `reasoning` parameter); the rest ignore it, which is
+   * safe because the hint is an economy measure, not a correctness gate.
+   */
+  reasoning?: "none" | "low";
 }
 
 export interface ChatResult {
@@ -324,6 +333,14 @@ const openrouter: ProviderDef = {
         model: input.model,
         max_tokens: input.maxTokens ?? DEFAULT_MAX_TOKENS,
         temperature: input.temperature ?? 0.2,
+        // OpenRouter's unified reasoning control. `enabled: false` turns
+        // thinking off on hybrid models (DeepSeek v3.1+); a model that cannot
+        // comply errors back, and the call site retries without the hint.
+        ...(input.reasoning === "none"
+          ? { reasoning: { enabled: false } }
+          : input.reasoning === "low"
+            ? { reasoning: { effort: "low" } }
+            : {}),
         messages: [
           { role: "system", content: input.system },
           { role: "user", content: input.user },

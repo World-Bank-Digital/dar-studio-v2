@@ -303,3 +303,135 @@ wrapping <label> inherits its textarea's content into the accessible name
 Still open: 3.3 farmer registry — three runs of "documents did not establish"
 point at retrieval (Jina ranking for this phrase), not validation; the levers
 are an Exa key (user's call) or a non-reasoning extraction model.
+
+### L19 — Round 3: the funnel's three leaks, each fixed at its own stage
+**Incident (delivery run 5, instrumented funnel):** machine fill plateaued at
+33/97 with three distinct leaks. (1) Quantitative extraction: 119 documents
+retrieved across 9 batches produced 3 candidate readings — retrieval
+delivered; the reasoning model read defensively and spent its budget thinking.
+(2) Rubric research: 6 of the 32 rejections were argued, cited proposals
+thrown away because one quote failed verbatim verification — recoverable
+losses (10 accepted; 16 were in reach) — and the audit could not say WHY
+quotes failed. (3) The acid-test registry (3.3) resisted a third run behind
+ONE fixed query phrasing: the indicator name's slash glued two capabilities
+into "Egypt National farmer registry database official", while the winning
+human query had been two words.
+**Root cause:** one prompt/one call/one phrasing per stage, tuned once and
+never given a second angle — plus a defensive-prompt sibling of the L11 class:
+the extraction prompt still said "returning nothing is correct and expected"
+after round 2 had de-defensived the rubric prompt.
+**Fix:** (a) extraction runs with chain-of-thought asked off (OpenRouter
+unified `reasoning: {enabled: false}`), one VISIBLE fallback to default
+reasoning if the hint is refused; the defensive invitation replaced by a
+positive obligation ("MUST return a supported figure"); a model reply that
+parses to zero items now alarms instead of impersonating an honest empty
+result (the L14 class). (b) Quote-failure rejections carry the offending
+quote, and a proposal that failed ONLY on quote verification gets exactly one
+repair call naming the failed quote — the verification bar itself is unmoved;
+the prompt now forbids translating quotes. (c) Rubric search tries up to three
+phrasings (slashed name alternatives split into separate queries, leading
+scope words dropped), advancing while the harvest lacks the rubric's
+discriminating vocabulary; per-variant results interleave by rank under the
+document cap. Vocabulary matching is ONLY a keep-searching trigger, never an
+evidence rank or filter — the reference decree establishes the registry
+without ever saying "registry".
+**Result (delivery run 7, DELIVERY PASS):** 35/97 machine-levelled (+2 over
+run 5; +52% over baseline), 11 proposals, quantitative 3 accepted / 0
+uncheckable (run 5: 2/1), 208 rubric documents read (variants firing), ingest
+wall-clock FLAT at 38.6 min (reasoning-off paid for the extra searches). The
+new diagnostics earned their keep immediately: all six quote failures survived
+repair unchanged and read as fluent spans, not paraphrase — pointing at
+cross-document misattribution and quoting-from-memory, not transformation
+(→ round 3b: cross-document re-attribution, 9k quotable window, reading-trail
+audits). 3.3's failure mode moved from "did not establish" (retrieval) to an
+L1 judgment correctly refused by the guard — the documents now arrive; the
+judgment is the next target.
+**Meta-lesson: instrument a funnel before pulling levers — run 5's
+stage-by-stage counts turned "the machine fills too little" into three
+specific, separately fixable leaks. A repair loop that recovers nothing is
+still a diagnostic: it eliminates the failure mode it was built for.**
+**Pinned by:** `providers.test.ts` (reasoning parameter mapping),
+`retrieval.test.ts` (no-reasoning-first with visible fallback, unparseable
+alarm, prompt obligation), `rubric.test.ts` (name alternatives, query
+variants, topic-trigger semantics, rank interleave, offending-quote reasons,
+one-repair-only, no repair for non-quote rejections, re-attribution rules,
+9k window, reading trail).
+
+### L20 — One catalogue name killed the whole rubric pass (delivery run 6)
+**Incident:** run 6 died at "Researching documentary rubrics — 41 of 42" with
+no pass summary, a 22-minute audit silence, one `ingest_error` ("Cannot read
+properties of undefined (reading 'replace')"), and a QA harness death by
+deadline. The 41 finished rubrics' work survived only because persistence is
+per-rubric.
+**Root cause:** two stacked problems. (1) Indicator 3.5 — "National
+agricultural data portal / open data" — writes its alternatives with a
+FREESTANDING slash. The new `nameAlternatives` parser understood only slashed
+tokens ("registry/database"); a bare "/" token has empty sides, the function
+returned no alternatives, and `alts[0].replace` threw. The unit tests covered
+three handpicked names, not the catalogue — L11's lesson (a class of mistake
+rarely has one instance) applied to data instead of code. (2) A thrown worker
+rejects the whole `mapLimit` pool, so one rubric's crash abandoned the 42nd
+rubric AND the pass summary, leaving the run to die of deadline rather than of
+a named error.
+**Fix:** a spaced slash now splits whole phrasings; every degenerate parse
+falls back to the cleaned full name, so an empty alternatives list is
+unconstructible. The rubric worker contains crashes per indicator ("{id}
+crashed: …" surfaces in the pass summary's error list) — one rubric can never
+again cost the other forty-one. Audit rejection reasons widened 160 → 300
+chars so the repair-attempt suffix survives into the trail.
+**Meta-lesson: when a function's input domain is a catalogue, the test sweeps
+the catalogue — handpicked fixtures test the parser you wrote; the catalogue
+tests the parser you needed. And a worker pool one item can kill turns a data
+bug into an availability bug; containment belongs at the worker.**
+**Pinned by:** `rubric.test.ts` — "reads a spaced slash as whole-phrase
+alternatives" and "builds non-empty queries for EVERY researchable rubric in
+the catalogue"; the containment comment at the `mapLimit` worker in
+`actions.ts`.
+
+### L21 — Round 3b: the memory-quote diagnosis, and what the reading trail caught (delivery run 8)
+**Incident:** run 7's six failed quotes all survived a repair pass unchanged
+and read as fluent, specific spans — not paraphrase. Working hypothesis was
+cross-document misattribution; the alternative was quoting from model memory.
+Separately, 3.3's rejection trail showed the rubric pass reading ONLY
+`censusinfo.capmas.gov.eg` — the NSO scope, inherited from the quantitative
+path, had confined the registry search to the census bureau for four runs,
+and census pages say "database" everywhere, so even the round-3 vocabulary
+trigger was satisfied by the wrong capability.
+**Fix + result (run 8, DELIVERY PASS, 43/97 machine-levelled — +8 over run 7,
++87% over baseline):** the rubric prompt's shown window went 4500 → 9000 chars
+(the shown text is the model's whole quotable surface), cross-document
+re-attribution was added for quotes found verbatim on exactly one other
+retrieved page, and rejects carry a reading-trail of hosts. Outcome settled
+the diagnosis: re-attribution fired ZERO times, while citation repair — which
+had recovered nothing at 4500 — recovered 3 proposals at 9000. The failed
+quotes were model memory, not misattribution: give the model enough real page
+to quote and the repair loop starts working. Quote failures fell 6 → 3 (the
+residue is one recurring memory-quote about a known case study). Rubric
+proposals 11 → 17, quantitative acceptances 3 → 6, rubrics left named 31 → 22.
+One model call died upstream ("finish reason: error"); the L20 containment
+kept it to one rubric and named it in the pass summary.
+**The 3.3 probe (scripts/probe-rubric.ts):** a two-minute single-rubric live
+probe replaced the fourth 70-minute delivery run. Descoped to the open web,
+the registry query stopped reading the census bureau — and returned India's
+AgriStack portal (`mhfr.agristack.gov.in`) plus generic FAO/OECD pages:
+topical, official-looking, wrong country. That surfaced a new integrity
+class — one government's documents must never inform another government's
+capability assessment — now closed by `isForeignGovernmentHost` (ccTLD
+government patterns, foreign-gov docs discarded before the topic trigger or
+the prompt). Re-probed: the pool is clean and domestic-or-intergovernmental,
+and 3.3 still honestly rejects — Jina's ranking simply does not surface
+Egypt's own Farmer's Card pages for English registry phrasings. The residual
+levers are an Exa key (real `includeDomains`, neural ranking — user's call)
+or query variants in the country's official language (the Farmer's Card is an
+Arabic-first programme).
+**Meta-lessons: when two hypotheses explain a failure, build the cheap
+discriminating experiment into the pipeline and let one production run settle
+it — the re-attribution counter existing at all is what proved misattribution
+wrong. A reading trail on every rejection converts "still fails" into "fails
+for this named reason". And a single-item live probe belongs next to any
+70-minute loop — three delivery runs were spent learning what one probe shows
+in two minutes.**
+**Pinned by:** `rubric.test.ts` (re-attribution rules, 9k window, reading
+trail, foreign-doc exclusion from the prompt, open-web scope for rubrics);
+`websearch.test.ts` (foreign-government host patterns, intergovernmental
+hosts untouched, unknown-country no-op).

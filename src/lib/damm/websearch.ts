@@ -49,6 +49,24 @@ export function isBlockedHost(url: string): boolean {
   return BLOCKED_HOSTS.some((h) => host === h || host.endsWith(`.${h}`));
 }
 
+/**
+ * Is this ANOTHER country's government site? An open-web rubric search for
+ * "Egypt farmer registry" returned India's AgriStack portal (a live probe's
+ * reading trail caught it) — topical, official-looking, and about the wrong
+ * country. One government's documents must never inform — or accidentally
+ * establish — another government's capability assessment. Matches ccTLD
+ * government second-level labels (gov.eg, gov.in, go.ke, gouv.fr, gob.mx,
+ * gub.uy); intergovernmental hosts (fao.org, worldbank.org) are untouched, as
+ * secondary sources ABOUT the country are legitimate evidence.
+ */
+export function isForeignGovernmentHost(url: string, countryIso2: string): boolean {
+  if (!countryIso2) return false;
+  const host = hostOf(url);
+  const m = host.match(/(?:^|\.)(?:gov|go|gouv|gob|gub|gv)\.([a-z]{2})$/);
+  if (!m) return false;
+  return m[1] !== countryIso2.toLowerCase();
+}
+
 /** Extract a JSON array from model text (raw or fenced). */
 export function parseJsonArray(text: string): unknown[] {
   const trimmed = text.trim();
