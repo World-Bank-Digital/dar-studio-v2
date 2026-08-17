@@ -251,6 +251,30 @@ conditional banner on prescriptive chapters, inline grades/PROXY/STALE flags,
 and the health page — provenance made impossible to miss, instead of work
 made impossible to reach.
 
+### D3 — The pipeline explains itself, then casts three nets (user decision, 2026-08-18)
+**What changed:** the run sequence is now: (1) explain the DAMM — a
+deterministic explainer computed from the model configuration opens the run,
+the Guide tab and the draft; (2) collect all 97 indicators, each carrying
+source, year, credibility and level; (3) an **opportunistic sweep** — a wide
+net over the public domain for citable country evidence outside the indicator
+structure, stored as quote-verified findings (never score inputs; they feed
+chapters and Annex B); (4) **practice research** — strategies and best
+practices from roughly the past year, any country, as cited comparators for
+prescriptive chapters; (5) **strategic-foresight uploads** — user-provided
+documents (PDF/DOCX/TXT/MD, text-extracted) cited by the draft as user
+material. App copy was swept of references to previous behaviour — the app
+describes itself as it is (`copy.test.ts` pins the banned phrases).
+**Why:** the fixed indicator frame under-uses what the public domain knows
+(the user's direction), and a diagnostic that opens by silently collecting
+reads as a black box. The verification discipline is unchanged everywhere:
+findings carry verbatim checked quotes; foreign-government hosts are excluded
+from country evidence but welcome as practice comparators; uploads are
+labelled user-provided.
+**Pinned by:** `explainer.test.ts`, `findings.test.ts`, `copy.test.ts`,
+`draft.test.ts` (model page first, Annex B inventory, comparator blocks,
+facts-block feeds), and the four new `qa-delivery.mjs` assertions (sweep
+findings visible, foresight upload cited, model page in the draft).
+
 ### D2 — Rubrics are researched, not skipped (user decision, same date)
 Anchored rubrics (42 indicators) and locally-sourced quantitative gaps (29) are
 now researched on the open web. Rubric proposals must argue clause-by-clause

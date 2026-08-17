@@ -67,6 +67,8 @@ const NAV = {
   gauntlet: ["Evidence", "Readiness"],
   evidence: ["Evidence", "Indicators"],
   dossier: ["Evidence", "Documents"],
+  findings: ["Evidence", "Findings"],
+  uploads: ["Evidence", "Foresight"],
   steps: ["Decisions", "Steps 2\u20138"],
   exports: ["Outputs", "Draft & exports"],
 };
@@ -195,6 +197,41 @@ try {
   if (!ingestDone) throw new Error("Step 1 diagnostic did not finish inside the deadline");
   phase("ingest", { minutes: Math.round((Date.now() - ingestStart) / 6000) / 10 });
 
+  note("3b. the wide sweeps must have produced cited findings (a silent zero is a broken pass)");
+  await tab("findings");
+  await page.getByText(/Public-domain findings/i).waitFor({ timeout: 15000 });
+  await page.waitForTimeout(1500);
+  {
+    const body = await page.locator("body").innerText();
+    const findingCards = (body.match(/Verified quote: /g) || []).length;
+    const practiceSection = /Recent strategies and practices/.test(body);
+    report.phases.sweeps = { findingCards, practiceSection };
+    note(`   sweeps: ${findingCards} findings visible; practice section=${practiceSection}`);
+    if (!practiceSection) throw new Error("findings tab is missing the practices section");
+    if (findingCards === 0) throw new Error("the wide sweeps stored zero findings — the pass ran dry (L17 class)");
+  }
+  await shot("d-01a-findings");
+  phase("sweeps", report.phases.sweeps);
+
+  note("3c. upload strategic-foresight material; the draft must cite it");
+  await tab("uploads");
+  await page.getByText(/Strategic-foresight material/i).waitFor({ timeout: 15000 });
+  {
+    const { writeFileSync, mkdtempSync } = await import("node:fs");
+    const { join: joinPath } = await import("node:path");
+    const { tmpdir } = await import("node:os");
+    const dir = mkdtempSync(joinPath(tmpdir(), "dar-qa-"));
+    const fixture = joinPath(dir, "qa-foresight-scenarios.txt");
+    writeFileSync(
+      fixture,
+      "QA strategic foresight fixture. Scenario Alpha assumes accelerated smallholder platform adoption by 2032; Scenario Beta assumes stalled rural connectivity investment. Prepared for the delivery loop.",
+    );
+    await page.locator('input[type="file"]').setInputFiles(fixture);
+    await page.getByText(/readable characters stored/i).waitFor({ timeout: 20000 });
+  }
+  await shot("d-01a2-foresight");
+  phase("foresight", { uploaded: true });
+
   note("4. draft-first: assemble the full DAR immediately, before any human step");
   await tab("exports");
   await page.getByRole("button", { name: /Assemble draft/i }).click();
@@ -205,16 +242,20 @@ try {
     const chapters = new Set([...body.matchAll(/^(\d{1,2})\.\s.{4,80}$/gm)].map((m) => Number(m[1]))).size;
     const annexes = new Set([...body.matchAll(/^[A-K]\.\s.{4,80}$/gm)].map((m) => m[0][0])).size;
     const health = /Evidence health/.test(body);
+    const modelPage = /THE MODEL THIS RUN EXECUTES/.test(body);
     const undrafted = (body.match(/is not drafted/gi) || []).length;
     const noClaim = /no stage claimable/i.test(body);
     const conditional = /CONDITIONS ON THIS CHAPTER/.test(body);
-    report.phases.draftFirst = { chapters, annexes, health, undrafted, noClaim, conditional };
-    note(`   draft-first: chapters=${chapters} annexes=${annexes} health=${health} undrafted=${undrafted} noClaim=${noClaim} conditional=${conditional}`);
+    const citesForesight = /qa-foresight-scenarios\.txt/.test(body);
+    report.phases.draftFirst = { chapters, annexes, health, modelPage, undrafted, noClaim, conditional, citesForesight };
+    note(`   draft-first: chapters=${chapters} annexes=${annexes} health=${health} model=${modelPage} undrafted=${undrafted} noClaim=${noClaim} conditional=${conditional} foresight=${citesForesight}`);
     if (chapters !== 17 || annexes !== 11) throw new Error(`draft-first expected 17+11, saw ${chapters}+${annexes}`);
     if (!health) throw new Error("draft-first: evidence-health page missing");
+    if (!modelPage) throw new Error("draft-first: the draft must open by explaining the model it runs on");
     if (undrafted > 0) throw new Error(`draft-first: ${undrafted} sections undrafted`);
     if (!noClaim) throw new Error("draft-first: the engagement-package rule must still withhold the stage");
     if (!conditional) throw new Error("draft-first: prescriptive chapters should carry the conditional banner pre-validation");
+    if (!citesForesight) throw new Error("draft-first: the uploaded strategic-foresight material is not cited in the draft");
   }
   await shot("d-01b-draft-first");
   phase("draftFirstAssembled", report.phases.draftFirst);

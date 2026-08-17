@@ -8,6 +8,7 @@ import type {
 import { claimableStage, formatObserved, formatPct, formatScore } from "./scoring.ts";
 import { disclaimer } from "./model.ts";
 import { DAR_OUTLINE, isPrescriptive } from "./outline.ts";
+import { modelExplainer } from "./explainer.ts";
 
 export interface DraftPayload {
   countryName: string;
@@ -62,6 +63,28 @@ export interface DraftPayload {
     score: number;
     informs: string;
     relatedIndicator: string | null;
+  }>;
+  /**
+   * Cited findings from the two wide sweeps: `opportunistic` (public-domain
+   * country evidence outside the indicator structure) and `practice` (recent
+   * strategies and best practices, any country). Context for chapters and the
+   * ecosystem inventory; never a score input.
+   */
+  findings?: Array<{
+    kind: "opportunistic" | "practice";
+    claim: string;
+    quote: string;
+    sourceName: string | null;
+    sourceUrl: string;
+    publishedYear: number | null;
+    credibility: string | null;
+    pillarHint: string | null;
+  }>;
+  /** User-provided strategic-foresight material, as extracted text excerpts. */
+  foresight?: Array<{
+    filename: string;
+    chars: number;
+    excerpt: string;
   }>;
 }
 
@@ -118,6 +141,18 @@ function factsBlock(p: DraftPayload): string {
     lines.push(`Targeting shortlist: ${p.targeting.chains.join("; ") || "(none)"}`);
     lines.push(`Targeting rejected: ${p.targeting.rejected.join("; ") || "(none)"}`);
     if (p.targeting.notes) lines.push(`Targeting notes: ${p.targeting.notes}`);
+  }
+  // Sweep findings and foresight material enter the facts block so model
+  // prose may draw on them — and so the fidelity gate treats their figures as
+  // present in the evidence base rather than rejecting them as inventions.
+  for (const f of (p.findings ?? []).filter((f) => f.kind === "opportunistic").slice(0, 25)) {
+    lines.push(`Public-domain finding (${f.credibility ?? "?"}${f.publishedYear ? ` ${f.publishedYear}` : ""}; ${f.sourceUrl}): ${f.claim}`);
+  }
+  for (const f of (p.findings ?? []).filter((f) => f.kind === "practice").slice(0, 15)) {
+    lines.push(`Recent practice/strategy (${f.publishedYear ?? "n.d."}; ${f.sourceUrl}): ${f.claim}`);
+  }
+  for (const u of (p.foresight ?? []).slice(0, 5)) {
+    lines.push(`User-provided strategic foresight — ${u.filename} (${u.chars.toLocaleString()} chars): ${u.excerpt.slice(0, 600)}`);
   }
   return lines.join("\n");
 }
@@ -210,8 +245,8 @@ export function assembleDeterministicDraft(model: DammModel, payload: DraftPaylo
     };
   });
 
-  // The health section leads the document: what the evidence can and cannot
-  // yet carry, and the ranked list of what to strengthen first.
+  // The health section leads the evidence: what it can and cannot yet carry,
+  // and the ranked list of what to strengthen first.
   chapters.unshift({
     n: "health",
     title: "Evidence health",
@@ -220,6 +255,18 @@ export function assembleDeterministicDraft(model: DammModel, payload: DraftPaylo
     modelName,
     draftedAt,
     body: evidenceHealth(payload),
+  });
+  // And the model explainer leads the document: the DAR opens by explaining
+  // the maturity model it executes, computed from the same configuration the
+  // engine scores with. Deterministic; never model prose.
+  chapters.unshift({
+    n: "model",
+    title: "The model this draft runs on",
+    ready: true,
+    machineDrafted: true,
+    modelName,
+    draftedAt,
+    body: modelExplainer(model),
   });
   return {
     title: `Digital Agriculture Roadmap — first draft — ${payload.countryName}`,
@@ -416,6 +463,27 @@ function assembleChapter(n: string, p: DraftPayload): string {
       }
       return lines.join("\n");
     }
+    // Annex B — Ecosystem Inventory: where the opportunistic sweep's findings
+    // live. Cited public-domain evidence gathered OUTSIDE the indicator
+    // structure; context for the roadmap, never a score input.
+    case "B": {
+      const opportunistic = (p.findings ?? []).filter((f) => f.kind === "opportunistic");
+      const lines = [
+        "Annex — ecosystem inventory. Systems, programmes, platforms and initiatives identified in the public domain by the wide-net sweep that follows the structured indicator collection. Each entry is a cited, quote-verified finding; none populates an indicator or moves a score.",
+        "",
+      ];
+      if (!opportunistic.length) {
+        lines.push("No public-domain findings are stored for this workspace yet. The sweep runs as part of the Step 1 diagnostic (a search key and an active model are required).");
+        return lines.join("\n");
+      }
+      for (const f of opportunistic) {
+        lines.push(
+          `- ${f.claim} (${f.sourceName ?? "source"}, ${f.publishedYear ?? "n.d."}; credibility ${f.credibility ?? "—"}; ${f.sourceUrl})`,
+          `  Verified quote: “${f.quote}”${f.pillarHint ? ` [pillar ${f.pillarHint}]` : ""}`,
+        );
+      }
+      return lines.join("\n");
+    }
     default: {
       const ready = p.chapters.find((c) => c.n === n);
       const related = p.decisions.filter((d) => (ready ? ready.readyAt === d.step || d.step >= 6 : false));
@@ -430,6 +498,21 @@ function assembleChapter(n: string, p: DraftPayload): string {
           lines.push(`- Step ${d.step}: “${d.optionName}” — ${d.deciderName} (${d.role}) on ${d.createdAt}.`);
           if (d.notes) lines.push(`  Notes: ${d.notes}`);
           if (d.rejected) lines.push(`  Rejected: ${d.rejected}`);
+        }
+      }
+      if (isPrescriptive(n)) {
+        const practices = (p.findings ?? []).filter((f) => f.kind === "practice");
+        if (practices.length) {
+          lines.push("", "Recent strategies and practices identified for comparison (cited; from any country or institution — comparators, not prescriptions):");
+          for (const f of practices.slice(0, 12)) {
+            lines.push(`- ${f.claim} (${f.sourceName ?? "source"}, ${f.publishedYear ?? "n.d."}; ${f.sourceUrl})`);
+          }
+        }
+        if (p.foresight?.length) {
+          lines.push("", "Strategic-foresight material provided by the task team (user uploads, cited as such):");
+          for (const u of p.foresight) {
+            lines.push(`- ${u.filename} (${u.chars.toLocaleString()} readable characters). Excerpt: ${u.excerpt.slice(0, 300)}…`);
+          }
         }
       }
       lines.push("");

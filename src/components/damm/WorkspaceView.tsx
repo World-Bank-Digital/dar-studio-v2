@@ -28,6 +28,8 @@ import {
   type Workspace,
 } from "@/lib/damm/actions";
 import { model } from "@/lib/damm/model";
+import { modelExplainer } from "@/lib/damm/explainer";
+import { FindingsTab, ForesightTab } from "./SweepTabs";
 import { finalLevel, formatObserved, formatPct, formatScore, isStale, suggestedLevel } from "@/lib/damm/scoring";
 import { nextAction } from "@/lib/damm/ladder";
 import { chainSuggestions } from "@/lib/damm/chains";
@@ -43,6 +45,8 @@ const TAB_IDS = [
   "gauntlet",
   "gates",
   "dossier",
+  "findings",
+  "uploads",
   "visuals",
   "steps",
   "memo",
@@ -67,6 +71,8 @@ const NAV_GROUPS: Array<{ name: string; tabs: Array<{ id: Tab; label: string }> 
       { id: "gauntlet", label: "Readiness" },
       { id: "gates", label: "Core gates" },
       { id: "dossier", label: "Documents" },
+      { id: "findings", label: "Findings" },
+      { id: "uploads", label: "Foresight" },
       { id: "visuals", label: "Charts" },
     ],
   },
@@ -232,6 +238,8 @@ export function WorkspaceView({ id }: { id: string }) {
         {tab === "guide" ? <GuideTab ws={ws} setTab={setTab} onLaunch={onLaunch} launching={launching} /> : null}
         {tab === "gauntlet" ? <GauntletTab ws={ws} /> : null}
         {tab === "dossier" ? <DossierTab ws={ws} onChange={refresh} /> : null}
+        {tab === "findings" ? <FindingsTab id={ws.id} /> : null}
+        {tab === "uploads" ? <ForesightTab id={ws.id} /> : null}
         {tab === "steps" ? <Steps ws={ws} onChange={refresh} /> : null}
         {tab === "outline" ? <Outline ws={ws} /> : null}
         {tab === "evidence" ? <EvidenceTab ws={ws} onChange={refresh} /> : null}
@@ -283,19 +291,30 @@ function GuideTab({
       title: "Run the Step 1 diagnostic",
       detail:
         ws.ingestStatus === "running"
-          ? `The machine is collecting and researching — ${ws.ingestProgress}/${ws.ingestTotal} series done. 30–45 minutes; you can leave.`
-          : "Official statistics, verified web search for the quantitative gaps, and clause-mapped research of every documentary rubric. 30–45 minutes, unattended.",
+          ? `The machine is collecting and researching — ${ws.ingestProgress}/${ws.ingestTotal} series done. 45–60 minutes; you can leave.`
+          : "In sequence: all 97 model indicators from official statistics and verified web research (each with source, year, credibility and level), then a wider public-domain sweep beyond the indicator structure, then research into recent strategies and best practices. 45–60 minutes, unattended.",
       done: ws.step1Done,
       actionLabel: ws.ingestStatus === "running" ? "Collecting…" : "Launch the diagnostic",
       action: onLaunch,
       busy: launching || ws.ingestStatus === "running",
     },
     {
+      title: "Add strategic-foresight material",
+      detail:
+        ws.uploadsCount > 0
+          ? `${ws.uploadsCount} document${ws.uploadsCount === 1 ? "" : "s"} uploaded — the draft cites them as user-provided material alongside the collected evidence.`
+          : "Upload scenario studies or foresight reports at any point — the draft cites them as user-provided material alongside the collected evidence.",
+      done: ws.uploadsCount > 0,
+      optional: true,
+      actionLabel: "Open Foresight",
+      action: () => setTab("uploads"),
+    },
+    {
       title: "Assemble and read the draft",
       detail:
         ws.draftCount > 0
           ? `${ws.draftCount} draft${ws.draftCount === 1 ? "" : "s"} assembled — evidence health page, 17 chapters, 11 annexes, every figure cited.`
-          : "No waiting, no gates: the full 17-chapter roadmap drafts from whatever the evidence base holds, opening with an evidence-health page that ranks what to strengthen.",
+          : "The full 17-chapter roadmap drafts from whatever the evidence base holds, opening with an evidence-health page that ranks what to strengthen.",
       done: ws.draftCount > 0,
       actionLabel: "Open Draft & exports",
       action: () => setTab("exports"),
@@ -327,6 +346,16 @@ function GuideTab({
 
   return (
     <div>
+      <Card className="mb-4">
+        <details open={!ws.step1Done}>
+          <summary className="cursor-pointer font-display text-xl">
+            The model this workspace runs
+          </summary>
+          <pre className="mt-3 max-h-[28rem] overflow-y-auto whitespace-pre-wrap font-sans text-sm leading-relaxed text-muted">
+            {modelExplainer(model)}
+          </pre>
+        </details>
+      </Card>
       <Card>
         <div className="flex items-baseline justify-between gap-3">
           <h2 className="font-display text-xl">The path to a roadmap</h2>

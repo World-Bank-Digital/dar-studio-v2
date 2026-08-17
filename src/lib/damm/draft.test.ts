@@ -5,7 +5,7 @@ import { fileURLToPath } from "node:url";
 import { describe, it } from "node:test";
 import type { DammModel } from "./types.ts";
 import { scoreAssessment } from "./scoring.ts";
-import { assembleDeterministicDraft } from "./draft.ts";
+import { assembleDeterministicDraft , payloadForPrompt } from "./draft.ts";
 import { emptyEvidenceRows } from "./draft.ts";
 import { chapterReadiness } from "./ladder.ts";
 import { claimableStage } from "./scoring.ts";
@@ -184,8 +184,7 @@ describe("draft honesty", () => {
   });
 });
 
-describe("draft-first architecture", () => {
-  function fullPayload(overrides = {}) {
+function fullPayload(overrides = {}) {
     const rows = emptyEvidenceRows(model);
     const card = scoreAssessment(model, rows);
     const chapters = chapterReadiness(model, [], true);
@@ -205,8 +204,9 @@ describe("draft-first architecture", () => {
       targeting: null, gauntletPassed: false, gauntletSummary: "Gauntlet locked. 0/13 populated.",
       ...overrides,
     };
-  }
+}
 
+describe("draft-first architecture", () => {
   it("drafts all 17 chapters and 11 annexes right after Step 1, with nothing undrafted", () => {
     const doc = assembleDeterministicDraft(model, fullPayload());
     const undrafted = doc.chapters.filter((c) => /is not drafted/.test(c.body));
@@ -215,10 +215,13 @@ describe("draft-first architecture", () => {
     assert.equal(doc.chapters.filter((c) => /^[A-K]$/.test(c.n)).length, 11);
   });
 
-  it("opens with the evidence-health page, which reports the claim and the ranked fixes", () => {
+  it("opens by explaining the model, then the evidence-health page (pipeline revision point 2)", () => {
     const doc = assembleDeterministicDraft(model, fullPayload());
-    assert.equal(doc.chapters[0].n, "health");
-    const body = doc.chapters[0].body;
+    assert.equal(doc.chapters[0].n, "model");
+    assert.match(doc.chapters[0].body, /THE MODEL THIS RUN EXECUTES/);
+    assert.match(doc.chapters[0].body, /97 indicators/);
+    assert.equal(doc.chapters[1].n, "health");
+    const body = doc.chapters[1].body;
     assert.match(body, /no stage claimable/i);
     assert.match(body, /Strengthen first \(ranked\):/);
     assert.match(body, /core gate/i);
@@ -247,5 +250,63 @@ describe("conditions banner survives prose (L18)", () => {
     assert.ok(banner?.startsWith("CONDITIONS ON THIS CHAPTER"));
     assert.ok(!banner?.includes("Chapter text follows"));
     assert.equal(extractConditionsBanner("Plain chapter body with no banner."), null);
+  });
+});
+
+describe("sweep findings and foresight in the draft (pipeline points 3-5)", () => {
+  const FINDING_OPP = {
+    kind: "opportunistic" as const,
+    claim: "The Farmer's Card programme reaches 4.5 million registered farmers across all governorates.",
+    quote: "the Farmer's Card now reaches 4.5 million registered farmers",
+    sourceName: "Ministry of Agriculture",
+    sourceUrl: "https://www.moalr.gov.eg/farmers-card-2026",
+    publishedYear: 2026,
+    credibility: "B",
+    pillarHint: "C2",
+  };
+  const FINDING_PRACTICE = {
+    kind: "practice" as const,
+    claim: "Kenya's 2026 digital agriculture strategy pairs e-extension scale-up with agri-data governance rules.",
+    quote: "the strategy pairs e-extension scale-up with agricultural data governance",
+    sourceName: "Ministry of Agriculture Kenya",
+    sourceUrl: "https://kilimo.go.ke/strategy-2026",
+    publishedYear: 2026,
+    credibility: "B",
+    pillarHint: null,
+  };
+  const FORESIGHT = { filename: "egypt-2040-scenarios.pdf", chars: 54210, excerpt: "Scenario B assumes water stress accelerates consolidation of smallholder plots…" };
+
+  it("renders the opportunistic sweep as the ecosystem inventory (Annex B) with verified quotes", () => {
+    const doc = assembleDeterministicDraft(model, { ...fullPayload(), findings: [FINDING_OPP, FINDING_PRACTICE] });
+    const annexB = doc.chapters.find((c) => c.n === "B")!;
+    assert.match(annexB.body, /wide-net sweep/);
+    assert.ok(annexB.body.includes(FINDING_OPP.claim));
+    assert.ok(annexB.body.includes(FINDING_OPP.quote), "the verified quote travels with the finding");
+    assert.ok(!annexB.body.includes(FINDING_PRACTICE.claim), "practices are comparators, not ecosystem inventory");
+  });
+
+  it("shows practices and foresight to prescriptive chapters as labelled comparator material", () => {
+    const doc = assembleDeterministicDraft(model, { ...fullPayload(), findings: [FINDING_OPP, FINDING_PRACTICE], foresight: [FORESIGHT] });
+    const ch12 = doc.chapters.find((c) => c.n === "12")!;
+    assert.ok(ch12.body.includes(FINDING_PRACTICE.claim));
+    assert.match(ch12.body, /comparators, not prescriptions/);
+    assert.ok(ch12.body.includes(FORESIGHT.filename));
+    assert.match(ch12.body, /user uploads, cited as such/);
+    const ch2 = doc.chapters.find((c) => c.n === "2")!;
+    assert.ok(!ch2.body.includes(FINDING_PRACTICE.claim), "diagnostic chapters do not carry comparator practices");
+  });
+
+  it("feeds findings and foresight into the model facts block so prose may cite them", () => {
+    const facts = payloadForPrompt({ ...fullPayload(), findings: [FINDING_OPP, FINDING_PRACTICE], foresight: [FORESIGHT] });
+    assert.ok(facts.includes(FINDING_OPP.claim));
+    assert.ok(facts.includes(FINDING_PRACTICE.claim));
+    assert.ok(facts.includes(FORESIGHT.filename));
+    assert.match(facts, /User-provided strategic foresight/);
+  });
+
+  it("keeps Annex B honest when no sweep has run", () => {
+    const doc = assembleDeterministicDraft(model, fullPayload());
+    const annexB = doc.chapters.find((c) => c.n === "B")!;
+    assert.match(annexB.body, /No public-domain findings are stored/);
   });
 });

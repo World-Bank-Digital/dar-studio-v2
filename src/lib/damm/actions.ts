@@ -20,6 +20,8 @@ import { PROVIDER_IDS, defaultModelFor, providerDef, verifyProviderKey } from ".
 import { SEARCH_PROVIDER_IDS, isSearchProviderId, searchProviderDef, verifySearchKey } from "./search";
 import { retrieveVerifiedReadings } from "./retrieval";
 import { proposalNote, researchRubric, researchableRubrics } from "./rubric";
+import { opportunisticTopics, practiceTopics, researchFindings, type FindingKind } from "./findings";
+import { explainerSummary } from "./explainer";
 import { checkProseFidelity } from "./fidelity";
 import { isPrescriptive, shouldProse } from "./outline";
 import type { Confidence, EvidenceRow, RecordedDecision, Scorecard } from "./types";
@@ -251,6 +253,10 @@ export type Workspace = {
   dossierJob: DossierJob;
   /** How many drafts have been assembled — lets the Guide show real progress. */
   draftCount: number;
+  /** Cited findings stored by the two wide sweeps (opportunistic + practice). */
+  findingsCount: number;
+  /** User-provided strategic-foresight uploads. */
+  uploadsCount: number;
 };
 
 async function loadWorkspaceFor(
@@ -318,6 +324,12 @@ async function loadWorkspaceFor(
     dossierJob: dossierJobFor(c.id),
     draftCount: Number(
       (await sql<{ n: string }>`select count(*) as n from drafts where country_id = ${c.id} and user_id = ${userId}`)[0]?.n ?? 0,
+    ),
+    findingsCount: Number(
+      (await sql<{ n: string }>`select count(*) as n from findings where country_id = ${c.id} and user_id = ${userId}`)[0]?.n ?? 0,
+    ),
+    uploadsCount: Number(
+      (await sql<{ n: string }>`select count(*) as n from uploads where country_id = ${c.id} and user_id = ${userId}`)[0]?.n ?? 0,
     ),
   };
   if (c.ingest_status === "running" && !ingestLocks.has(c.id)) {
@@ -829,6 +841,88 @@ async function runRubricResearchPass(
   await setIngestMessage(countryId, summary);
 }
 
+/**
+ * The two wide sweeps that follow the structured DAMM collection.
+ *
+ * `opportunistic`: the indicator register is a fixed frame; this pass casts a
+ * wide net over the public domain for anything about the country a roadmap
+ * can use — including loosened queries for indicators the structured pass
+ * could not fill. `practice`: recent strategies and best practices from any
+ * country or institution, as comparator material for the prescriptive
+ * chapters. Both persist cited, quote-verified findings; neither can touch an
+ * indicator or move a score.
+ */
+async function runFindingsSweep(
+  kind: FindingKind,
+  countryId: string,
+  userId: string,
+  iso3: string,
+  countryName: string,
+  actor: { role: string; name: string },
+) {
+  const label = kind === "opportunistic" ? "public-domain sweep" : "practice research";
+  const searchCfg = await resolveSearchProvider(userId);
+  const modelCfg = await resolveDraftModel(userId);
+  if (!searchCfg || !modelCfg) {
+    await writeAudit(
+      userId,
+      countryId,
+      actor.role,
+      actor.name,
+      `${kind}_sweep_skipped`,
+      `The ${label} needs both a search key and an active model (search: ${searchCfg ? "yes" : "no"}, model: ${modelCfg ? "yes" : "no"}).`,
+    );
+    return;
+  }
+  const sql = await getSql();
+
+  let topics;
+  if (kind === "opportunistic") {
+    const open = await sql<{ indicator_id: string }>`
+      select indicator_id from evidence
+      where country_id = ${countryId} and value is null and assessor_level is null
+        and suggested_level is null and data_gap = false`;
+    const openIds = new Set(open.map((r) => r.indicator_id));
+    const gapNames = model.indicators.filter((i) => openIds.has(i.id) && i.pillar !== "C0").map((i) => i.name);
+    topics = opportunisticTopics(countryName, gapNames);
+  } else {
+    topics = practiceTopics(model.assessment_year);
+  }
+
+  await setIngestMessage(countryId, kind === "opportunistic"
+    ? "Casting a wider net — public-domain evidence beyond the indicator structure…"
+    : "Researching recent strategies and best practices…");
+
+  const outcome = await researchFindings({
+    kind,
+    search: { providerId: searchCfg.provider, key: searchCfg.key },
+    model: { providerId: modelCfg.provider, key: modelCfg.key, modelName: modelCfg.modelName },
+    countryName,
+    iso3,
+    assessmentYear: model.assessment_year,
+    topics,
+    onProgress: async (done, total) => {
+      await setIngestMessage(countryId, `${kind === "opportunistic" ? "Public-domain sweep" : "Practice research"} — topic batch ${done} of ${total}…`);
+    },
+  });
+
+  for (const f of outcome.findings) {
+    await sql`insert into findings (id, user_id, country_id, kind, claim, quote, source_name, source_url, published_year, credibility, pillar_hint)
+      values (${uid()}, ${userId}, ${countryId}, ${f.kind}, ${f.claim}, ${f.quote}, ${f.sourceName}, ${f.sourceUrl}, ${f.publishedYear}, ${f.credibility}, ${f.pillarHint})`;
+  }
+  for (const drop of outcome.rejected.slice(0, 3)) {
+    await writeAudit(userId, countryId, actor.role, actor.name, `${kind}_finding_rejected`, `${drop.topic}: ${drop.reason.slice(0, 300)}`);
+  }
+
+  const summary =
+    `${kind === "opportunistic" ? "Public-domain sweep" : "Practice research"} via ${searchCfg.provider}: ` +
+    `${outcome.findings.length} cited findings stored, ${outcome.rejected.length} rejected as uncheckable, ` +
+    `${outcome.documentsRead} documents read across ${topics.length} topics` +
+    (outcome.error ? `; errors: ${outcome.error.slice(0, 160)}` : "");
+  await writeAudit(userId, countryId, actor.role, actor.name, `${kind}_sweep`, summary);
+  await setIngestMessage(countryId, summary);
+}
+
 /** xAI's built-in search tool. Unverifiable, so readings land at Low confidence. */
 async function runLegacySearchPass(
   countryId: string,
@@ -899,6 +993,11 @@ async function runCountryIngest(countryId: string, userId: string, iso3: string,
     }
     await runWebSearchPass(countryId, userId, iso3, countryName, actor);
     await runRubricResearchPass(countryId, userId, iso3, countryName, actor);
+    // The structured DAMM collection is done; now the two wider sweeps —
+    // opportunistic public-domain evidence, then recent strategies and best
+    // practices — in that order, per the pipeline sequence.
+    await runFindingsSweep("opportunistic", countryId, userId, iso3, countryName, actor);
+    await runFindingsSweep("practice", countryId, userId, iso3, countryName, actor);
     await completeStep1(countryId, userId, actor);
   } catch (err) {
     const sql = await getSql();
@@ -931,7 +1030,7 @@ export const launchDiagnostic = createServerFn({ method: "POST" })
     if (c.step1_completed_at && c.ingest_status === "done") return { ok: true as const, alreadyDone: true };
     const total = ingestQueue().filter((s) => s.kind !== "named-gap").length;
     await sql`update countries set ingest_status = 'running', ingest_progress = 0, ingest_total = ${total},
-      ingest_message = ${"TTL launched Step 1. Collecting verified public series…"}
+      ingest_message = ${"The model is explained in the Guide tab. Collecting all 97 indicators from verified public series…"}
       where id = ${data.countryId}`;
     await writeAudit(
       context.userId,
@@ -941,6 +1040,10 @@ export const launchDiagnostic = createServerFn({ method: "POST" })
       "launch_diagnostic",
       `TTL launched the Step 1 diagnostic for ${c.iso3}`,
     );
+    // The run opens by explaining the model it executes; the full text renders
+    // in the workspace Guide and in the draft's front matter, computed from
+    // the same configuration the engine scores with.
+    await writeAudit(context.userId, data.countryId, "machine", "DAR Studio", "model_explainer", explainerSummary());
     kickIngest(data.countryId, context.userId, c.iso3, { role: data.role, name: data.actorName });
     return { ok: true as const, alreadyDone: false };
   });
@@ -1361,6 +1464,122 @@ export const listAudit = createServerFn({ method: "GET" })
       order by at desc limit 200`;
   });
 
+/** Extract readable text from an uploaded document. Server-only imports. */
+async function extractUploadText(filename: string, mime: string, bytes: Buffer): Promise<string> {
+  const lower = filename.toLowerCase();
+  if (lower.endsWith(".pdf") || mime === "application/pdf") {
+    const { PDFParse } = await import("pdf-parse");
+    const parser = new PDFParse({ data: bytes });
+    try {
+      const parsed = await parser.getText();
+      return String(parsed.text ?? "");
+    } finally {
+      await parser.destroy();
+    }
+  }
+  if (lower.endsWith(".docx") || mime === "application/vnd.openxmlformats-officedocument.wordprocessingml.document") {
+    const mammoth = await import("mammoth");
+    const parsed = await mammoth.extractRawText({ buffer: bytes });
+    return String(parsed.value ?? "");
+  }
+  return bytes.toString("utf8");
+}
+
+const UPLOAD_MAX_BYTES = 10 * 1024 * 1024;
+const UPLOAD_MAX_CHARS = 200_000;
+
+/**
+ * Strategic-foresight material the user provides for the roadmap. Stored as
+ * extracted text; the draft cites it as a user-provided source, clearly
+ * separated from machine-collected public evidence.
+ */
+export const uploadForesight = createServerFn({ method: "POST" })
+  .middleware([authMiddleware])
+  .validator((input: { countryId: string; filename: string; mime: string; base64: string; role: string; actorName: string }) => input)
+  .handler(async ({ context, data }) => {
+    const sql = await getSql();
+    const owned = await sql<{ id: string }>`
+      select id from countries where id = ${data.countryId} and user_id = ${context.userId} and deleted_at is null`;
+    if (!owned.length) return { ok: false as const, error: "Country not found" };
+
+    const bytes = Buffer.from(data.base64, "base64");
+    if (!bytes.length) return { ok: false as const, error: "The file was empty." };
+    if (bytes.length > UPLOAD_MAX_BYTES) {
+      return { ok: false as const, error: `The file is ${(bytes.length / 1048576).toFixed(1)} MB; the limit is 10 MB.` };
+    }
+
+    let text: string;
+    try {
+      text = (await extractUploadText(data.filename, data.mime, bytes)).replace(/\0/g, "").trim();
+    } catch (err) {
+      return { ok: false as const, error: `Could not read the document: ${err instanceof Error ? err.message : "unknown error"}` };
+    }
+    if (text.length < 40) {
+      return { ok: false as const, error: "No readable text was found in the document (scanned PDFs without a text layer cannot be used)." };
+    }
+
+    const id = uid();
+    await sql`insert into uploads (id, user_id, country_id, filename, kind, mime, chars, content)
+      values (${id}, ${context.userId}, ${data.countryId}, ${data.filename.slice(0, 200)}, ${"foresight"}, ${data.mime.slice(0, 100)}, ${text.length}, ${text.slice(0, UPLOAD_MAX_CHARS)})`;
+    await writeAudit(
+      context.userId,
+      data.countryId,
+      data.role,
+      data.actorName,
+      "foresight_uploaded",
+      `Strategic-foresight material uploaded: ${data.filename} (${text.length.toLocaleString()} readable characters).`,
+    );
+    return { ok: true as const, id, chars: text.length };
+  });
+
+export const listUploads = createServerFn({ method: "GET" })
+  .middleware([authMiddleware])
+  .validator((input: { countryId: string }) => input)
+  .handler(async ({ context, data }) => {
+    const sql = await getSql();
+    return sql<{ id: string; filename: string; kind: string; mime: string | null; chars: number; uploaded_at: string }>`
+      select id, filename, kind, mime, chars, uploaded_at from uploads
+      where user_id = ${context.userId} and country_id = ${data.countryId}
+      order by uploaded_at desc limit 100`;
+  });
+
+export const deleteUpload = createServerFn({ method: "POST" })
+  .middleware([authMiddleware])
+  .validator((input: { countryId: string; uploadId: string; role: string; actorName: string }) => input)
+  .handler(async ({ context, data }) => {
+    const sql = await getSql();
+    const rows = await sql<{ filename: string }>`
+      delete from uploads where id = ${data.uploadId} and user_id = ${context.userId} and country_id = ${data.countryId}
+      returning filename`;
+    if (rows.length) {
+      await writeAudit(context.userId, data.countryId, data.role, data.actorName, "foresight_removed", `Upload removed: ${rows[0].filename}`);
+    }
+    return { ok: true as const };
+  });
+
+export const listFindings = createServerFn({ method: "GET" })
+  .middleware([authMiddleware])
+  .validator((input: { countryId: string }) => input)
+  .handler(async ({ context, data }) => {
+    const sql = await getSql();
+    return sql<{
+      id: string;
+      kind: string;
+      claim: string;
+      quote: string;
+      source_name: string | null;
+      source_url: string;
+      published_year: number | null;
+      credibility: string | null;
+      pillar_hint: string | null;
+      created_at: string;
+    }>`
+      select id, kind, claim, quote, source_name, source_url, published_year, credibility, pillar_hint, created_at
+      from findings
+      where user_id = ${context.userId} and country_id = ${data.countryId}
+      order by kind, created_at desc limit 500`;
+  });
+
 export const getSettings = createServerFn({ method: "GET" })
   .middleware([authMiddleware])
   .handler(async ({ context }) => {
@@ -1598,6 +1817,24 @@ export const generateDraft = createServerFn({ method: "POST" })
       const ws = await loadWorkspaceFor(context.userId, data.countryId);
       if (!ws.ok) return { ok: false as const, error: ws.error, fallback: true };
       const w = ws.workspace;
+      const sqlForExtras = await getSql();
+      const findingRows = await sqlForExtras<{
+        kind: string;
+        claim: string;
+        quote: string;
+        source_name: string | null;
+        source_url: string;
+        published_year: number | null;
+        credibility: string | null;
+        pillar_hint: string | null;
+      }>`
+        select kind, claim, quote, source_name, source_url, published_year, credibility, pillar_hint
+        from findings where user_id = ${context.userId} and country_id = ${data.countryId}
+        order by created_at desc limit 200`;
+      const uploadRows = await sqlForExtras<{ filename: string; chars: number; content: string }>`
+        select filename, chars, content from uploads
+        where user_id = ${context.userId} and country_id = ${data.countryId}
+        order by uploaded_at desc limit 10`;
       const payload: DraftPayload = {
         countryName: w.name,
         iso3: w.iso3,
@@ -1652,6 +1889,21 @@ export const generateDraft = createServerFn({ method: "POST" })
         gauntletPassed: w.gauntlet.passed,
         gauntletSummary: w.gauntlet.summary,
         dossier: w.dossier,
+        findings: findingRows.map((f) => ({
+          kind: f.kind === "practice" ? ("practice" as const) : ("opportunistic" as const),
+          claim: f.claim,
+          quote: f.quote,
+          sourceName: f.source_name,
+          sourceUrl: f.source_url,
+          publishedYear: f.published_year,
+          credibility: f.credibility,
+          pillarHint: f.pillar_hint,
+        })),
+        foresight: uploadRows.map((u) => ({
+          filename: u.filename,
+          chars: u.chars,
+          excerpt: u.content.slice(0, 1200),
+        })),
       };
       const doc = assembleDeterministicDraft(model, payload);
       const cfg = await resolveDraftModel(context.userId);

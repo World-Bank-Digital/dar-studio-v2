@@ -37,28 +37,57 @@ a live checklist with a single "Do this next" button.
 Sign in → *New country* → type the name, pick the official economy. You land
 in the country workspace.
 
-**2. Launch the Step 1 diagnostic — machine, 30–45 minutes.**
-One button. The machine then: (a) pulls every indicator the World Bank / ITU /
-FAO statistical systems publish, with source URLs; (b) runs verified web
-search for remaining quantitative gaps — a search provider fetches the actual
-page, a model extracts figures *from that page only*, and every figure is
-checked against the page text before it is stored; (c) anything it cannot
-verify becomes a **named gap** routed to a steward — never a guess. It then
-researches every **documentary rubric** on the web — farmer registry,
-data-governance framework, coordination mechanism — and proposes a provisional
-level for each, argued clause-by-clause against the rubric's anchor text with
-quote-verified citations and an explicit note on why the next level up was not
-proposed. It also builds the **dossier** (see glossary).
+**2. Launch the Step 1 diagnostic — machine, 45–60 minutes.**
+One button. The run opens by **explaining the model it executes** — the
+pillars, weights, read-outs, core gates and ladder, computed from the model
+configuration itself (the Guide tab shows it, and the draft opens with it).
+Then, in sequence:
 
-**3. Assemble the draft — machine, ~10 minutes. No gates, no waiting.**
+*First, the structured collection — all 97 indicators.* The machine (a) pulls
+every indicator the World Bank / ITU / FAO statistical systems publish, with
+source URLs; (b) runs verified web search for remaining quantitative gaps — a
+search provider fetches the actual page, a model extracts figures *from that
+page only*, and every figure is checked against the page text before it is
+stored; (c) anything it cannot verify becomes a **named gap** routed to a
+steward — never a guess. Every collected indicator carries its source, its
+observation year, a credibility grade and a maturity level. It then researches
+every **documentary rubric** on the web — farmer registry, data-governance
+framework, coordination mechanism — and proposes a provisional level for each,
+argued clause-by-clause against the rubric's anchor text with quote-verified
+citations and an explicit note on why the next level up was not proposed. It
+also builds the **dossier** (see glossary).
+
+*Second, the wide net.* Indicators the structured pass could not fill are not
+the end of the story: an **opportunistic sweep** searches the public domain
+for anything citable about the country that a roadmap can use — systems,
+programmes, startups, pilots, investments — wherever it sits relative to the
+97 indicators. Each finding is stored with a quote checked verbatim against
+the retrieved page (*Evidence ▸ Findings*). Findings inform chapters and the
+ecosystem inventory; they never populate an indicator or move a score.
+
+*Third, comparators.* The machine researches **strategies and best practices
+from roughly the past year** — digital agriculture, agriculture, digital
+transformation, from any country or institution — and stores them as cited
+comparator material for the prescriptive chapters.
+
+**2b. Add strategic-foresight material — you, any time.**
+*Evidence ▸ Foresight* accepts scenario studies, foresight reports and other
+strategic material (PDF, DOCX, TXT, Markdown). The draft cites uploads
+explicitly as user-provided material, kept separate from machine-collected
+public evidence.
+
+**3. Assemble the draft — machine, ~10 minutes.**
 *Outputs ▸ Draft & exports* → *Assemble draft*. The full DAR drafts from
-whatever the evidence base holds: an **evidence-health page** first (how much
-is validated vs machine-provisional, credibility grades, and a ranked
-"strengthen first" list), then all 17 chapters and 11 annexes. Prescriptive
+whatever the evidence base holds: the **model explanation** first, then an
+**evidence-health page** (how much is validated vs machine-provisional,
+credibility grades, and a ranked "strengthen first" list), then all 17
+chapters and 11 annexes — with sweep findings in the ecosystem inventory,
+recent practices as cited comparators in the prescriptive chapters, and any
+foresight uploads cited as user-provided material. Prescriptive
 chapters carry an explicit **conditional banner** until the evidence readiness
 gate clears — recommendations are stated as hypothesis → evidence → decision
 gate, never as settled advice. And no maturity stage is claimable until you
-validate: that rule is untouched.
+validate.
 
 **4. Review and correct — you, as much or as little as you choose.**
 Read the draft. The health page ranks what to strengthen. For each
@@ -135,8 +164,8 @@ farmer consent, and so on) treated as prerequisites, not trade-offs.
 **Gauntlet / Evidence readiness** — The readiness gate over those
 13 core gates. It clears when at least 11 of 13 are populated, the evidence
 behind them is strong (graded A or B, or a human-validated level with a
-citation), and none are silently missing. It no longer locks anything: it is
-the evidence-health page's headline, and until it clears the prescriptive
+citation), and none are silently missing. It locks nothing: it is the
+evidence-health page's headline, and until it clears the prescriptive
 chapters carry an explicit conditional banner. Think of it as QER for the
 evidence base, reported rather than enforced.
 
@@ -183,22 +212,22 @@ belongs to the machine; Steps 2–8 move only when a human records them.
 **Chapters and annexes** — 17 chapters + 11 annexes. Chapters 2–9 and 17 are
 *diagnostic* (they report evidence and draft as soon as their inputs exist);
 chapters 1 and 10–16 are *prescriptive* (they recommend, sequence and cost,
-and stay locked behind the gauntlet). Annexes are the evidence record itself
-and are never rewritten by a model.
+and carry the conditional banner until evidence readiness clears). Annexes
+are the evidence record itself and are never rewritten by a model.
 
 ## Why it feels complex — and what the complexity is doing
 
 The honest answer: the app is a **process made executable**, and the process
 is the Bank's own discipline. Every piece that feels like friction is a
-prohibition doing its job — the gauntlet stops recommendations resting on
-unreviewable evidence; the engagement-package rule stops a machine-scored
-"Stage 2" leaking into a PAD; the citation requirement stops invented
-statistics; the ladder stops a roadmap skipping the government mandate.
-A simpler tool that skipped these steps would produce a document faster — and
-that document would not survive quality review.
+prohibition doing its job — the readiness gate keeps recommendations
+conditional until the evidence behind them is reviewable; the
+engagement-package rule stops a machine-scored "Stage 2" leaking into a PAD;
+the citation requirement stops invented statistics; the ladder stops a
+roadmap skipping the government mandate. A simpler tool without these steps
+would produce a document faster — and that document would not survive
+quality review.
 
-That said, the *interface* has been simplified without weakening the process:
-the workspace opens on a **Guide** — the seven-step path as a live checklist
-with one "Do this next" button; the eleven tabs are folded into four groups
-(**Guide · Evidence · Decisions · Outputs**); and "Gauntlet" now appears in
-the interface as **Readiness**.
+The interface keeps that process to four groups: the workspace opens on a
+**Guide** — the seven-step path as a live checklist with one "Do this next"
+button — alongside **Evidence**, **Decisions** and **Outputs**; evidence
+readiness appears in the interface as **Readiness**.
