@@ -14,7 +14,7 @@ generated in Grok's App Builder sandbox, substantially rebuilt since.
 defect ledger (L1–L18 + design shifts D1/D2); the methodology deck regenerates
 via `node scripts/build-methodology-deck.mjs`.
 
-**Repo state:** branch `rebuild/byok-delivery-2026-08`, HEAD `6a1e30f`, pushed
+**Repo state:** branch `rebuild/byok-delivery-2026-08`, HEAD `c4e6d9c`, pushed
 to `github.com/rsudan/dar-studio-v2`. `main` still holds only the original
 import commit `84a0c9d` — merging is the user's call and has not been asked
 for. 240 unit tests, clean typecheck/lint/production build at HEAD.
@@ -89,8 +89,8 @@ separate assess call per level clause).
 
 ## Other open threads, in rough priority order
 
-1. **Run 5 verdict** + ledger entry for round-2 outcomes; retire its QA
-   workspace after (`update countries set deleted_at=now() where id='…'`).
+1. **Fill rate** — pick a lever from the section above (Exa needs the
+   user's go-ahead first); 3.3 farmer registry is the acid test.
 2. **Chapters 11 (Target Architecture) and 13 (Governance/Delivery)** still
    use the generic decision-restating builder — they need bespoke builders.
 3. **Contradiction ledger (master prompt §3)** — Annex J is scaffolded,
