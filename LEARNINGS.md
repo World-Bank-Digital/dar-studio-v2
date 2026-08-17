@@ -291,3 +291,15 @@ hours apart.
 `evidenceScore.test.ts` (researched-proposal grading), `draft.test.ts` (banner
 extraction), `fidelity.test.ts` (band list), `retrieval.test.ts` (per-indicator
 dedupe), and the tightened persist/update paths in `actions.ts`.
+**Round-2 follow-up (delivery run 5, DELIVERY PASS):** short country names,
+unstuffed 2–5-word rubric queries, unambiguous document labels and the
+anti-defensive prompt lifted machine-levelled indicators 23 → 33 (+43% over
+baseline), rubric proposals to 10 including three documentary CORE GATES (4.1
+data-protection law, 4.5 ag data governance, 5.7 ministry digital unit — all
+L3 with citations), and model-prose coverage to 15 of 17 chapters with the
+fidelity gate still rejecting 2. Two Playwright traps entered the record: a
+wrapping <label> inherits its textarea's content into the accessible name
+(target the textarea directly), and a monitor's timeout is not the run's.
+Still open: 3.3 farmer registry — three runs of "documents did not establish"
+point at retrieval (Jina ranking for this phrase), not validation; the levers
+are an Exa key (user's call) or a non-reasoning extraction model.

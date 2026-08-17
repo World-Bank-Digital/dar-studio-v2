@@ -73,10 +73,13 @@ short country names in queries ("Egypt", not "Egypt, Arab Rep."), unstuffed
 6 docs/rubric, anti-defensive prompt wording ("MUST propose if any document
 evidences L2+").
 
-**Run 5 was in flight when this handoff was written** (workspace
-`cedb9442-…`, mid-ingest). Check its outcome first:
-`psql -d dar_studio -c "select detail from audit where action in ('rubric_research_pass','web_search_pass') order by at desc limit 2;"`
-plus `qa-reports/`. If proposals still stall, the untested levers are:
+**Run 5 verdict: DELIVERY PASS** (report
+`qa-reports/delivery-2026-08-17T14-44-56-883Z.json`): 33/97 machine-levelled
+(+43% over baseline), 10 rubric proposals incl. three documentary core gates
+(4.1, 4.5, 5.7 at L3), 15/17 chapters with model prose, fidelity gate active,
+full 17+11 draft pre-human, stage withheld throughout. Quantitative extraction
+remains the weakest link (2 accepted / 9 batches) and 3.3 farmer registry
+still resists retrieval after three runs. The untested levers are:
 (a) **Exa instead of Jina** for retrieval (real `includeDomains` list, better
 content extraction — the user has no Exa key yet; ask before assuming);
 (b) a **non-reasoning extraction model** (DeepSeek burns budget on
