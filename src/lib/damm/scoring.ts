@@ -358,7 +358,7 @@ export function claimableStage(
       claimable: false,
       display: "Evidence gauntlet not passed",
       explanation:
-        "The 13 core gates have not cleared the evidence gauntlet (80% populated, 60% A/B, no silent gaps). Policy chapters stay locked. The engagement pack remains available.",
+        "The 13 core gates have not cleared the evidence gauntlet (80% populated, 60% A/B, no silent gaps). Prescriptive chapters carry the conditional banner; the draft remains available.",
     };
   }
   return {

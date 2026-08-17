@@ -13,8 +13,9 @@
  *  - `kind` — whether it reports evidence or prescribes action.
  *
  * `kind` is the important one. Prescriptive chapters recommend, sequence and
- * cost things, so they stay locked until the evidence gauntlet clears; a
- * diagnostic chapter can be drafted from whatever evidence exists, because
+ * cost things, so until the evidence gauntlet clears they open with a
+ * conditional banner and state recommendations in hypothesis → gate form; a
+ * diagnostic chapter reports from whatever evidence exists, because
  * describing a weak evidence base is itself a legitimate finding.
  */
 
@@ -246,8 +247,9 @@ export const DAR_ANNEXES: OutlineChapter[] = [
 export const DAR_OUTLINE: OutlineChapter[] = [...DAR_CHAPTERS, ...DAR_ANNEXES];
 
 /**
- * Chapters that prescribe rather than describe, and therefore stay locked until
- * the evidence gauntlet clears. Derived from `kind` so the two can never drift.
+ * Chapters that prescribe rather than describe — they carry the conditional
+ * banner until the evidence gauntlet clears. Derived from `kind` so the two
+ * can never drift.
  */
 export const PRESCRIPTIVE_CHAPTERS: Set<string> = new Set(
   DAR_OUTLINE.filter((c) => c.kind === "prescriptive").map((c) => c.n),

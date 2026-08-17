@@ -81,3 +81,28 @@ describe("evidence score /100", () => {
     assert.ok(s.grade === "D" || s.grade === "E");
   });
 });
+
+describe("machine-researched proposals (L18)", () => {
+  it("grades a researched proposal as populated but capped at C — both graders now agree", async () => {
+    const { scoreEvidence } = await import("./evidenceScore.ts");
+    const s = scoreEvidence({
+      indicatorId: "3.3",
+      value: null,
+      assessorLevel: null,
+      suggestedLevel: 4,
+      provenance: "machine-researched",
+      sourceName: "Ministry of Agriculture and Land Reclamation",
+      sourceUrl: "https://www.moalr.gov.eg/farmers-card",
+    });
+    assert.equal(s.fit, "direct");
+    assert.notEqual(s.grade, "E", "a cited proposal is not an empty row");
+    assert.ok(s.grade === "C" || s.grade === "D", `capped below A/B, got ${s.grade}`);
+    assert.match(s.note, /pending validation/i);
+  });
+
+  it("still treats a researched row without a level as missing", async () => {
+    const { scoreEvidence } = await import("./evidenceScore.ts");
+    const s = scoreEvidence({ indicatorId: "3.3", value: null, assessorLevel: null, suggestedLevel: null, provenance: "machine-researched" });
+    assert.equal(s.grade, "E");
+  });
+});

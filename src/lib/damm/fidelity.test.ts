@@ -166,3 +166,11 @@ describe("hyphenated ranges (L15 follow-up)", () => {
     assert.equal(r.ok, false);
   });
 });
+
+describe("band list covers the model's own bands (L18)", () => {
+  it("catches 'is transformative' asserted without a claimable stage", () => {
+    const r = checkProseFidelity("The ecosystem is transformative.", { facts: "x" }, { stageClaimable: false });
+    assert.equal(r.ok, false);
+    assert.ok(r.unsupportedClaims.length > 0);
+  });
+});

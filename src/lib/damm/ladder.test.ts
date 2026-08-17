@@ -30,15 +30,19 @@ describe("ladder", () => {
     assert.equal(currentOpenStep(decisions, true), 4);
   });
 
-  it("makes the diagnostic chapters draftable after Step 1, but not the executive summary", () => {
+  it("draft-first: after Step 1 every chapter drafts; pending decisions are notes, not locks", () => {
     const chapters = chapterReadiness(model, [], true);
-    // Ch.2 agrifood diagnostic and Ch.3 ecosystem assessment are provisional from Step 1.
-    assert.equal(chapters.find((c) => c.n === "2")?.status, "inputs_ready");
-    assert.equal(chapters.find((c) => c.n === "3")?.status, "inputs_ready");
-    // Ch.1 is the executive summary; it is written last, at Step 8.
-    assert.notEqual(chapters.find((c) => c.n === "1")?.status, "inputs_ready");
-    // Ch.15 sequences the roadmap and cannot precede the portfolio scenario.
-    assert.notEqual(chapters.find((c) => c.n === "15")?.status, "inputs_ready");
+    assert.ok(chapters.every((c) => c.status === "inputs_ready"), "nothing blocks once an evidence base exists");
+    // The unrecorded ladder is still visible — as stated assumptions in place.
+    const exec = chapters.find((c) => c.n === "1")!;
+    assert.ok(exec.blockers.length > 0, "pending decisions are reported");
+    assert.match(exec.blockers.join(" "), /not yet recorded/);
+    assert.doesNotMatch(exec.blockers.join(" "), /stays? locked/i);
+  });
+
+  it("before Step 1 there is no evidence base, so chapters are still forming", () => {
+    const chapters = chapterReadiness(model, [], false);
+    assert.ok(chapters.every((c) => c.status === "inputs_forming"));
   });
 
   it("unlocks later chapters once the ladder is complete", () => {

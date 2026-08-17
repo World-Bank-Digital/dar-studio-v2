@@ -38,49 +38,31 @@ export function chapterReadiness(
   step1Done: boolean,
 ): ChapterReadiness[] {
   const recorded = new Set(decisions.map((d) => stepNum(d.step)));
-  const reached = step1Done ? Math.max(1, ...decisions.map((d) => stepNum(d.step)), 1) : 0;
 
+  // Draft-first: once the Step 1 diagnostic has run, every chapter drafts.
+  // "Blockers" are now informational — decisions not yet recorded, which the
+  // draft states in place as assumptions rather than refusing to exist. The
+  // stage CLAIM (engagement-package rule) is governed elsewhere and unchanged.
   return DAR_OUTLINE.map((ch) => {
-    const blockers: string[] = [];
+    const pending: string[] = [];
+    if (!step1Done) {
+      pending.push("Step 1 automated diagnostic has not run — there is no evidence base to draft from.");
+    }
     const needs = ch.needsDecisions ?? [];
     if (needs.includes("G") && !recorded.has(5)) {
-      blockers.push("Government gates (Step 5) have not been recorded.");
-    }
-    const lastInput = Math.max(...ch.inputs, ch.readyAt);
-    if (!step1Done && lastInput >= 1) {
-      blockers.push("Step 1 automated diagnostic has not finished.");
+      pending.push("Government gates (Step 5) not yet recorded — drafted as pre-mandate preparatory material.");
     }
     for (const inputStep of ch.inputs) {
-      if (inputStep === 1) continue;
-      if (!recorded.has(inputStep) && inputStep <= ch.readyAt) {
-        const rung = model.ladder.find((r) => r.step === inputStep);
-        blockers.push(
-          `Step ${inputStep}${rung ? ` (${rung.name})` : ""} has not been recorded.`,
-        );
-      }
+      if (inputStep === 1 || recorded.has(inputStep)) continue;
+      const rung = model.ladder.find((r) => r.step === inputStep);
+      pending.push(`Step ${inputStep}${rung ? ` (${rung.name})` : ""} not yet recorded — drafted from engine facts under stated assumptions.`);
     }
-    if (reached < ch.readyAt && !recorded.has(ch.readyAt) && ch.readyAt !== 1) {
-      const rung = model.ladder.find((r) => r.step === ch.readyAt);
-      if (!blockers.some((b) => b.includes(`Step ${ch.readyAt}`))) {
-        blockers.push(
-          `Chapter is produced at Step ${ch.readyAt}${rung ? ` — ${rung.name}` : ""}.`,
-        );
-      }
-    }
-
-    // The agrifood and ecosystem diagnostics are provisional from Step 1 — the
-    // claim policy, not readiness, is what withholds a maturity stage.
-    const provisional = step1Done && (ch.n === "2" || ch.n === "3");
-
-    let status: ChapterReadiness["status"] = "not_started";
-    if (blockers.length === 0 || provisional) status = "inputs_ready";
-    else if (step1Done || reached > 0) status = "inputs_forming";
 
     return {
       n: ch.n,
       title: ch.title,
-      status,
-      blockers: provisional ? blockers.filter((b) => !b.includes("Step 1 automated")) : blockers,
+      status: step1Done ? ("inputs_ready" as const) : ("inputs_forming" as const),
+      blockers: pending,
       readyAt: ch.readyAt,
       producedBy: ch.producedBy,
       note: ch.note ?? "",

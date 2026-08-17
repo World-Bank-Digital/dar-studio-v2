@@ -33,7 +33,7 @@ describe("evidence gauntlet", () => {
     assert.ok(g.populated < g.populatedNeeded);
     assert.ok(g.silentGaps.length > 0);
     assert.ok(g.tasks.some((t) => t.indicatorId === "3.3" && t.priority === "blocking"));
-    assert.match(g.summary, /locked/i);
+    assert.match(g.summary, /not cleared/i);
     const rubric = g.lines.find((l) => l.indicatorId === "3.3");
     assert.equal(rubric?.kind, "rubric");
     assert.equal(rubric?.reading, "Documentary — unmeasured");

@@ -48,12 +48,34 @@ describe("buildExtractionPrompt", () => {
       iso3: "BTN",
       assessmentYear: YEAR,
       indicators: [{ id: "2.1", name: "Rural 3G coverage", anchors: { L5: "full" } as never }],
-      documents: [DOC],
+      docsByIndicator: new Map([["2.1", [DOC]]]),
     });
     assert.match(prompt, /You are not searching/);
     assert.match(prompt, /ONLY the document text provided/);
     assert.ok(prompt.includes(DOC.url));
     assert.ok(prompt.includes("Rural 3G population coverage reached 65 per cent"));
+  });
+
+  it("gives every indicator its own section — starvation is structural now (L17)", () => {
+    const inds = [
+      { id: "2.1", name: "Rural 3G coverage", anchors: { L5: "" } as never },
+      { id: "2.5", name: "Broadband price", anchors: { L5: "" } as never },
+      { id: "5.5", name: "Extension digital training", anchors: { L5: "" } as never },
+    ];
+    const prompt = buildExtractionPrompt({
+      countryName: "Egypt", iso3: "EGY", assessmentYear: YEAR,
+      indicators: inds,
+      docsByIndicator: new Map([
+        ["2.1", [DOC, DOC, DOC, DOC]],
+        ["2.5", []],
+        ["5.5", [{ ...DOC, url: "https://itu.int/x", text: "price basket 1.58 per cent of GNI" }]],
+      ]),
+    });
+    for (const ind of inds) assert.ok(prompt.includes(`### Indicator ${ind.id}`), `${ind.id} missing its section`);
+    assert.match(prompt, /No documents were retrieved for this indicator\. Omit it\./);
+    assert.ok(prompt.includes("price basket 1.58"), "5.5's own document must reach the model");
+    // Per-indicator cap: 4 docs supplied, at most 3 rendered.
+    assert.ok((prompt.match(/Document \d for indicator 2\.1/g) ?? []).length <= 3);
   });
 });
 
@@ -159,6 +181,7 @@ describe("scoped-then-open document collection (LEARNINGS L11)", () => {
     });
     assert.deepEqual(calls, [["capmas.gov.eg"], null], "expected scoped attempt then open fallback");
     assert.equal(out.documents.length, 1);
+    assert.equal(out.docsByIndicator.get("2.1")?.length, 1, "the hit must be attributed to its indicator");
   });
 
   it("does not fall back when the scoped search already found usable text", async () => {
@@ -194,5 +217,19 @@ describe("scoped-then-open document collection (LEARNINGS L11)", () => {
       nsoDomains: [], resultsPerIndicator: 4,
     });
     assert.deepEqual(calls, [null]);
+  });
+});
+
+describe("search country names (round-2)", () => {
+  it("uses the plain name, not the official economy label", async () => {
+    const { searchCountryName, buildQuery } = await import("./retrieval.ts");
+    assert.equal(searchCountryName("Egypt, Arab Rep."), "Egypt");
+    assert.equal(searchCountryName("Bhutan"), "Bhutan");
+    const q = buildQuery({
+      indicator: { id: "2.1", name: "Rural 3G coverage", anchors: { L5: "" } as never },
+      countryName: "Egypt, Arab Rep.", assessmentYear: 2026,
+    });
+    assert.doesNotMatch(q, /Arab Rep/);
+    assert.match(q, /^Egypt /);
   });
 });

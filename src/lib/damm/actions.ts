@@ -5,13 +5,13 @@ import { uid, mapLimit } from "@/lib/utils";
 import { model, disclaimer } from "./model";
 import { claimableStage, finalLevel, formatScore, isStale, scoreAssessment, suggestedLevel } from "./scoring";
 import { chapterReadiness, currentOpenStep, canRecordStep } from "./ladder";
-import { assembleDeterministicDraft, draftSystemPrompt, payloadForPrompt, type DraftPayload } from "./draft";
+import { assembleDeterministicDraft, draftSystemPrompt, extractConditionsBanner, payloadForPrompt, type DraftPayload } from "./draft";
 import { assembleMemo } from "./memo";
 import { ingestIndicator, ingestQueue, webSearchableIndicators } from "./ingest";
 import { economyByName, fetchEconomies, type Economy } from "./countries";
 import { citationError, nextProvenance } from "./citation";
 import { credibilityFor } from "./credibility";
-import { evaluateGauntlet, POLICY_CHAPTERS, type GauntletResult } from "./gauntlet";
+import { evaluateGauntlet, type GauntletResult } from "./gauntlet";
 import { groupByPillar, searchPublicReadings } from "./websearch";
 import { sourceFor } from "./sources";
 import { demoPackRows } from "./fixture";
@@ -19,6 +19,7 @@ import { decryptSecret, encryptSecret, encryptionAvailable, fingerprintSecret, i
 import { PROVIDER_IDS, defaultModelFor, providerDef, verifyProviderKey } from "./providers";
 import { SEARCH_PROVIDER_IDS, isSearchProviderId, searchProviderDef, verifySearchKey } from "./search";
 import { retrieveVerifiedReadings } from "./retrieval";
+import { proposalNote, researchRubric, researchableRubrics } from "./rubric";
 import { checkProseFidelity } from "./fidelity";
 import { isPrescriptive, shouldProse } from "./outline";
 import type { Confidence, EvidenceRow, RecordedDecision, Scorecard } from "./types";
@@ -300,14 +301,10 @@ async function loadWorkspaceFor(
     }),
     evidence,
     decisions,
-    chapters: chapterReadiness(model, decisions, step1Done).map((ch) => {
-      if (!POLICY_CHAPTERS.has(ch.n) || gauntlet.passed) return ch;
-      return {
-        ...ch,
-        status: "inputs_forming" as const,
-        blockers: [...ch.blockers, "Evidence gauntlet has not passed — policy chapters stay locked."],
-      };
-    }),
+    // Draft-first: readiness is never downgraded by the gauntlet. The gate's
+    // state reaches the draft as gauntletPassed/gauntletSummary and is stated
+    // inside prescriptive chapters as a condition, not a lock.
+    chapters: chapterReadiness(model, decisions, step1Done),
     targeting: t
       ? {
           chains: t.chains ? (JSON.parse(t.chains) as string[]) : [],
@@ -580,7 +577,7 @@ async function persistWebReading(
 /** How many indicators go into one retrieval batch. Bounded by prompt size, not policy. */
 const SEARCH_BATCH_SIZE = 6;
 /** Ceiling on batches per run, so one country cannot exhaust an operator's search quota. */
-const MAX_SEARCH_BATCHES = 8;
+const MAX_SEARCH_BATCHES = 12;
 
 async function setIngestMessage(countryId: string, message: string) {
   const sql = await getSql();
@@ -711,6 +708,109 @@ async function runWebSearchPass(
   await setIngestMessage(countryId, summary);
 }
 
+/** How many rubrics research concurrently. Each is a search plus a long model call. */
+const RUBRIC_CONCURRENCY = 3;
+
+/**
+ * Research the anchored rubrics on the public web.
+ *
+ * Every proposal is stored as a machine-researched *suggested* level: it feeds
+ * the provisional scores exactly as quantitative machine imports do, and the
+ * note carries the clause-mapped rationale, the negative finding, and every
+ * citation, so validation is a review of an argued case rather than a blank
+ * page. An assessor level set at validation overrides it; the engagement-
+ * package rule (no claimable stage before validation) is untouched.
+ */
+async function runRubricResearchPass(
+  countryId: string,
+  userId: string,
+  iso3: string,
+  countryName: string,
+  actor: { role: string; name: string },
+) {
+  const searchCfg = await resolveSearchProvider(userId);
+  const modelCfg = await resolveDraftModel(userId);
+  if (!searchCfg || !modelCfg) {
+    await writeAudit(
+      userId,
+      countryId,
+      actor.role,
+      actor.name,
+      "rubric_research_skipped",
+      `Rubric research needs both a search key and an active model (search: ${searchCfg ? "yes" : "no"}, model: ${modelCfg ? "yes" : "no"}).`,
+    );
+    return;
+  }
+  const sql = await getSql();
+  const open = await sql<{ indicator_id: string }>`
+    select indicator_id from evidence
+    where country_id = ${countryId} and value is null and assessor_level is null
+      and suggested_level is null and data_gap = false`;
+  const openIds = new Set(open.map((r) => r.indicator_id));
+  const allTargets = researchableRubrics(model.indicators).filter((i) => openIds.has(i.id));
+  const RUBRIC_MAX_PER_RUN = 48;
+  const targets = allTargets.slice(0, RUBRIC_MAX_PER_RUN);
+  if (allTargets.length > targets.length) {
+    await writeAudit(userId, countryId, actor.role, actor.name, "rubric_research_capped",
+      `${allTargets.length - targets.length} rubrics deferred to the per-run ceiling of ${RUBRIC_MAX_PER_RUN}.`);
+  }
+  if (!targets.length) return;
+
+  let proposed = 0;
+  let rejectedCount = 0;
+  let documents = 0;
+  const errors: string[] = [];
+  let done = 0;
+  let reported = 0;
+
+  await mapLimit(targets, RUBRIC_CONCURRENCY, async (indicator) => {
+    const res = await researchRubric({
+      search: { providerId: searchCfg.provider, key: searchCfg.key },
+      model: { providerId: modelCfg.provider, key: modelCfg.key, modelName: modelCfg.modelName },
+      countryName,
+      iso3,
+      indicator,
+    });
+    documents += res.documentsRead;
+    const current = ++done;
+    // Concurrent workers' UPDATEs can commit out of order; only ever write a
+    // higher count than the last one written.
+    if (current > reported) {
+      reported = current;
+      await setIngestMessage(countryId, `Researching documentary rubrics — ${current} of ${targets.length}…`);
+    }
+    if (res.error) {
+      errors.push(res.error);
+      return;
+    }
+    if (res.rejected) {
+      rejectedCount += 1;
+      await writeAudit(userId, countryId, actor.role, actor.name, "rubric_rejected", `${res.rejected.indicatorId}: ${res.rejected.reason.slice(0, 160)}`);
+      return;
+    }
+    const p = res.proposal!;
+    await sql`update evidence set
+      suggested_level = ${p.proposedLevel},
+      provenance = ${"machine-researched"},
+      source_name = ${p.primary.sourceName},
+      source_url = ${p.primary.sourceUrl},
+      confidence = ${"Medium"},
+      observation_year = ${p.documentYear},
+      notes = ${proposalNote(p)}
+      where country_id = ${countryId} and indicator_id = ${p.indicatorId} and user_id = ${userId}
+        and assessor_level is null and data_gap = false
+        and value is null and suggested_level is null`;
+    proposed += 1;
+  });
+
+  const summary =
+    `Rubric research via ${searchCfg.provider}+${modelCfg.provider}: ${proposed} provisional levels proposed, ` +
+    `${rejectedCount} rubrics left named (insufficient or unverifiable evidence), ${documents} documents read of ${targets.length} rubrics` +
+    (errors.length ? `; errors: ${Array.from(new Set(errors)).slice(0, 2).join(" | ")}` : "");
+  await writeAudit(userId, countryId, actor.role, actor.name, "rubric_research_pass", summary);
+  await setIngestMessage(countryId, summary);
+}
+
 /** xAI's built-in search tool. Unverifiable, so readings land at Low confidence. */
 async function runLegacySearchPass(
   countryId: string,
@@ -780,6 +880,7 @@ async function runCountryIngest(countryId: string, userId: string, iso3: string,
         where id = ${countryId}`;
     }
     await runWebSearchPass(countryId, userId, iso3, countryName, actor);
+    await runRubricResearchPass(countryId, userId, iso3, countryName, actor);
     await completeStep1(countryId, userId, actor);
   } catch (err) {
     const sql = await getSql();
@@ -835,6 +936,12 @@ export const refreshPublicEvidence = createServerFn({ method: "POST" })
       select id, iso3 from countries where id = ${data.countryId} and user_id = ${context.userId} and deleted_at is null`;
     const c = countries[0];
     if (!c) return { ok: false as const, error: "Country not found" };
+    // Machine-researched rows carry citation + note as well; a refresh must not
+    // leave a "MACHINE-RESEARCHED PROPOSAL" note on an emptied row.
+    await sql`update evidence set
+      source_name = null, source_url = null, confidence = null, notes = null
+      where country_id = ${data.countryId} and user_id = ${context.userId}
+        and provenance = 'machine-researched' and assessor_level is null and data_gap = false`;
     await sql`update evidence set
       value = null, observation_year = null, suggested_level = null, provenance = null
       where country_id = ${data.countryId} and user_id = ${context.userId}
@@ -1119,7 +1226,11 @@ export const updateEvidence = createServerFn({ method: "POST" })
     const cur = curRows[0];
     if (!cur) return { ok: false as const, error: "Row not found" };
     const value = data.value !== undefined ? data.value : cur.value;
-    const suggested = suggestedLevel(ind, value);
+    // Recompute from thresholds where possible; PRESERVE the stored level where
+    // not. All 42 anchored rubrics have no numeric cuts, so recomputation
+    // yields null for them — writing that null erased machine-researched
+    // proposals on any unrelated edit (review finding #1).
+    const suggested = suggestedLevel(ind, value) ?? cur.suggested_level;
     const assessor = data.assessorLevel !== undefined ? data.assessorLevel : cur.assessor_level;
     const dataGap = data.dataGap !== undefined ? data.dataGap : cur.data_gap;
     const sourceName = data.sourceName !== undefined ? data.sourceName : cur.source_name;
@@ -1552,6 +1663,11 @@ export const generateDraft = createServerFn({ method: "POST" })
           }
           if (!prose) return;
 
+          // Draft-first's conditional banner is a guarantee, not a style: the
+          // model rewrites the body, so re-attach the deterministic banner
+          // (review finding: `ch.body = prose` silently deleted it).
+          const banner = extractConditionsBanner(ch.body);
+
           // The promise that no figure is invented has to be enforced here, not
           // in the prompt. Prose carrying a number the engine never produced is
           // discarded and the deterministic skeleton stands.
@@ -1565,7 +1681,7 @@ export const generateDraft = createServerFn({ method: "POST" })
             ch.body = `${ch.body}\n\n[Model prose for this chapter was rejected by the fidelity check and discarded. ${check.reason}]`;
             return;
           }
-          ch.body = prose;
+          ch.body = banner ? `${banner}\n\n${prose}` : prose;
           ch.modelName = `${cfg.provider}:${cfg.modelName}`;
         });
         doc.modelName =
@@ -1628,7 +1744,16 @@ export const generateMemo = createServerFn({ method: "POST" })
           draftSystemPrompt() + " Write a short decision memo. Do not pick an option.",
           text,
         );
-        if (prose) text = prose;
+        // The memo was the one prose path with no fidelity gate — and with
+        // rubric research populating core gates, the engine computes a rated
+        // stage at Step 1 that unguarded prose could assert as settled.
+        if (prose) {
+          const check = checkProseFidelity(prose, { facts: text }, {
+            stageClaimable: w.claim.claimable,
+            assessmentYear: model.assessment_year,
+          });
+          if (check.ok) text = prose;
+        }
       }
       return { ok: true as const, text };
     } catch (err) {

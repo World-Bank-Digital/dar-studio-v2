@@ -1,0 +1,70 @@
+{
+  "startedAt": "2026-08-17T14:04:05.061Z",
+  "base": "http://127.0.0.1:8080",
+  "phases": {
+    "signin": {
+      "at": "2026-08-17T14:04:06.382Z",
+      "email": "dbcheck@example.com"
+    },
+    "country": {
+      "at": "2026-08-17T14:04:07.278Z",
+      "countryUrl": "http://127.0.0.1:8080/c/4dca44b4-7bf4-406f-9801-f5128d100d96"
+    },
+    "ingest": {
+      "at": "2026-08-17T14:31:30.336Z",
+      "minutes": 27.4
+    },
+    "draftFirst": {
+      "chapters": 17,
+      "annexes": 11,
+      "health": true,
+      "undrafted": 0,
+      "noClaim": true,
+      "conditional": true
+    },
+    "draftFirstAssembled": {
+      "at": "2026-08-17T14:41:02.219Z",
+      "chapters": 17,
+      "annexes": 11,
+      "health": true,
+      "undrafted": 0,
+      "noClaim": true,
+      "conditional": true
+    },
+    "gatesBefore": {
+      "failing": 9,
+      "ids": [
+        "3.3",
+        "3.11",
+        "4.1",
+        "4.5",
+        "4.9",
+        "5.5",
+        "5.7",
+        "7.9",
+        "7.12"
+      ]
+    }
+  },
+  "ok": false,
+  "error": "locator.fill: Timeout 30000ms exceeded.\nCall log:\n  - waiting for getByLabel(/^Notes$/i)\n",
+  "finishedAt": "2026-08-17T14:41:37.133Z",
+  "log": [
+    "14:04:05 1. sign in as the key-holding account",
+    "14:04:06 ✔ signin {\"email\":\"dbcheck@example.com\"}",
+    "14:04:06 2. create a fresh Egypt workspace",
+    "14:04:07 ✔ country {\"countryUrl\":\"http://127.0.0.1:8080/c/4dca44b4-7bf4-406f-9801-f5128d100d96\"}",
+    "14:04:07 3. launch the Step 1 diagnostic (official cascade + verified web search)",
+    "14:31:30 ✔ ingest {\"minutes\":27.4}",
+    "14:31:30 4. draft-first: assemble the full DAR immediately, before any human step",
+    "14:41:00    draft-first: chapters=17 annexes=11 health=true undrafted=0 noClaim=true conditional=true",
+    "14:41:02 ✔ draftFirstAssembled {\"chapters\":17,\"annexes\":11,\"health\":true,\"undrafted\":0,\"noClaim\":true,\"conditional\":true}",
+    "14:41:02 5. gauntlet: read the failing gates, then clear them as the human",
+    "14:41:03    clearing 3.3 — Unmeasured — machine named gap is not an accounted reading.",
+    "14:41:04    clearing 3.11 — Unmeasured — machine named gap is not an accounted reading.",
+    "14:41:06    clearing 4.1 — Grade C (55/100) is below A/B and is not a human-marked gap."
+  ],
+  "errors": [
+    "pageerror: Hydration failed because the server rendered HTML didn't match the client. As a result this tree will be regenerated on the client. This can happen if a SSR-ed Client Component used:\n\n- A server/client branch `if (typeof window !== 'undefined')`.\n- Variable input such as `Date.now()` or `Math.random()` which changes each time it's called.\n- Date formatting in a user's locale which doesn't match the server.\n- External changing data without sending a snapshot of it along with the HTML.\n- Invalid HTML tag nesting.\n\nIt can also happen if the client has a browser extension installed which messes with the HTML before React loaded.\n\nhttps://react.dev/link/hydration-mismatch\n\n  ...\n    <MatchImpl routeId=\"/login\">\n      <MatchView router={{...}} match={{id:\"/login...\", ...}}>\n        <SafeFragment>\n          <SafeFragment fallback={null}>\n            <CatchBoundary getResetKey={function getResetKey} errorComponent={function AppErrorComponent} ...>\n              <CatchBoundaryImpl getResetKey={function getResetKey} errorComponent={function AppErrorComponent} ...>\n                <SafeFragment fallback={function fallback}>\n                  <MatchInnerImpl match={{id:\"/login...\", ...}}>\n                    <Lazy>\n                      <Login>\n                        <main className=\"grid min-h...\">\n                          <Card className=\"w-full max...\">\n                            <div className=\"bg-surface...\">\n                              <p>\n                              <h1>\n                              <p>\n                              <div className=\"mt-6 space...\">\n+                               <p className=\"rounded-sm border border-border bg-moss/30 px-3 py-2 text-xs text-muted\">\n-                               <button\n-                                 className=\"inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-s...\"\n-                               >\n                                ...\n                              ...\n"
+  ]
+}

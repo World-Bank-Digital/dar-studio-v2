@@ -283,51 +283,43 @@ function GuideTab({
       title: "Run the Step 1 diagnostic",
       detail:
         ws.ingestStatus === "running"
-          ? `The machine is collecting — ${ws.ingestProgress}/${ws.ingestTotal} series done. This takes ~15 minutes; you can leave.`
-          : "The machine pulls official statistics, runs verified web search, and names every gap it cannot fill. About 15 minutes, unattended.",
+          ? `The machine is collecting and researching — ${ws.ingestProgress}/${ws.ingestTotal} series done. 30–45 minutes; you can leave.`
+          : "Official statistics, verified web search for the quantitative gaps, and clause-mapped research of every documentary rubric. 30–45 minutes, unattended.",
       done: ws.step1Done,
       actionLabel: ws.ingestStatus === "running" ? "Collecting…" : "Launch the diagnostic",
       action: onLaunch,
       busy: launching || ws.ingestStatus === "running",
     },
     {
-      title: "Clear the evidence readiness gate",
-      detail: ws.gauntlet.passed
-        ? `Cleared — ${ws.gauntlet.populated} of ${ws.gauntlet.mandatory} core gates populated.`
-        : `${ws.gauntlet.populated} of ${ws.gauntlet.mandatory} core gates populated; ${failing} need a human: set an assessor level with a document citation, or mark an explicit data gap.`,
-      done: ws.gauntlet.passed,
-      actionLabel: "Open Readiness",
-      action: () => setTab("gauntlet"),
+      title: "Assemble and read the draft",
+      detail:
+        ws.draftCount > 0
+          ? `${ws.draftCount} draft${ws.draftCount === 1 ? "" : "s"} assembled — evidence health page, 17 chapters, 11 annexes, every figure cited.`
+          : "No waiting, no gates: the full 17-chapter roadmap drafts from whatever the evidence base holds, opening with an evidence-health page that ranks what to strengthen.",
+      done: ws.draftCount > 0,
+      actionLabel: "Open Draft & exports",
+      action: () => setTab("exports"),
     },
     {
-      title: "Skim the country document library",
-      detail: ws.dossier.length
-        ? `${ws.dossier.length} cited documents collected — useful leads for validating the gates above.`
-        : "Optional but recommended: collect cited national strategies, laws and evaluations as leads for gate validation.",
-      done: ws.dossier.length > 0,
+      title: "Strengthen the evidence the draft flags",
+      detail: ws.gauntlet.passed
+        ? `Readiness gate cleared — ${ws.gauntlet.populated} of ${ws.gauntlet.mandatory} core gates carry adequate evidence.`
+        : `${failing} core gates rest on machine research or nothing. The draft's health page ranks them; confirm the machine's proposals or attach documents in Evidence ▸ Indicators.`,
+      done: ws.gauntlet.passed,
       optional: true,
-      actionLabel: "Open Documents",
-      action: () => setTab("dossier"),
+      actionLabel: "Open Readiness",
+      action: () => setTab("gauntlet"),
     },
     {
       title: "Record the decisions, Steps 2\u20138",
       detail:
         laddered >= 7
           ? "All seven decisions recorded. The record is adopted."
-          : `${laddered} of 7 recorded. One short form per rung — engagement mode, targeting, evidence plan, government gates, validation, portfolio, adoption. The ladder cannot skip.`,
+          : `${laddered} of 7 recorded. Optional for drafting — required before any maturity stage can be claimed. One short form per rung.`,
       done: laddered >= 7,
+      optional: true,
       actionLabel: "Open Steps",
       action: () => setTab("steps"),
-    },
-    {
-      title: "Assemble and export the draft",
-      detail:
-        ws.draftCount > 0
-          ? `${ws.draftCount} draft${ws.draftCount === 1 ? "" : "s"} assembled — 17 chapters and 11 annexes, every figure cited.`
-          : "The assembler writes all 17 chapters and 11 annexes from the evidence base. Chapters that prescribe stay locked until the readiness gate clears.",
-      done: ws.draftCount > 0,
-      actionLabel: "Open Draft & exports",
-      action: () => setTab("exports"),
     },
   ];
 
@@ -573,7 +565,7 @@ function GauntletTab({ ws }: { ws: Workspace }) {
     <div className="space-y-4">
       <Card>
         <p className="text-xs font-medium uppercase tracking-widest text-sage">Readiness gate</p>
-        <h2 className="mt-1 font-display text-2xl">{g.passed ? "Cleared — policy chapters may assemble" : "Not cleared — roadmap stays locked"}</h2>
+        <h2 className="mt-1 font-display text-2xl">{g.passed ? "Cleared — policy chapters may assemble" : "Not cleared — prescriptive chapters conditional"}</h2>
         <p className="mt-2 text-sm text-muted">{g.summary}</p>
         <p className="mt-2 text-xs text-subtle">
           Mandatory set is the 13 core gates, not the 97-indicator census. National exact series beat international
@@ -1144,6 +1136,7 @@ function EvidenceTab({ ws, onChange }: { ws: Workspace; onChange: () => Promise<
                   <td className="px-3 py-2 tabular-nums font-medium">{final ?? "—"}</td>
                   <td className="px-3 py-2 text-xs">
                     {e?.provenance === "named-gap" ? "gap " : ""}
+                    {e?.provenance === "machine-researched" ? "researched " : ""}
                     {e?.isProxy ? "proxy " : ""}
                     {stale ? "stale " : ""}
                     {e?.dataGap ? "data-gap" : ""}
@@ -1607,7 +1600,7 @@ function Exports({ ws }: { ws: Workspace }) {
                   <style>body{font-family:Georgia,serif;max-width:720px;margin:40px auto;color:#1c1f1a;line-height:1.5}
                   h1,h2{font-weight:600} .disc{font-size:12px;border:1px solid #ccc;padding:8px}</style></head>
                   <body><p class="disc">${escapeHtml(doc.disclaimer)}</p><h1>${escapeHtml(doc.title)}</h1>
-                  ${doc.chapters.map((c) => `<h2>${escapeHtml(c.n)}. ${escapeHtml(c.title)}</h2><p><em>Machine-drafted by ${escapeHtml(c.modelName)} on ${escapeHtml(c.draftedAt)}. Draft for human rewriting.</em></p><pre style="white-space:pre-wrap;font-family:Georgia">${escapeHtml(c.body)}</pre>`).join("")}
+                  ${doc.chapters.map((c) => `<h2>${c.n === "health" ? escapeHtml(c.title) : `${escapeHtml(c.n)}. ${escapeHtml(c.title)}`}</h2><p><em>Machine-drafted by ${escapeHtml(c.modelName)} on ${escapeHtml(c.draftedAt)}. Draft for human rewriting.</em></p><pre style="white-space:pre-wrap;font-family:Georgia">${escapeHtml(c.body)}</pre>`).join("")}
                   </body></html>`;
                 download(`${ws.iso3}-dar-draft.html`, html, "text/html");
               }}
@@ -1617,7 +1610,7 @@ function Exports({ ws }: { ws: Workspace }) {
             {doc.chapters.map((c) => (
               <article key={c.n}>
                 <h3 className="font-display text-lg">
-                  {c.n}. {c.title}
+                  {c.n === "health" ? c.title : `${c.n}. ${c.title}`}
                 </h3>
                 <p className="text-xs text-subtle">
                   Machine-drafted by {c.modelName} on {c.draftedAt}. Draft for human rewriting.

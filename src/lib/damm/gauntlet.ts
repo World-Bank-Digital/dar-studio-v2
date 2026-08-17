@@ -26,7 +26,7 @@ export interface GateLine {
   name: string;
   specialist: SpecialistDesk;
   kind: "quantitative" | "rubric";
-  status: "direct" | "proxy" | "human-validated" | "human-gap" | "missing";
+  status: "direct" | "proxy" | "human-validated" | "human-gap" | "proposed" | "missing";
   populated: boolean;
   accounted: boolean;
   grade: EvidenceScore["grade"];
@@ -72,6 +72,9 @@ function formatGateReading(
   if (row?.dataGap && row.assessorLevel == null && row.value == null) return "Explicit data gap";
   if (kind === "rubric") {
     if (row?.assessorLevel != null) return `Assessor level ${row.assessorLevel}`;
+    if (row?.provenance === "machine-researched" && row.suggestedLevel != null) {
+      return `Proposed L${row.suggestedLevel} (machine-researched)`;
+    }
     return "Documentary — unmeasured";
   }
   if (row?.value == null) return "No series";
@@ -81,11 +84,19 @@ function formatGateReading(
 
 function specialistChallenge(line: GateLine): SpecialistChallenge | null {
   if (line.status === "human-gap" || line.status === "human-validated") return null;
+  if (line.status === "proposed") {
+    return {
+      desk: line.specialist,
+      indicatorId: line.indicatorId,
+      finding: `${line.specialist} desk: ${line.name} carries a machine-researched proposal. Confirm, correct or reject it — the proposal's rationale and citations are on the evidence row.`,
+      action: "require-human",
+    };
+  }
   if (line.kind === "rubric" && line.status === "missing") {
     return {
       desk: line.specialist,
       indicatorId: line.indicatorId,
-      finding: `${line.specialist} desk: ${line.name} is a documentary gate. A search agent must not invent a level. Attach a primary document or mark an explicit data gap.`,
+      finding: `${line.specialist} desk: ${line.name} is a documentary gate with no proposal. Attach a primary document or mark an explicit data gap.`,
       action: "require-human",
     };
   }
@@ -126,16 +137,19 @@ export function evaluateGauntlet(rows: EvidenceRow[], iso3 = "XXX"): GauntletRes
       provenance: row?.provenance,
       dataGap: row?.dataGap,
       assessorLevel: row?.assessorLevel ?? null,
+      suggestedLevel: row?.suggestedLevel ?? null,
     });
     const humanGap = Boolean(row?.dataGap);
     const humanValidated = row?.assessorLevel != null;
-    const hasReading = row?.value != null || humanValidated;
+    const proposed = row?.provenance === "machine-researched" && row?.suggestedLevel != null;
+    const hasReading = row?.value != null || humanValidated || proposed;
     const populated = hasReading && !humanGap;
     const accounted = populated || humanGap;
 
     let status: GateLine["status"] = "missing";
     if (humanGap && !hasReading) status = "human-gap";
     else if (humanValidated) status = "human-validated";
+    else if (proposed) status = "proposed";
     else if (scored.fit === "proxy") status = "proxy";
     else if (hasReading && scored.fit === "direct") status = "direct";
     else if (row?.provenance === "named-gap") status = "missing";
@@ -205,7 +219,7 @@ export function evaluateGauntlet(rows: EvidenceRow[], iso3 = "XXX"): GauntletRes
 
   const summary = passed
     ? `Gauntlet passed. ${populated} of ${mandatory.length} core gates populated (need ${populatedNeeded}); ${gradeAB} of those are A/B.`
-    : `Gauntlet locked. ${populated}/${mandatory.length} populated (need ${populatedNeeded}); ${gradeAB} A/B (need ${abNeeded} of the populated set); ${silentGaps.length} silent gaps; ${weakReadings.length} weak readings. Policy chapters stay locked.`;
+    : `Gauntlet not cleared. ${populated}/${mandatory.length} populated (need ${populatedNeeded}); ${gradeAB} A/B (need ${abNeeded} of the populated set); ${silentGaps.length} silent gaps; ${weakReadings.length} weak readings. Prescriptive chapters carry the conditional banner.`;
 
   return {
     passed,
@@ -226,10 +240,7 @@ export function evaluateGauntlet(rows: EvidenceRow[], iso3 = "XXX"): GauntletRes
 }
 
 /**
- * Chapters withheld until the evidence gauntlet clears.
- *
- * Re-exported from the outline rather than hard-coded: these are exactly the
- * chapters that prescribe action, so a new prescriptive chapter is gated the
- * moment it is added instead of when someone remembers to update a list here.
+ * The prescriptive chapter set (conditional-banner carriers while the gauntlet
+ * is uncleared). Kept as a named re-export for older tests and callers.
  */
 export { PRESCRIPTIVE_CHAPTERS as POLICY_CHAPTERS } from "./outline.ts";

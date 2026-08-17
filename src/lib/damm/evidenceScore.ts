@@ -13,6 +13,8 @@ export interface EvidenceScoreInput {
   provenance?: string | null;
   dataGap?: boolean;
   assessorLevel?: number | null;
+  /** Machine-proposed level (rubric research); populates a row without a value. */
+  suggestedLevel?: number | null;
 }
 
 export interface EvidenceScore {
@@ -113,10 +115,11 @@ const GRADE_LABEL: Record<EvidenceGrade, string> = {
 export function scoreEvidence(input: EvidenceScoreInput): EvidenceScore {
   const caps: string[] = [];
   const entry = registryEntry(input.indicatorId);
+  const researched = input.provenance === "machine-researched" && input.suggestedLevel != null;
   const missing =
     input.provenance === "named-gap" ||
     Boolean(input.dataGap) ||
-    (input.value == null && input.assessorLevel == null);
+    (input.value == null && input.assessorLevel == null && !researched);
 
   if (missing && input.provenance === "named-gap") {
     return {
@@ -157,6 +160,26 @@ export function scoreEvidence(input: EvidenceScoreInput): EvidenceScore {
 
   const sourceClass = classifySource(input.sourceName, input.sourceUrl);
   const authority = AUTHORITY[sourceClass];
+
+  // A machine-researched rubric proposal is populated, cited and reviewable —
+  // but it is a proposal, not a validated reading. It grades at most C until
+  // a human confirms it, whatever the citation's authority. This is also what
+  // keeps the readiness gate honest: proposals count as populated without
+  // being able to clear the A/B bar on their own (review finding #3: the
+  // Evidence tab graded these rows E "no value" while the draft graded them A).
+  if (researched) {
+    const capped = Math.min(55 + Math.round(authority / 4), 65);
+    return {
+      total: capped,
+      grade: gradeFromScore(capped),
+      label: GRADE_LABEL[gradeFromScore(capped)],
+      note: `Machine-researched proposal (L${input.suggestedLevel}) — pending validation. Cited: ${input.sourceName ?? "source"}.`,
+      sourceClass,
+      fit: "direct",
+      parts: { authority, definition: 0, recency: 0, disaggregation: 0 },
+      caps: ["machine-researched-pending-validation"],
+    };
+  }
   const isProxy = Boolean(input.isProxy);
   const required = entry?.disaggregation ?? "national";
   const wantsCut = required === "rural" || required === "agricultural" || required === "rural-agricultural" || required === "sex";

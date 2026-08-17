@@ -76,6 +76,11 @@ export function credibilityFor(input: {
   let tier: CredibilityTier = "E";
   if (input.provenance === "named-gap" || input.dataGap) {
     tier = "E";
+  } else if (input.provenance === "machine-researched") {
+    // A researched proposal is cited and reviewable but not validated — cap at
+    // C so the draft's health tally and the Evidence tab agree with the
+    // evidence scorer (review finding #3: one grader said E, the other A).
+    tier = "C";
   } else if (official && !input.isProxy) {
     tier = "A";
   } else if (official && input.isProxy) {

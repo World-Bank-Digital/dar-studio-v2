@@ -38,7 +38,7 @@ export function nextProvenance(input: {
   if (input.dataGap) return input.current ?? "named-gap";
   if (input.assessorLevel !== null && input.assessorLevel !== undefined) return "assessor";
   if (input.value !== null && input.value !== undefined) {
-    if (input.current === "machine-imported" || input.current === "proxy") return input.current;
+    if (input.current === "machine-imported" || input.current === "proxy" || input.current === "machine-researched") return input.current;
     return "manual";
   }
   return input.current;

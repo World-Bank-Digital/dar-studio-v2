@@ -446,16 +446,16 @@ deck.sectionSlide({
 {
   const s = deck.slide();
   deck.kicker(s, "C3 / The output");
-  deck.title(s, "Diagnostic chapters draft. Prescriptive chapters wait.");
+  deck.title(s, "Everything drafts. Only the claim waits.");
   deck.statRow(s, 1.95, [
     { n: "17", t: "Chapters, from the executive summary and investment case through to consultation priorities." },
     { n: "11", t: "Annexes carrying the evidence record itself — never rewritten by a language model." },
-    { n: "8", t: "Prescriptive chapters that stay locked until the evidence readiness gate clears." },
+    { n: "8", t: "Prescriptive chapters that draft as conditional scenarios until the evidence readiness gate clears." },
   ]);
   deck.hline(s, MX, 4.62, CW, { color: PALETTE.HAIRL, pt: 1 });
   const cols = [
     ["Diagnostic — chapters 2–9, 17", "Report what the evidence shows and what is missing. They draft as soon as their inputs exist, because describing a weak evidence base is itself a legitimate finding."],
-    ["Prescriptive — chapters 1, 10–16", "Recommend, sequence and cost. They stay locked until at least 11 of 13 core gates carry adequate evidence, so a roadmap can never propose investment on evidence that would not survive review."],
+    ["Prescriptive — chapters 1, 10–16", "Recommend, sequence and cost. Until 11 of 13 core gates carry adequate evidence they open with an explicit conditional banner and state each recommendation as hypothesis → evidence → decision gate — drafted, never locked."],
   ];
   let cx = MX;
   const ccw = (CW - 0.9) / 2;

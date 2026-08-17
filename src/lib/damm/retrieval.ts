@@ -27,6 +27,8 @@ export interface RetrievalIndicator
   extends Pick<IndicatorDef, "id" | "name" | "anchors"> {
   preferredSource?: string;
   gapNote?: string;
+  /** Full replacement query (e.g. the rubric pass's document-biased query). */
+  queryOverride?: string;
 }
 
 export interface RejectedReading {
@@ -43,8 +45,8 @@ export interface RetrievalOutcome {
   error?: string;
 }
 
-const MAX_DOC_CHARS = 6000;
-const MAX_DOCS_IN_PROMPT = 6;
+const MAX_DOC_CHARS = 4500;
+const MAX_DOCS_PER_INDICATOR = 3;
 
 /**
  * Strip indicator-registry notation from a search query. Unit suffixes like
@@ -60,6 +62,15 @@ export function cleanQueryTerm(value: string): string {
     .trim();
 }
 
+/**
+ * The plain-language country name for search queries. Official economy names
+ * ("Egypt, Arab Rep.") carry punctuation that literal search engines match
+ * against; the two-word query a human wins with starts with just "Egypt".
+ */
+export function searchCountryName(countryName: string): string {
+  return countryName.split(",")[0].trim();
+}
+
 /** One search query per indicator, biased to official national publishers. */
 export function buildQuery(input: {
   indicator: RetrievalIndicator;
@@ -67,17 +78,27 @@ export function buildQuery(input: {
   assessmentYear: number;
 }): string {
   const { indicator, countryName, assessmentYear } = input;
+  if (indicator.queryOverride) return indicator.queryOverride;
   const preferred = indicator.preferredSource ? ` ${cleanQueryTerm(indicator.preferredSource)}` : "";
-  return `${countryName} ${cleanQueryTerm(indicator.name)} statistics${preferred} ${assessmentYear - 3}-${assessmentYear}`;
+  return `${searchCountryName(countryName)} ${cleanQueryTerm(indicator.name)} statistics${preferred} ${assessmentYear - 3}-${assessmentYear}`;
 }
 
-/** Render fetched documents for the extraction prompt, numbered so the model can cite by index. */
+/**
+ * Render the extraction prompt with each indicator's OWN documents attached.
+ *
+ * The first live delivery run shared one flat document list across a batch of
+ * six indicators and truncated it to six entries — so the documents of the
+ * first two indicators crowded out the rest, and two-thirds of every batch
+ * reached the model with no evidence at all (LEARNINGS L17: 100 documents
+ * retrieved, 2 readings accepted). Sectioning by indicator makes starvation
+ * structurally impossible.
+ */
 export function buildExtractionPrompt(input: {
   countryName: string;
   iso3: string;
   assessmentYear: number;
   indicators: RetrievalIndicator[];
-  documents: SearchHit[];
+  docsByIndicator: Map<string, SearchHit[]>;
 }): string {
   const lines = [
     `Extract cited statistics for ${input.countryName} (${input.iso3}) from the documents below.`,
@@ -93,19 +114,23 @@ export function buildExtractionPrompt(input: {
     "- Omit any indicator you cannot support. Returning nothing is correct and expected.",
     "",
     "Return ONLY a JSON array of objects with keys: id, value, year, sourceName, sourceUrl, quote, isProxy, proxyNote.",
-    "",
-    "Indicators:",
+    "The id field must be exactly the indicator id shown after 'Indicator' (e.g. 2.1) — never a document label.",
   ];
   for (const ind of input.indicators) {
     lines.push(
-      `- ${ind.id} ${ind.name}` +
-        (ind.gapNote ? ` | note: ${ind.gapNote}` : "") +
-        ` | L5 anchor: ${ind.anchors.L5}`,
+      "",
+      `### Indicator ${ind.id} — ${ind.name}` +
+        (ind.gapNote ? ` (note: ${ind.gapNote})` : ""),
+      `L5 anchor: ${ind.anchors.L5}`,
     );
-  }
-  lines.push("", "Documents:");
-  for (const [i, doc] of input.documents.slice(0, MAX_DOCS_IN_PROMPT).entries()) {
-    lines.push("", `[${i + 1}] ${doc.title || "(untitled)"}`, `URL: ${doc.url}`, doc.text.slice(0, MAX_DOC_CHARS));
+    const docs = (input.docsByIndicator.get(ind.id) ?? []).slice(0, MAX_DOCS_PER_INDICATOR);
+    if (!docs.length) {
+      lines.push("No documents were retrieved for this indicator. Omit it.");
+      continue;
+    }
+    for (const [i, doc] of docs.entries()) {
+      lines.push("", `Document ${i + 1} for indicator ${ind.id} — ${doc.title || "(untitled)"}`, `URL: ${doc.url}`, doc.text.slice(0, MAX_DOC_CHARS));
+    }
   }
   return lines.join("\n");
 }
@@ -189,9 +214,10 @@ export async function collectDocuments(input: {
   assessmentYear: number;
   nsoDomains: string[];
   resultsPerIndicator: number;
-}): Promise<{ documents: SearchHit[]; searchError?: string }> {
+}): Promise<{ documents: SearchHit[]; docsByIndicator: Map<string, SearchHit[]>; searchError?: string }> {
   const documents: SearchHit[] = [];
-  const seen = new Set<string>();
+  const docsByIndicator = new Map<string, SearchHit[]>();
+  const inFlatList = new Set<string>();
   let searchError: string | undefined;
 
   const scope = input.nsoDomains.length
@@ -200,11 +226,23 @@ export async function collectDocuments(input: {
       : input.nsoDomains.slice(0, input.searcher.domainFilterLimit as number)
     : undefined;
 
-  const usable = (hit: SearchHit) => !seen.has(hit.url) && Boolean(hit.text.trim()) && !isBlockedHost(hit.url);
-
   for (const indicator of input.indicators) {
     const query = buildQuery({ indicator, countryName: input.countryName, assessmentYear: input.assessmentYear });
-    let found = 0;
+    const mine: SearchHit[] = [];
+    // Dedupe PER INDICATOR: a document shared by sibling indicators must appear
+    // in each one's section, or later siblings are starved by the batch-wide
+    // seen-set (review findings #12/#15 — the exact starvation the per-indicator
+    // restructure was meant to end).
+    const seenHere = new Set<string>();
+    const take = (hit: SearchHit) => {
+      if (seenHere.has(hit.url) || !hit.text.trim() || isBlockedHost(hit.url)) return;
+      seenHere.add(hit.url);
+      mine.push(hit);
+      if (!inFlatList.has(hit.url)) {
+        inFlatList.add(hit.url);
+        documents.push(hit);
+      }
+    };
     if (scope) {
       const scoped = await input.searcher.search({
         key: input.key,
@@ -214,14 +252,9 @@ export async function collectDocuments(input: {
         withText: true,
       });
       if (scoped.error) searchError = scoped.error;
-      for (const hit of scoped.hits) {
-        if (!usable(hit)) continue;
-        seen.add(hit.url);
-        documents.push(hit);
-        found += 1;
-      }
+      for (const hit of scoped.hits) take(hit);
     }
-    if (found === 0) {
+    if (mine.length === 0) {
       const open = await input.searcher.search({
         key: input.key,
         query,
@@ -229,14 +262,11 @@ export async function collectDocuments(input: {
         withText: true,
       });
       if (open.error) searchError = open.error;
-      for (const hit of open.hits) {
-        if (!usable(hit)) continue;
-        seen.add(hit.url);
-        documents.push(hit);
-      }
+      for (const hit of open.hits) take(hit);
     }
+    docsByIndicator.set(indicator.id, mine);
   }
-  return { documents, searchError };
+  return { documents, docsByIndicator, searchError };
 }
 
 const EXTRACTION_SYSTEM =
@@ -269,7 +299,7 @@ export async function retrieveVerifiedReadings(input: {
   if (!extractor) return { readings: [], rejected: [], documentsRead: 0, error: `Unknown model provider “${input.model.providerId}”.` };
 
   const nsoDomains = nsoDomainsFor(input.iso3);
-  const { documents, searchError } = await collectDocuments({
+  const { documents, docsByIndicator, searchError } = await collectDocuments({
     searcher,
     key: input.search.key,
     indicators: input.indicators,
@@ -293,7 +323,7 @@ export async function retrieveVerifiedReadings(input: {
     iso3: input.iso3,
     assessmentYear: input.assessmentYear,
     indicators: input.indicators,
-    documents,
+    docsByIndicator,
   });
 
   const chat = await extractor.chat({
@@ -301,9 +331,13 @@ export async function retrieveVerifiedReadings(input: {
     model: input.model.modelName,
     system: EXTRACTION_SYSTEM,
     user: prompt,
-    maxTokens: 3000,
+    // 24k, not 3k: a reasoning model spends budget on chain-of-thought before
+    // visible text — the 3k budget produced zero extractions with zero errors
+    // in a live run (the sibling of LEARNINGS L14, found by its own diagnosis
+    // message in the audit).
+    maxTokens: 24_000,
     temperature: 0,
-    timeoutMs: 90_000,
+    timeoutMs: 360_000,
   });
   if (chat.error) return { readings: [], rejected: [], documentsRead: documents.length, error: chat.error };
   if (!chat.text) {

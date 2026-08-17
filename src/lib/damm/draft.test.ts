@@ -183,3 +183,69 @@ describe("draft honesty", () => {
     assert.match(body3, /Wheat/);
   });
 });
+
+describe("draft-first architecture", () => {
+  function fullPayload(overrides = {}) {
+    const rows = emptyEvidenceRows(model);
+    const card = scoreAssessment(model, rows);
+    const chapters = chapterReadiness(model, [], true);
+    const claim = claimableStage(card, { currentStep: 1, mandateRecorded: false, validationRecorded: false });
+    return {
+      countryName: "Thinland", iso3: "THN", generatedAt: "2026-01-01T00:00:00.000Z",
+      modelVersion: model.version, assessmentYear: model.assessment_year,
+      currentStep: 1, mandateRecorded: false, validationRecorded: false,
+      scorecard: card, claim, chapters, decisions: [],
+      evidence: model.indicators.map((i) => ({
+        id: i.id, name: i.name, pillar: i.pillar, role: i.role,
+        value: null, year: null, source: null, sourceUrl: null, confidence: null,
+        provenance: "named-gap" as const, proxy: false, proxyNote: null,
+        dataGap: false, gapSteward: "steward", suggested: null, assessor: null,
+        final: null, stale: false, gate: i.gate,
+      })),
+      targeting: null, gauntletPassed: false, gauntletSummary: "Gauntlet locked. 0/13 populated.",
+      ...overrides,
+    };
+  }
+
+  it("drafts all 17 chapters and 11 annexes right after Step 1, with nothing undrafted", () => {
+    const doc = assembleDeterministicDraft(model, fullPayload());
+    const undrafted = doc.chapters.filter((c) => /is not drafted/.test(c.body));
+    assert.equal(undrafted.length, 0, undrafted.map((c) => c.n).join(","));
+    assert.equal(doc.chapters.filter((c) => /^\d+$/.test(c.n)).length, 17);
+    assert.equal(doc.chapters.filter((c) => /^[A-K]$/.test(c.n)).length, 11);
+  });
+
+  it("opens with the evidence-health page, which reports the claim and the ranked fixes", () => {
+    const doc = assembleDeterministicDraft(model, fullPayload());
+    assert.equal(doc.chapters[0].n, "health");
+    const body = doc.chapters[0].body;
+    assert.match(body, /no stage claimable/i);
+    assert.match(body, /Strengthen first \(ranked\):/);
+    assert.match(body, /core gate/i);
+  });
+
+  it("marks prescriptive chapters as conditional when the readiness gate has not cleared", () => {
+    const doc = assembleDeterministicDraft(model, fullPayload());
+    const ch10 = doc.chapters.find((c) => c.n === "10")!;
+    assert.match(ch10.body, /CONDITIONS ON THIS CHAPTER/);
+    assert.match(ch10.body, /hypothesis → evidence → decision-gate/);
+    const ch2 = doc.chapters.find((c) => c.n === "2")!;
+    assert.doesNotMatch(ch2.body, /CONDITIONS ON THIS CHAPTER/, "diagnostic chapters report, they are not conditional");
+  });
+
+  it("never lets the health page claim a stage the policy withholds", () => {
+    const doc = assembleDeterministicDraft(model, fullPayload());
+    assert.doesNotMatch(doc.chapters[0].body, /Stage [1-5] is claimable|claimable: Stage/i);
+  });
+});
+
+describe("conditions banner survives prose (L18)", () => {
+  it("extracts the banner block and nothing else", async () => {
+    const { extractConditionsBanner } = await import("./draft.ts");
+    const body = "CONDITIONS ON THIS CHAPTER — its recommendations are conditional scenarios, not settled advice:\n- The evidence readiness gate has not cleared.\n\nChapter text follows here.";
+    const banner = extractConditionsBanner(body);
+    assert.ok(banner?.startsWith("CONDITIONS ON THIS CHAPTER"));
+    assert.ok(!banner?.includes("Chapter text follows"));
+    assert.equal(extractConditionsBanner("Plain chapter body with no banner."), null);
+  });
+});

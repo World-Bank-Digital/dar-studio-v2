@@ -7,7 +7,7 @@ export type Provenance =
   | "assessor"
   | "named-gap"
   | "proxy"
-  | "manual";
+  | "manual" | "machine-researched";
 
 export interface LevelAnchors {
   L1: string;

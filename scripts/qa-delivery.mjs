@@ -28,8 +28,8 @@ const base = process.argv[2] || "http://127.0.0.1:8080";
 const email = process.env.QA_EMAIL || "dbcheck@example.com";
 const password = process.env.QA_PASSWORD || "TestPass123!";
 
-const INGEST_DEADLINE_MS = 25 * 60 * 1000; // WB cascade + verified search
-const DRAFT_DEADLINE_MS = 15 * 60 * 1000; // 17 prose calls, pool of 4
+const INGEST_DEADLINE_MS = 75 * 60 * 1000; // WB cascade + verified search + rubric research
+const DRAFT_DEADLINE_MS = 30 * 60 * 1000; // 17 prose calls, pool of 4, reasoning-model worst case
 
 const report = {
   startedAt: new Date().toISOString(),
@@ -117,8 +117,12 @@ async function clearGate(id) {
   await page.getByLabel(/Source name/i).fill("Ministry of Agriculture and Land Reclamation");
   await page.getByLabel(/^Source URL$/i).fill("https://www.moalr.gov.eg/");
   await page.getByLabel(/Assessor level/i).selectOption("3");
+  // Not getByLabel: the wrapping <label> includes the textarea's own content in
+  // the accessible name, so a machine-researched note breaks /^Notes$/ (run-4
+  // failure — the first run in which a core gate carried a proposal).
   await page
-    .getByLabel(/^Notes$/i)
+    .locator("textarea")
+    .last()
     .fill("QA delivery loop — scripted demonstration record, not an official Government of Egypt reading.");
   await page.getByRole("button", { name: /Save and recompute/i }).click();
   await page.getByText(/Assessor level \(wins over the machine\)/i).waitFor({ state: "hidden", timeout: 15000 });
@@ -191,7 +195,31 @@ try {
   if (!ingestDone) throw new Error("Step 1 diagnostic did not finish inside the deadline");
   phase("ingest", { minutes: Math.round((Date.now() - ingestStart) / 6000) / 10 });
 
-  note("4. gauntlet: read the failing gates, then clear them as the human");
+  note("4. draft-first: assemble the full DAR immediately, before any human step");
+  await tab("exports");
+  await page.getByRole("button", { name: /Assemble draft/i }).click();
+  await page.getByText(/Machine-drafted/i).first().waitFor({ timeout: DRAFT_DEADLINE_MS });
+  await page.waitForTimeout(1500);
+  {
+    const body = await page.locator("body").innerText();
+    const chapters = new Set([...body.matchAll(/^(\d{1,2})\.\s.{4,80}$/gm)].map((m) => Number(m[1]))).size;
+    const annexes = new Set([...body.matchAll(/^[A-K]\.\s.{4,80}$/gm)].map((m) => m[0][0])).size;
+    const health = /Evidence health/.test(body);
+    const undrafted = (body.match(/is not drafted/gi) || []).length;
+    const noClaim = /no stage claimable/i.test(body);
+    const conditional = /CONDITIONS ON THIS CHAPTER/.test(body);
+    report.phases.draftFirst = { chapters, annexes, health, undrafted, noClaim, conditional };
+    note(`   draft-first: chapters=${chapters} annexes=${annexes} health=${health} undrafted=${undrafted} noClaim=${noClaim} conditional=${conditional}`);
+    if (chapters !== 17 || annexes !== 11) throw new Error(`draft-first expected 17+11, saw ${chapters}+${annexes}`);
+    if (!health) throw new Error("draft-first: evidence-health page missing");
+    if (undrafted > 0) throw new Error(`draft-first: ${undrafted} sections undrafted`);
+    if (!noClaim) throw new Error("draft-first: the engagement-package rule must still withhold the stage");
+    if (!conditional) throw new Error("draft-first: prescriptive chapters should carry the conditional banner pre-validation");
+  }
+  await shot("d-01b-draft-first");
+  phase("draftFirstAssembled", report.phases.draftFirst);
+
+  note("5. gauntlet: read the failing gates, then clear them as the human");
   let failing = await failingGates();
   report.phases.gatesBefore = { failing: failing.length, ids: failing.map((f) => f.id) };
   await shot("d-02-gauntlet-before");
@@ -208,7 +236,7 @@ try {
   }
   phase("gauntletCleared", { humanCleared: report.phases.gatesBefore.failing });
 
-  note("5. record steps 2–8");
+  note("6. record steps 2–8");
   await tab("steps");
   await recordStep("Standard assessment", "QA delivery loop: live lending pipeline demonstration. Rejected Defer and Rapid.");
   await recordStep(null, "Shortlist proposed to counterpart.", {
@@ -223,7 +251,7 @@ try {
   await page.getByText(/The record is adopted/i).waitFor({ timeout: 10000 });
   phase("ladder", { steps: "2-8 recorded" });
 
-  note("6. assemble the 17-chapter draft (live model prose + fidelity gate)");
+  note("7. re-assemble with the validated evidence (live model prose + fidelity gate)");
   await tab("exports");
   await page.getByRole("button", { name: /Assemble draft/i }).click();
   await page.getByText(/Machine-drafted/i).first().waitFor({ timeout: DRAFT_DEADLINE_MS });
@@ -264,7 +292,7 @@ try {
   }
   phase("draftAssembled", report.phases.draft);
 
-  note("7. exports and persistence");
+  note("8. exports and persistence");
   const [download] = await Promise.all([
     page.waitForEvent("download", { timeout: 15000 }).catch(() => null),
     page.getByRole("button", { name: /Evidence CSV/i }).click(),

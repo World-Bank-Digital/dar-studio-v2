@@ -217,3 +217,77 @@ does a full navigation); a mail failure must never fail the sign-in
 authenticator); `mailer.test.ts`. **Meta-lesson: a feature a user assumes
 exists is a product decision pending — either build it or make its absence
 visible in the interface.**
+
+### L17 — Document starvation: 100 documents retrieved, 2 readings accepted
+**Incident:** the verified search pass retrieved 100 documents across 8 batches
+and produced 2 readings, with zero rejections — the verification gate was never
+even consulted.
+**Root cause:** one flat document list per six-indicator batch, truncated to
+six entries in the prompt. The first two indicators' documents crowded out the
+rest, so two-thirds of every batch reached the extraction model with no
+evidence attached — asked to extract from documents it was never shown.
+**Fix:** the extraction prompt is sectioned per indicator, each carrying its
+own retrieved documents; an indicator with none is told to omit itself.
+Starvation is now structurally impossible rather than statistically unlikely.
+**Pinned by:** `retrieval.test.ts` — "gives every indicator its own section".
+**Meta-lesson: zero rejections from a verification gate is not reassurance —
+it means the gate's input dried up upstream. Instrument the whole funnel.**
+
+## Design shifts
+
+### D1 — Draft-first: gates moved from in front of the work to inside the document
+**What changed (2026-08-17, user decision):** the ladder and the readiness
+gauntlet no longer block drafting. The automated run goes straight to a full
+17-chapter DAR; unrecorded decisions and unverified gates become stated
+conditions inside the text; the draft opens with an evidence-health page that
+ranks what to strengthen first. The engagement-package rule is untouched — no
+maturity stage is claimable before mandate and validation.
+**Why:** the gated flow showed a TTL 2 of 17 chapters after the automated run
+and demanded seven recorded decisions plus nine hand-validated gates before
+revealing the rest. Review-and-correct beats author-from-blank-page; an
+unusable rigorous tool produces zero rigour in practice.
+**What guards the claims now:** the claim policy (`claimableStage`), the
+conditional banner on prescriptive chapters, inline grades/PROXY/STALE flags,
+and the health page — provenance made impossible to miss, instead of work
+made impossible to reach.
+
+### D2 — Rubrics are researched, not skipped (user decision, same date)
+Anchored rubrics (42 indicators) and locally-sourced quantitative gaps (29) are
+now researched on the open web. Rubric proposals must argue clause-by-clause
+against the anchor text, state why the next level up was NOT proposed, and
+cite quote-verified retrieved documents — the shape demonstrated by the user's
+own Egypt farmer-registry assessment, which is the reference test fixture.
+Proposals are provisional suggested levels (provenance `machine-researched`);
+validation converts or corrects them. `rubric.test.ts` pins the contract.
+
+### L18 — The adversarial review harvest: 27 confirmed findings in one diff
+**Incident:** a four-lens adversarial review (31 agents, every finding re-verified
+by a skeptic against the code) of the draft-first + rubric-research change
+confirmed 27 defects I would have shipped, plus one more surfaced by the live
+run (#28).
+**The heaviest:** (a) a human edit to any researched rubric row silently erased
+the machine's proposal — `suggested_level` recomputed from a null value;
+(b) the rubric persist could overwrite evidence a human entered mid-run;
+(c) `generateMemo` was the one prose path with no fidelity gate, newly armed by
+rubric research computing a rated stage at Step 1; (d) the CONDITIONS banner
+did not survive prose replacement — the central draft-first safeguard existed
+only pre-prose; (e) the two graders contradicted each other: a researched row
+graded E ("no value") in the Evidence tab and A ("official series") in the
+draft; (f) the sibling starvation and statistics-biased queries that kept the
+farmer registry — the user's own worked example — out of the proposals;
+(g) "Transformative", the model's own top band, missing from the fidelity
+gate's band list; (h) #28 from the live run: L1 proposed from absence of
+evidence — retrieved documents failing to show a capability was treated as
+evidence it does not exist. All fixed; researched proposals now grade ≤C in
+BOTH graders (populated, cited, but pending validation), L1 is unproposable
+from web research, and the banner is re-attached after prose.
+**Meta-lessons:** a graceful path added in one place (L14's budget fix) must be
+grepped for in every sibling call site — the 3k-token extraction budget
+reproduced L14 exactly and was found by its own diagnostic message in the
+audit; and independent adversarial review pays for itself at design-shift
+boundaries — most of these lived in the seams between components written
+hours apart.
+**Pinned by:** `rubric.test.ts` (L1 refusal, strict citations, documentYear),
+`evidenceScore.test.ts` (researched-proposal grading), `draft.test.ts` (banner
+extraction), `fidelity.test.ts` (band list), `retrieval.test.ts` (per-indicator
+dedupe), and the tightened persist/update paths in `actions.ts`.

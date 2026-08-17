@@ -37,53 +37,58 @@ a live checklist with a single "Do this next" button.
 Sign in → *New country* → type the name, pick the official economy. You land
 in the country workspace.
 
-**2. Launch the Step 1 diagnostic — machine, ~15 minutes.**
+**2. Launch the Step 1 diagnostic — machine, 30–45 minutes.**
 One button. The machine then: (a) pulls every indicator the World Bank / ITU /
 FAO statistical systems publish, with source URLs; (b) runs verified web
 search for remaining quantitative gaps — a search provider fetches the actual
 page, a model extracts figures *from that page only*, and every figure is
 checked against the page text before it is stored; (c) anything it cannot
-verify becomes a **named gap** routed to a steward — never a guess. It also
-builds the **dossier** (see glossary). When it finishes, it hands over.
+verify becomes a **named gap** routed to a steward — never a guess. It then
+researches every **documentary rubric** on the web — farmer registry,
+data-governance framework, coordination mechanism — and proposes a provisional
+level for each, argued clause-by-clause against the rubric's anchor text with
+quote-verified citations and an explicit note on why the next level up was not
+proposed. It also builds the **dossier** (see glossary).
 
-**3. Read the readiness gate (Evidence ▸ Readiness) — you, 5 minutes.**
-Thirteen **core gates** — the foundational indicators — are listed with a
-"why it fails" note against each. Expect roughly 4 to be already filled from
-official statistics and roughly 9 waiting for you. That is by design: things
-like "is there a farmer registry?" or "is there an agricultural
-data-governance framework?" have no international statistic. Only a person
-who has seen the document can answer.
+**3. Assemble the draft — machine, ~10 minutes. No gates, no waiting.**
+*Outputs ▸ Draft & exports* → *Assemble draft*. The full DAR drafts from
+whatever the evidence base holds: an **evidence-health page** first (how much
+is validated vs machine-provisional, credibility grades, and a ranked
+"strengthen first" list), then all 17 chapters and 11 annexes. Prescriptive
+chapters carry an explicit **conditional banner** until the evidence readiness
+gate clears — recommendations are stated as hypothesis → evidence → decision
+gate, never as settled advice. And no maturity stage is claimable until you
+validate: that rule is untouched.
 
-**4. Clear the human gates — you, ~30–60 minutes of real work.**
-For each open gate, in *Evidence ▸ Indicators*: click the row, set an assessor
-level (1–5), and cite the document that justifies it — source name plus a
-public URL. If no document exists, mark an **explicit data gap** instead;
-that is an accepted answer, not a failure. When 11 of the 13 gates are
-populated with adequate evidence, the gate clears and the chapters that
-*prescribe* (investment, policy, sequencing) unlock. This is the single most
-important human step in the whole process.
+**4. Review and correct — you, as much or as little as you choose.**
+Read the draft. The health page ranks what to strengthen. For each
+machine-researched rubric proposal: confirm it, correct it, or reject it in
+*Evidence ▸ Indicators* — each proposal shows its rationale, its citations and
+why a higher level was not proposed, so this is review, not authoring. Attach
+better documents where the grade is weak. Every correction sharpens the next
+draft.
 
-**5. Walk the decision ladder, Steps 2–8 — you, ~15 minutes.**
+**5. Walk the decision ladder, Steps 2–8 — you, ~15 minutes, when ready.**
 *Decisions ▸ Steps 2–8* records seven decisions, one per rung, in order: engagement
 mode and budget (2); targeting hypotheses — which value chains (3); the
 evidence plan (4); government gates — the mandate (5); validated read-outs
 (6); the portfolio scenario (7); adopt and disclose (8). Each is a short form:
 choose an option, write a note, record. The ladder cannot skip or move
-backwards, exactly like a decision meeting sequence.
+backwards. Recording it is what makes a maturity stage claimable — the draft
+never waits for it.
 
-**6. Assemble the draft — machine, ~10 minutes.**
-*Outputs ▸ Draft & exports* → *Assemble draft*. The deterministic assembler writes all 17
-chapters and 11 annexes from engine facts; if a drafting model is configured,
-it rewrites the connective prose — and any prose containing a figure the
-evidence base does not hold is rejected and the deterministic text stands.
+**6. Re-assemble and export — 1 minute.**
+Regenerate after corrections; the health page and the conditional banners
+update to match the strengthened evidence base.
 
 **7. Export — you, 1 minute.**
 Download the draft as HTML and the evidence base as CSV. The result is a
 first-draft DAR: fully cited, honest about its gaps, ready for human
 rewriting and consultation.
 
-Total: about **90 minutes of your time**, most of it the one step machines
-must not do — validating documentary evidence.
+Total: a complete draft DAR after one unattended machine run, with your time
+spent reviewing and correcting an argued, cited document — not authoring one
+from a blank page.
 
 ## The three read-outs: CMS, EMS, OES
 
@@ -130,10 +135,10 @@ farmer consent, and so on) treated as prerequisites, not trade-offs.
 **Gauntlet / Evidence readiness** — The readiness gate over those
 13 core gates. It clears when at least 11 of 13 are populated, the evidence
 behind them is strong (graded A or B, or a human-validated level with a
-citation), and none are silently missing. Until it clears, the chapters that
-prescribe action stay locked; the diagnostic chapters draft regardless. Think
-of it as QER for the evidence base: it exists so a roadmap can never
-recommend investments on evidence that would not survive review.
+citation), and none are silently missing. It no longer locks anything: it is
+the evidence-health page's headline, and until it clears the prescriptive
+chapters carry an explicit conditional banner. Think of it as QER for the
+evidence base, reported rather than enforced.
 
 **Dossier** — The country document library. Search queries sweep ten
 assessment domains (agrifood structure, registries, DPI, institutions, legal,

@@ -103,9 +103,10 @@ function factsBlock(p: DraftPayload): string {
       `Pillar ${pl.id} ${pl.name}: score ${formatScore(pl.score)}, coverage ${formatPct(pl.coverage)} (${pl.scored}/${pl.total}), band ${pl.band ?? "not rated"}, stale ${pl.stale}`,
     );
   }
+  const researched = new Set(p.evidence.filter((e) => e.provenance === "machine-researched").map((e) => e.id));
   for (const g of s.gates) {
     lines.push(
-      `Core gate ${g.id} ${g.name}: ${g.unmeasured ? "unmeasured" : `level ${g.finalLevel}`}${g.failed ? " (failure)" : ""}${g.stale ? " (stale)" : ""}`,
+      `Core gate ${g.id} ${g.name}: ${g.unmeasured ? "unmeasured" : `level ${g.finalLevel}`}${researched.has(g.id) ? " (machine-researched proposal, pending validation)" : ""}${g.failed ? " (failure)" : ""}${g.stale ? " (stale)" : ""}`,
     );
   }
   for (const d of p.decisions) {
@@ -119,6 +120,16 @@ function factsBlock(p: DraftPayload): string {
     if (p.targeting.notes) lines.push(`Targeting notes: ${p.targeting.notes}`);
   }
   return lines.join("\n");
+}
+
+/**
+ * The conditional banner a prescriptive chapter opens with, if present.
+ * generateDraft re-attaches it after model prose replaces the body — the
+ * banner is a guarantee of draft-first, not a stylistic choice.
+ */
+export function extractConditionsBanner(body: string): string | null {
+  const m = body.match(/^CONDITIONS ON THIS CHAPTER[\s\S]*?(?=\n\n)/);
+  return m ? m[0] : null;
 }
 
 function gapNote(ch: ChapterReadiness, extra?: string): string {
@@ -147,17 +158,21 @@ function cite(e: DraftPayload["evidence"][number]): string {
   if (e.stale) bits.push("STALE");
   if (e.dataGap) bits.push("explicit data gap");
   if (e.provenance === "named-gap") bits.push(`named gap → ${e.gapSteward ?? "steward"}`);
+  if (e.provenance === "machine-researched") bits.push("MACHINE-RESEARCHED PROPOSAL — pending validation");
   return bits.join("; ");
 }
 
 export function assembleDeterministicDraft(model: DammModel, payload: DraftPayload): DraftDocument {
   const draftedAt = payload.generatedAt;
   const modelName = "deterministic-assembler";
+  // Draft-first: every chapter drafts once Step 1 exists. Unrecorded decisions
+  // and an uncleared readiness gate become stated conditions INSIDE the text,
+  // not locks in front of it. The stage claim stays governed by the
+  // engagement-package rule, which this function never touches.
   const chapters: DraftChapter[] = DAR_OUTLINE.map((outline) => {
     const ready = payload.chapters.find((c) => String(c.n) === String(outline.n));
-    const policyLocked = payload.gauntletPassed === false && isPrescriptive(outline.n);
-    const isReady = !policyLocked && (ready?.status === "inputs_ready" || (ready != null && ready.blockers.length === 0));
-    if ((!isReady && ready) || policyLocked) {
+    const isReady = ready?.status === "inputs_ready" || (ready != null && ready.blockers.length === 0);
+    if (!isReady && ready) {
       return {
         n: outline.n,
         title: outline.title,
@@ -165,18 +180,25 @@ export function assembleDeterministicDraft(model: DammModel, payload: DraftPaylo
         machineDrafted: true,
         modelName,
         draftedAt,
-        body: gapNote(ready ?? {
-          n: outline.n,
-          title: outline.title,
-          status: "inputs_forming",
-          blockers: ["Evidence gauntlet has not passed — chapters that prescribe action stay locked."],
-          readyAt: outline.readyAt,
-          producedBy: outline.producedBy,
-          note: outline.note ?? "",
-        }, payload.gauntletSummary),
+        body: gapNote(ready, payload.gauntletSummary),
       };
     }
-    const body = assembleChapter(outline.n, payload);
+    let body = assembleChapter(outline.n, payload);
+    const pending = ready?.blockers ?? [];
+    if (isPrescriptive(outline.n) && (payload.gauntletPassed === false || pending.length)) {
+      body =
+        [
+          "CONDITIONS ON THIS CHAPTER — its recommendations are conditional scenarios, not settled advice:",
+          payload.gauntletPassed === false
+            ? `- The evidence readiness gate has not cleared (${payload.gauntletSummary ?? "core gates unverified"}). Recommendations resting on unverified gates are stated in hypothesis → evidence → decision-gate form.`
+            : null,
+          ...pending.map((b) => `- ${b}`),
+        ]
+          .filter(Boolean)
+          .join("\n") +
+        "\n\n" +
+        body;
+    }
     return {
       n: outline.n,
       title: outline.title,
@@ -187,6 +209,18 @@ export function assembleDeterministicDraft(model: DammModel, payload: DraftPaylo
       body,
     };
   });
+
+  // The health section leads the document: what the evidence can and cannot
+  // yet carry, and the ranked list of what to strengthen first.
+  chapters.unshift({
+    n: "health",
+    title: "Evidence health",
+    ready: true,
+    machineDrafted: true,
+    modelName,
+    draftedAt,
+    body: evidenceHealth(payload),
+  });
   return {
     title: `Digital Agriculture Roadmap — first draft — ${payload.countryName}`,
     disclaimer: disclaimer(),
@@ -194,6 +228,80 @@ export function assembleDeterministicDraft(model: DammModel, payload: DraftPaylo
     modelName,
     chapters,
   };
+}
+
+/**
+ * The evidence-health preface: the draft's own honesty page.
+ *
+ * Draft-first removes every gate in front of the document, so the document
+ * itself must say, on page one, how much of it is provisional and what a task
+ * team should strengthen first. Deterministic and never model-rewritten.
+ */
+export function evidenceHealth(p: DraftPayload): string {
+  const rows = p.evidence;
+  const by = (pred: (e: DraftPayload["evidence"][number]) => boolean) => rows.filter(pred).length;
+  const validated = by((e) => e.assessor !== null);
+  const researched = by((e) => e.provenance === "machine-researched");
+  const imported = by((e) => e.provenance === "machine-imported" || e.provenance === "proxy");
+  const dataGaps = by((e) => e.dataGap);
+  const named = by((e) => e.provenance === "named-gap" && !e.dataGap && e.value === null && e.assessor === null && e.suggested === null);
+  const levelled = by((e) => e.final !== null);
+  const stale = by((e) => e.stale);
+
+  const tiers: Record<string, number> = {};
+  for (const e of rows) {
+    if (e.final === null && e.value === null) continue;
+    const t = e.credibilityTier ?? "—";
+    tiers[t] = (tiers[t] ?? 0) + 1;
+  }
+  const weak = rows.filter((e) => (e.credibilityTier === "D" || e.credibilityTier === "E") && (e.final !== null || e.value !== null));
+
+  const gates = rows.filter((e) => e.gate);
+  const gatesUnverified = gates.filter((e) => e.assessor === null && e.value === null && !e.dataGap);
+
+  const lines: string[] = [
+    "This page reports what the evidence base can and cannot yet carry. Everything below it is drafted from this evidence; nothing waits on it.",
+    "",
+    `Claimable statement: ${p.claim.display}. ${p.claim.explanation}`,
+    "",
+    "Evidence base:",
+    `- ${levelled} of ${rows.length} indicators carry a level (${validated} human-validated, ${researched} machine-researched proposals awaiting confirmation, ${imported} imported from official statistics).`,
+    `- ${dataGaps} explicit data gaps (confirmed by a human), ${named} named gaps still open, ${stale} stale readings needing refresh.`,
+    `- Credibility of populated readings: ${["A", "B", "C", "D", "E"].map((t) => `${t}: ${tiers[t] ?? 0}`).join("  ")}.`,
+    "",
+    `Core gates (${gates.length}): ${gates.length - gatesUnverified.length} verified or human-answered, ${gatesUnverified.length} still resting on machine research or unpopulated.`,
+  ];
+
+  if (p.gauntletSummary) {
+    lines.push(`Readiness gate: ${p.gauntletSummary}`);
+  }
+
+  // Ranked fix-first list: core gates first (they cap the stage), then weak-
+  // credibility readings, then open named gaps in scored pillars.
+  const fixes: string[] = [];
+  for (const g of gatesUnverified) {
+    fixes.push(`${g.id} ${g.name} — core gate; ${g.provenance === "machine-researched" ? "confirm or correct the machine-researched proposal" : "attach a primary document or mark an explicit data gap"}${g.gapSteward ? ` (steward: ${g.gapSteward})` : ""}.`);
+  }
+  for (const e of weak) {
+    if (fixes.length >= 10) break;
+    if (e.gate) continue;
+    fixes.push(`${e.id} ${e.name} — grade ${e.credibilityTier}; replace with a national or official series${e.source ? ` (current: ${e.source})` : ""}.`);
+  }
+  for (const e of rows) {
+    if (fixes.length >= 10) break;
+    if (e.provenance === "named-gap" && !e.dataGap && e.final === null && e.pillar !== "C0") {
+      fixes.push(`${e.id} ${e.name} — no reading; route to ${e.gapSteward ?? "a steward"} or confirm as an explicit data gap.`);
+    }
+  }
+  lines.push("", "Strengthen first (ranked):");
+  fixes.slice(0, 10).forEach((f, i) => lines.push(`${i + 1}. ${f}`));
+  if (!fixes.length) lines.push("Nothing outstanding — every indicator is populated or accounted for.");
+
+  lines.push(
+    "",
+    "How to read the draft: figures carry their source, observation year and credibility grade in place. PROXY and STALE are flagged inline. Machine-researched rubric levels are provisional proposals — each carries its rationale and the reason a higher level was not proposed, and validation at Step 6 converts or corrects them.",
+  );
+  return lines.join("\n");
 }
 
 function assembleChapter(n: string, p: DraftPayload): string {
@@ -300,7 +408,7 @@ function assembleChapter(n: string, p: DraftPayload): string {
     }
     case "A": {
       const lines = [
-        "Annex — full indicator evidence base with provenance. Figures below are copied from the engine; none are inferred.",
+        "Annex — full indicator evidence base with provenance. Figures are copied from the engine; machine-researched rubric levels are labelled proposals pending validation.",
         "",
       ];
       for (const e of p.evidence) {
@@ -370,6 +478,7 @@ export function draftSystemPrompt(kind: "diagnostic" | "prescriptive" = "diagnos
     "This chapter prescribes. Recommend, prioritise and sequence — but every consequential recommendation must name its owner, its payer, its legal basis and its delivery channel, or be downgraded to a hypothesis.",
     "Where evidence is insufficient for a firm recommendation, write it as: strategic hypothesis, evidence required, decision gate, action if validated, alternative if rejected.",
     "State entry conditions, success criteria, stop conditions and fallback pathways for each major initiative, and include explicit do-not-do items where the evidence warrants them.",
+    "Where the chapter's inputs are provisional — machine-researched levels, an uncleared readiness gate, an unrecorded decision — present the recommendation as a conditional scenario and name what would confirm it. Never present a conditional as settled.",
     "Use cost classes — Low, Moderate, High, Very High — and name what drives the cost. Do not invent precise costs.",
     "Phase boundaries are gates, not dates. Do not assert calendar commitments the payload does not contain.",
   ].join(" ");

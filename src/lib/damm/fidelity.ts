@@ -125,7 +125,7 @@ export function checkProseFidelity(
   const unsupportedClaims: string[] = [];
   if (options.stageClaimable === false) {
     for (const m of prose.matchAll(/\bstage\s+[1-5]\b/gi)) unsupportedClaims.push(m[0]);
-    for (const m of prose.matchAll(/\b(?:is|are|remains?|sits?)\s+(?:at\s+)?(?:the\s+)?(emerging|established|advanced|nascent|leading)\b/gi)) {
+    for (const m of prose.matchAll(/\b(?:is|are|remains?|sits?)\s+(?:at\s+)?(?:the\s+)?(emerging|established|advanced|nascent|transformative|leading)\b/gi)) {
       unsupportedClaims.push(m[0]);
     }
   }

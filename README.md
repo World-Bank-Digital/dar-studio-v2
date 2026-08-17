@@ -86,20 +86,29 @@ round-trip end to end with a virtual authenticator.
    from that text only. Every extracted figure must quote its document, and the
    quotation is checked against the retrieved page before the reading is stored.
    Figures that cannot be located are dropped and logged — never downgraded.
-3. **Human validation.** The documentary gates (farmer registry, data-governance
-   framework, coordination mechanism, and the rest) have no international
-   substitute by design. A human attaches a primary document or marks an explicit
-   data gap. Nine of the thirteen core gates need this; the machine cannot and
-   should not fill them.
+3. **Rubric research.** Anchored rubrics — farmer registry, data-governance
+   framework, coordination mechanism — are researched on the open web. The
+   machine proposes a provisional level argued clause-by-clause against the
+   anchor text, states why the next level up was not proposed, and cites
+   quote-verified documents. Validation confirms, corrects or rejects each
+   proposal; an assessor level always wins.
 
-Without a search key, steps 1 and 3 still run and the remaining gaps stay named.
+Without a search key, step 1 still runs. Steps 2 and 3 need both a search key
+and an active drafting model; without them the quantitative gaps and the
+rubrics stay named, and the audit records exactly why they were skipped.
+
+## Draft-first, claims-gated
+
+The automated run goes straight to a complete DAR: evidence-health page, 17
+chapters, 11 annexes. Nothing waits on a human. What stays gated is the
+*claim*: no maturity stage is claimable until the government mandate (Step 5)
+and panel validation (Step 6) are recorded, prescriptive chapters carry an
+explicit conditional banner until the readiness gate clears, and every figure
+carries its source and credibility grade inline.
 
 ## The readiness gate
 
-Thirteen core gates must clear before the prescriptive chapters — the executive
-summary and investment case, the opportunity portfolio, architecture, policy
-actions, governance, financing, sequencing and results (chapters 1 and 10–16) —
-will assemble: at least 11 of 13 populated, 60% of those graded A or
+Thirteen core gates are the evidence-health page's headline: at least 11 of 13 populated, 60% of those graded A or
 B, no silent gaps and no weak readings. Evidence is graded on authority,
 definition fit, recency and disaggregation — and **any reading with no source URL
 is capped at 39/100**, which is grade E.
