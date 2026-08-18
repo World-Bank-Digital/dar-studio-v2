@@ -323,8 +323,18 @@ existed only in the reading. That is precisely the remit the red team was
 given, and it earned itself on the first pass.**
 **Pinned by:** `decisions.test.ts` (text-only fills the list; list-only fills
 the text; both merge without duplicates; nothing rejected records null, not an
-empty string; both separators); the self-contradiction assertion in
-`qa-delivery.mjs`.
+empty string; both separators); `draft.test.ts` (chapter 10 renders the stored
+rejection and says "none recorded" only when nothing was rejected anywhere);
+the self-contradiction assertion in `qa-delivery.mjs`.
+**Verified live** through the real Step 3 form on a demo-pack workspace: one
+rejection typed once now lands in all three places that hold it —
+`decisions.rejected`, `decisions.payload.rejected` and `targeting.rejected`.
+**A note on verifying this one:** the first attempt reset only ladder steps
+3–8 on an existing workspace, which shifted the harness's fixed step sequence
+by one — the chains and rejection landed on step 4 and the test proved
+nothing. The demo pack (Step 1 pre-completed) turned a two-hour re-run into a
+two-minute check. **When a harness walks a fixed sequence, resetting into the
+middle of it is not a smaller version of the test — it is a different one.**
 
 ## Design shifts
 

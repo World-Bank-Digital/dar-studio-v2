@@ -310,3 +310,35 @@ describe("sweep findings and foresight in the draft (pipeline points 3-5)", () =
     assert.match(annexB.body, /No public-domain findings are stored/);
   });
 });
+
+describe("the draft cannot answer the rejection question two ways (L24)", () => {
+  it("renders the stored targeting rejection in chapter 10, matching the decision record", () => {
+    const doc = assembleDeterministicDraft(model, {
+      ...fullPayload(),
+      targeting: { chains: ["Staple cereals"], rejected: ["Rice expansion"], notes: null },
+      decisions: [
+        {
+          step: 3,
+          optionName: "Chain shortlist and segmentation to propose to government",
+          deciderName: "TTL",
+          role: "TTL",
+          createdAt: "2026-08-19",
+          notes: null,
+          rejected: "Rice expansion",
+        },
+      ],
+    });
+    const ch10 = doc.chapters.find((c) => c.n === "10")!;
+    assert.match(ch10.body, /Rejected alternatives: Rice expansion/);
+    assert.doesNotMatch(ch10.body, /Rejected alternatives: \(none recorded\)/);
+  });
+
+  it("says none only when nothing was rejected anywhere", () => {
+    const doc = assembleDeterministicDraft(model, {
+      ...fullPayload(),
+      targeting: { chains: ["Staple cereals"], rejected: [], notes: null },
+    });
+    const ch10 = doc.chapters.find((c) => c.n === "10")!;
+    assert.match(ch10.body, /Rejected alternatives: \(none recorded\)/);
+  });
+});
