@@ -1,0 +1,38 @@
+{
+  "startedAt": "2026-08-18T09:29:37.491Z",
+  "base": "http://127.0.0.1:8080",
+  "phases": {
+    "signin": {
+      "at": "2026-08-18T09:29:38.868Z",
+      "email": "dbcheck@example.com"
+    },
+    "country": {
+      "at": "2026-08-18T09:29:39.720Z",
+      "countryUrl": "http://127.0.0.1:8080/c/1ea9eea3-a3e9-48bc-9107-07bb17791d36"
+    },
+    "ingest": {
+      "at": "2026-08-18T09:59:14.566Z",
+      "minutes": 29.6
+    },
+    "sweeps": {
+      "findingCards": 0,
+      "practiceSection": true
+    }
+  },
+  "ok": false,
+  "error": "the wide sweeps stored zero findings — the pass ran dry (L17 class)",
+  "finishedAt": "2026-08-18T09:59:16.893Z",
+  "log": [
+    "09:29:37 1. sign in as the key-holding account",
+    "09:29:38 ✔ signin {\"email\":\"dbcheck@example.com\"}",
+    "09:29:38 2. create a fresh Egypt workspace",
+    "09:29:39 ✔ country {\"countryUrl\":\"http://127.0.0.1:8080/c/1ea9eea3-a3e9-48bc-9107-07bb17791d36\"}",
+    "09:29:39 3. launch the Step 1 diagnostic (official cascade + verified web search)",
+    "09:59:14 ✔ ingest {\"minutes\":29.6}",
+    "09:59:14 3b. the wide sweeps must have produced cited findings (a silent zero is a broken pass)",
+    "09:59:16    sweeps: 0 findings visible; practice section=true"
+  ],
+  "errors": [
+    "pageerror: Hydration failed because the server rendered HTML didn't match the client. As a result this tree will be regenerated on the client. This can happen if a SSR-ed Client Component used:\n\n- A server/client branch `if (typeof window !== 'undefined')`.\n- Variable input such as `Date.now()` or `Math.random()` which changes each time it's called.\n- Date formatting in a user's locale which doesn't match the server.\n- External changing data without sending a snapshot of it along with the HTML.\n- Invalid HTML tag nesting.\n\nIt can also happen if the client has a browser extension installed which messes with the HTML before React loaded.\n\nhttps://react.dev/link/hydration-mismatch\n\n  ...\n    <MatchImpl routeId=\"/login\">\n      <MatchView router={{...}} match={{id:\"/login...\", ...}}>\n        <SafeFragment>\n          <SafeFragment fallback={null}>\n            <CatchBoundary getResetKey={function getResetKey} errorComponent={function AppErrorComponent} ...>\n              <CatchBoundaryImpl getResetKey={function getResetKey} errorComponent={function AppErrorComponent} ...>\n                <SafeFragment fallback={function fallback}>\n                  <MatchInnerImpl match={{id:\"/login...\", ...}}>\n                    <Lazy>\n                      <Login>\n                        <main className=\"grid min-h...\">\n                          <Card className=\"w-full max...\">\n                            <div className=\"bg-surface...\">\n                              <p>\n                              <h1>\n                              <p>\n                              <div className=\"mt-6 space...\">\n+                               <p className=\"rounded-sm border border-border bg-moss/30 px-3 py-2 text-xs text-muted\">\n-                               <button\n-                                 className=\"inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-s...\"\n-                               >\n                                ...\n                              ...\n"
+  ]
+}

@@ -29,7 +29,7 @@ const email = process.env.QA_EMAIL || "dbcheck@example.com";
 const password = process.env.QA_PASSWORD || "TestPass123!";
 
 const INGEST_DEADLINE_MS = 90 * 60 * 1000; // WB cascade + verified search + rubric research (variants + citation repair add real minutes)
-const DRAFT_DEADLINE_MS = 30 * 60 * 1000; // 17 prose calls, pool of 4, reasoning-model worst case
+const DRAFT_DEADLINE_MS = 45 * 60 * 1000; // 17 prose calls, pool of 4 — run 10 lost a race by seconds when the provider was degraded (draft landed at minute 30)
 
 const report = {
   startedAt: new Date().toISOString(),

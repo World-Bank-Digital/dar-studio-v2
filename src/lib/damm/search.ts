@@ -69,6 +69,43 @@ function failure(err: unknown): string {
   return msg;
 }
 
+/** Backoff delays between search retries. Exported for the test to keep short. */
+export const SEARCH_RETRY_DELAYS_MS = [1_500, 6_000];
+
+/**
+ * Fetch with a bounded retry on TRANSIENT failures only: network errors
+ * ("fetch failed") and 429 throttling. A run of five delivery loops in one
+ * night escalated Jina from slow answers to refused connections, and a single
+ * unretried blip silently cost a whole sweep topic (the run-11 dry pass —
+ * caught by the zero-findings alarm, L17 class). Auth failures, 4xx contract
+ * errors and 5xx answers return immediately: retrying a bad key is noise.
+ */
+export async function fetchWithRetry(
+  url: string,
+  init: RequestInit & { signal?: AbortSignal },
+  timeoutMs: number,
+  delays: number[] = SEARCH_RETRY_DELAYS_MS,
+): Promise<Response> {
+  let lastError: unknown;
+  for (let attempt = 0; attempt <= delays.length; attempt += 1) {
+    if (attempt > 0) await new Promise((r) => setTimeout(r, delays[attempt - 1]));
+    try {
+      const res = await fetch(url, { ...init, signal: AbortSignal.timeout(timeoutMs) });
+      if (res.status === 429 && attempt < delays.length) {
+        lastError = new Error("Search rate limited (429).");
+        continue;
+      }
+      return res;
+    } catch (err) {
+      lastError = err;
+      const msg = err instanceof Error ? err.message : String(err);
+      // Timeouts already waited a full window; only genuine network failures retry.
+      if (!/fetch failed|network|ECONNRESET|ECONNREFUSED|EAI_AGAIN|ENOTFOUND/i.test(msg)) throw err;
+    }
+  }
+  throw lastError instanceof Error ? lastError : new Error(String(lastError));
+}
+
 /**
  * Jina's s.reader answers a query with no hits as HTTP 422
  * (AssertionFailureError: "No search results available"). Treating that as a
@@ -126,7 +163,7 @@ const exa: SearchProviderDef = {
   domainFilterLimit: "all",
   async search(input) {
     try {
-      const res = await fetch("https://api.exa.ai/search", {
+      const res = await fetchWithRetry("https://api.exa.ai/search", {
         method: "POST",
         headers: { "content-type": "application/json", "x-api-key": input.key },
         body: JSON.stringify({
@@ -136,8 +173,7 @@ const exa: SearchProviderDef = {
           ...(input.includeDomains?.length ? { includeDomains: input.includeDomains } : {}),
           ...(input.withText === false ? {} : { contents: { text: { maxCharacters: MAX_TEXT } } }),
         }),
-        signal: AbortSignal.timeout(input.timeoutMs ?? DEFAULT_TIMEOUT),
-      });
+      }, input.timeoutMs ?? DEFAULT_TIMEOUT);
       if (!res.ok) return { hits: [], error: statusError(res.status, await res.text().catch(() => "")) };
       return { hits: parseExaResults(await res.json()) };
     } catch (err) {
@@ -146,12 +182,11 @@ const exa: SearchProviderDef = {
   },
   async read(input) {
     try {
-      const res = await fetch("https://api.exa.ai/contents", {
+      const res = await fetchWithRetry("https://api.exa.ai/contents", {
         method: "POST",
         headers: { "content-type": "application/json", "x-api-key": input.key },
         body: JSON.stringify({ urls: [input.url], text: { maxCharacters: MAX_TEXT } }),
-        signal: AbortSignal.timeout(input.timeoutMs ?? DEFAULT_TIMEOUT),
-      });
+      }, input.timeoutMs ?? DEFAULT_TIMEOUT);
       if (!res.ok) return { text: null, error: statusError(res.status, await res.text().catch(() => "")) };
       const hits = parseExaResults(await res.json());
       return { text: hits[0]?.text || null, title: hits[0]?.title };
@@ -195,10 +230,9 @@ const jina: SearchProviderDef = {
       };
       if (input.includeDomains?.length) headers["X-Site"] = input.includeDomains[0];
       if (input.withText === false) headers["X-Respond-With"] = "no-content";
-      const res = await fetch(`https://s.jina.ai/?q=${encodeURIComponent(input.query)}`, {
+      const res = await fetchWithRetry(`https://s.jina.ai/?q=${encodeURIComponent(input.query)}`, {
         headers,
-        signal: AbortSignal.timeout(input.timeoutMs ?? DEFAULT_TIMEOUT),
-      });
+      }, input.timeoutMs ?? DEFAULT_TIMEOUT);
       if (jinaTreatsAsEmpty(res.status)) return { hits: [] };
       if (!res.ok) return { hits: [], error: statusError(res.status, await res.text().catch(() => "")) };
       const hits = parseJinaResults(await res.json());
@@ -209,10 +243,9 @@ const jina: SearchProviderDef = {
   },
   async read(input) {
     try {
-      const res = await fetch(`https://r.jina.ai/${input.url}`, {
+      const res = await fetchWithRetry(`https://r.jina.ai/${input.url}`, {
         headers: { Authorization: `Bearer ${input.key}`, Accept: "application/json" },
-        signal: AbortSignal.timeout(input.timeoutMs ?? DEFAULT_TIMEOUT),
-      });
+      }, input.timeoutMs ?? DEFAULT_TIMEOUT);
       if (!res.ok) return { text: null, error: statusError(res.status, await res.text().catch(() => "")) };
       const body = (await res.json()) as { data?: { content?: unknown; title?: unknown } };
       return { text: clampText(body.data?.content) || null, title: String(body.data?.title ?? "") };

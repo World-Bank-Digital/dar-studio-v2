@@ -155,3 +155,72 @@ describe("jina no-results handling (LEARNINGS L11)", () => {
     assert.equal(jinaTreatsAsEmpty(500), false);
   });
 });
+
+describe("search retry on transient failure (the run-11 dry pass)", () => {
+  const original = globalThis.fetch;
+  const okResponse = () => new Response(JSON.stringify({ data: [] }), { status: 200 });
+
+  it("retries a network failure and succeeds on the second attempt", async () => {
+    const { fetchWithRetry } = await import("./search.ts");
+    let calls = 0;
+    globalThis.fetch = (async () => {
+      calls += 1;
+      if (calls === 1) throw new TypeError("fetch failed");
+      return okResponse();
+    }) as typeof fetch;
+    try {
+      const res = await fetchWithRetry("https://s.jina.ai/?q=x", {}, 5000, [10, 20]);
+      assert.equal(res.status, 200);
+      assert.equal(calls, 2);
+    } finally {
+      globalThis.fetch = original;
+    }
+  });
+
+  it("retries 429 throttling but returns the final 429 when it persists", async () => {
+    const { fetchWithRetry } = await import("./search.ts");
+    let calls = 0;
+    globalThis.fetch = (async () => {
+      calls += 1;
+      return new Response("slow down", { status: 429 });
+    }) as typeof fetch;
+    try {
+      const res = await fetchWithRetry("https://s.jina.ai/?q=x", {}, 5000, [10, 20]);
+      assert.equal(res.status, 429, "the caller still sees the throttle after retries are spent");
+      assert.equal(calls, 3);
+    } finally {
+      globalThis.fetch = original;
+    }
+  });
+
+  it("does not retry a non-transient failure — a bad key is not a blip", async () => {
+    const { fetchWithRetry } = await import("./search.ts");
+    let calls = 0;
+    globalThis.fetch = (async () => {
+      calls += 1;
+      return new Response("nope", { status: 401 });
+    }) as typeof fetch;
+    try {
+      const res = await fetchWithRetry("https://s.jina.ai/?q=x", {}, 5000, [10, 20]);
+      assert.equal(res.status, 401);
+      assert.equal(calls, 1);
+    } finally {
+      globalThis.fetch = original;
+    }
+  });
+
+  it("gives up after the delays are exhausted and surfaces the network error", async () => {
+    const { fetchWithRetry } = await import("./search.ts");
+    let calls = 0;
+    globalThis.fetch = (async () => {
+      calls += 1;
+      throw new TypeError("fetch failed");
+    }) as typeof fetch;
+    try {
+      await assert.rejects(() => fetchWithRetry("https://s.jina.ai/?q=x", {}, 5000, [10, 20]), /fetch failed/);
+      assert.equal(calls, 3);
+    } finally {
+      globalThis.fetch = original;
+    }
+  });
+});
