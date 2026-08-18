@@ -1,6 +1,6 @@
 # HANDOFF — DAR Studio v2
 
-*Session handoff, updated 2026-08-18 (morning). Read this top to bottom
+*Session handoff, updated 2026-08-18 (evening). Read this top to bottom
 before changing anything; read [LEARNINGS.md](LEARNINGS.md) before touching
 the retrieval, scoring or drafting layers.*
 
@@ -15,15 +15,15 @@ structure) → practice research (past-year strategies, any country) → optiona
 strategic-foresight uploads → a 17-chapter + 11-annex draft that opens with
 the model explanation and the evidence-health page. Originally generated in
 Grok's App Builder sandbox, substantially rebuilt since. `docs/TTL-GUIDE.md`
-is the user-facing field guide; `LEARNINGS.md` is the defect ledger (L1–L21 +
-design shifts D1–D3); the methodology deck regenerates via
+is the user-facing field guide; `LEARNINGS.md` is the defect ledger (L1–L23 +
+design shifts D1–D4); the methodology deck regenerates via
 `node scripts/build-methodology-deck.mjs`.
 
 **Repo state:** branch `rebuild/byok-delivery-2026-08`, pushed to
 `github.com/rsudan/dar-studio-v2`. `main` still holds only the original
 import commit `84a0c9d` — merging is the user's call and has not been asked
-for. 319 unit tests, clean typecheck/lint/production build at HEAD. The
-ledger runs L1–L22 + D1–D4. Migrations through
+for. 323 unit tests, clean typecheck/lint/production build at HEAD. The
+ledger runs L1–L23 + D1–D4. Migrations through
 `0007_team_keys_redteam.sql` (findings, uploads, team_keys,
 review_findings). New deps: `pdf-parse` v2, `mammoth`, `pptxgenjs` (which
 pulls `image-size` carrying two DoS advisories in image parsers — the deck
@@ -55,9 +55,19 @@ embeds no images, so that code path never sees input).
   `dbcheck@example.com` / `TestPass123!` — the user's OpenRouter key (model
   `deepseek/deepseek-v4-pro`) and Jina search key, both encrypted at rest.
   QA signs in as this account.
-- **QA loops:** `npm run qa:delivery` (end-to-end delivery proof; writes
-  `qa-reports/*.json`), `npm run qa:auth` (passkey round-trip via CDP virtual
-  authenticator — run against `localhost`, never `127.0.0.1`).
+- **QA loops:** `npm run qa:loop` is the one to reach for — it runs the
+  delivery gauntlet and, on failure, re-enters the SAME workspace at the
+  stage that failed after real backoff, up to 4 attempts, retaining
+  everything (`qa-reports/loop-*.json`). `npm run qa:delivery` is the single
+  pass underneath it and now takes `--workspace <id> --from <stage>` for
+  manual resume; stages already done are skipped, and a completed Step 1 or
+  a recorded ladder is never redone. `npm run qa:auth` is the passkey
+  round-trip (run against `localhost`, never `127.0.0.1`).
+- **Inspecting a run:** `node --env-file=.env scripts/export-workspace.ts
+  <countryId>` writes `exports/<ISO3>-<short-id>/` with draft.html,
+  deck.pptx, evidence/findings/red-team/decisions/audit CSVs, the foresight
+  text and a README. `exports/EGY-118fd701/` is run 13's full pass, kept as
+  the reference artifact set.
 - **Auth:** email/password + passkeys work locally. Google/X buttons are
   structurally dead on localhost (broker rejects the redirect URI) and the
   login page says so. Auth emails are dev-logged (`[mailer:dev]` in server
@@ -132,11 +142,22 @@ the 9k quotable window plus one bounded repair call is what recovers them.
 2. **Chapters 11 (Target Architecture) and 13 (Governance/Delivery)** still
    use the generic decision-restating builder — they need bespoke builders.
    (13 is one of the two recurring fidelity rejections in every run.)
-3. **Sweep tuning** — the practice pass rejected 20 of 31 candidates on the
+3. **Sweep tuning** — the practice pass rejects material outside the
    past-year window (working as designed, but query phrasing could target
-   fresher documents); the opportunistic sweep's 59 findings have not yet
-   been reviewed by a human for relevance quality — worth the user's eyes
-   on one workspace's Findings tab before tuning topics.
+   fresher documents); the sweep findings read well on inspection
+   (`exports/EGY-118fd701/findings.csv` — real agritech firms, programmes and
+   platforms) but have not had a domain expert's eyes on relevance.
+4. **Targeting record inconsistency (found by the red team, run 13)** — a
+   chapter reports "rice expansion" as an explicitly rejected value chain
+   while the targeting summary in the same draft says "Recorded targeting
+   rejected: none". One of the two renderings is reading the wrong field.
+   See `exports/EGY-118fd701/red-team.csv`, chapter 2, category
+   `contradiction`.
+5. **Red-team severity calibration** — run 13 produced 51 real findings
+   after the L23 fix (13 ownerless-recommendation, 20 ambiguity, 15
+   contradiction, 4 unsupported-claim). That is a useful volume for an
+   editor but unprioritised; a "top 10 to fix first" ranking would make the
+   panel actionable in the way the evidence-health page is.
 3. **Contradiction ledger (master prompt §3)** — Annex J is scaffolded,
    nothing populates it (detect conflicting claims across dossier/evidence).
 4. **Merge to `main`** — user's call; suggest a PR when they're ready.
@@ -184,7 +205,11 @@ needs an alarm (L13).
   changes again, re-time before trusting a FAIL.
 - QA workspaces are NOT auto-deleted by successor runs — soft-delete each
   run's Egypt card after reading its funnel (`update countries set
-  deleted_at = now() where id = '…'`).
+  deleted_at = now() where id = '…'`), EXCEPT the retained inspection
+  workspace `118fd701-6a9c-4873-83e1-4db265f0104a` (run 13, full pass: 42/97
+  levelled, 75 sweep findings, 56 red-team findings, deck). Soft-deleted
+  workspaces still export — `deleted_at` hides a card, it does not remove
+  data.
 - **Deck from any workspace (soft-deleted included):**
   `node --env-file=.env scripts/export-deck.ts <countryId> [out.pptx]` —
   same modules as the in-app export, byte-identical output.
