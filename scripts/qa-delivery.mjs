@@ -337,8 +337,10 @@ try {
   note("7b. red-team the final draft (deterministic + adversarial)");
   await tab("redteam");
   await page.getByRole("button", { name: /Run red team/i }).click();
-  // 17 adversarial chapter reviews at concurrency 4 on a reasoning model.
-  await page.getByText(/Red team reviewed \d+ chapters/i).waitFor({ timeout: 25 * 60 * 1000 });
+  // 17 adversarial chapter reviews at concurrency 4 on a reasoning model; the
+  // job runs detached server-side and the panel polls it, so this wait is on
+  // the rendered completion summary, with margin for degraded-provider nights.
+  await page.getByText(/Red team reviewed \d+ chapters/i).waitFor({ timeout: 40 * 60 * 1000 });
   {
     const summaryText = await page.getByText(/Red team reviewed \d+ chapters/i).first().innerText();
     const m = summaryText.match(/reviewed (\d+) chapters: (\d+) finding/i);

@@ -225,12 +225,33 @@ export function RedTeamTab({ id }: { id: string }) {
   const [busy, setBusy] = useState(false);
   const [summary, setSummary] = useState<string | null>(null);
 
+  // The review runs as a detached server job; this panel polls until the job
+  // reports done or error, then renders the stored findings.
   const refresh = () =>
     listRedTeamFindings({ data: { countryId: id } })
-      .then((r) => setRows(r as RedTeamRow[]))
-      .catch(() => setRows([]));
+      .then((r) => {
+        const res = r as { findings: RedTeamRow[]; job: { status: string; message: string } };
+        setRows(res.findings);
+        if (res.job.status === "running") {
+          setBusy(true);
+          setSummary(res.job.message);
+        } else {
+          setBusy(false);
+          if (res.job.status !== "idle") setSummary(res.job.message);
+        }
+        return res.job.status;
+      })
+      .catch(() => {
+        setRows([]);
+        return "idle";
+      });
   useEffect(() => {
     void refresh();
+    const timer = setInterval(async () => {
+      const status = await refresh();
+      if (status !== "running") clearInterval(timer);
+    }, 5000);
+    return () => clearInterval(timer);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id]);
 
@@ -249,14 +270,17 @@ export function RedTeamTab({ id }: { id: string }) {
             disabled={busy}
             onClick={async () => {
               setBusy(true);
-              setSummary(null);
-              try {
-                const res = await runRedTeam({ data: { countryId: id, role, actorName } });
-                setSummary(res.ok ? res.summary : res.error);
-                if (res.ok) await refresh();
-              } finally {
+              setSummary("Starting the review…");
+              const res = await runRedTeam({ data: { countryId: id, role, actorName } });
+              if (!res.ok) {
                 setBusy(false);
+                setSummary(res.error);
+                return;
               }
+              const timer = setInterval(async () => {
+                const status = await refresh();
+                if (status !== "running") clearInterval(timer);
+              }, 5000);
             }}
           >
             {busy ? "Reviewing…" : "Run red team"}

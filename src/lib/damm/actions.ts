@@ -228,6 +228,17 @@ export type DossierJob = {
 const dossierJobs = new Map<string, DossierJob>();
 const dossierLocks = new Set<string>();
 
+/** Red-team job state: the review runs detached (17 adversarial model calls
+ * must not live inside one HTTP request — the L9 lesson, relearned live when
+ * a degraded-provider night pushed the pass beyond every request-scoped
+ * wait). The UI and the QA loop poll this. */
+export type RedTeamJob = { status: "idle" | "running" | "done" | "error"; message: string };
+const redTeamJobs = new Map<string, RedTeamJob>();
+
+export function redTeamJobFor(countryId: string): RedTeamJob {
+  return redTeamJobs.get(countryId) ?? { status: "idle", message: "" };
+}
+
 function dossierJobFor(countryId: string): DossierJob {
   return dossierJobs.get(countryId) ?? { status: "idle", message: "", added: 0, total: 0 };
 }
@@ -1601,10 +1612,77 @@ export const deleteUpload = createServerFn({ method: "POST" })
 
 /* ---------- red team ---------- */
 
+/** The detached red-team job body. Never runs inside a request. */
+async function runRedTeamJob(
+  countryId: string,
+  userId: string,
+  actor: { role: string; name: string },
+  doc: { chapters: Array<{ n: string; title: string; body: string }> },
+  claimable: boolean,
+) {
+  const sql = await getSql();
+  try {
+    const { deterministicRedTeam, modelRedTeam, reviewableChapters } = await import("./redteam");
+    const reviewed = reviewableChapters(doc.chapters).length;
+    redTeamJobs.set(countryId, { status: "running", message: `Reviewing ${reviewed} chapters…` });
+
+    const findings = deterministicRedTeam(doc.chapters, claimable);
+
+    const modelCfg = await resolveDraftModel(userId);
+    let modelErrors: string[] = [];
+    let modelRan = false;
+    if (modelCfg) {
+      const def = providerDef(modelCfg.provider);
+      if (def) {
+        modelRan = true;
+        let done = 0;
+        const res = await modelRedTeam(doc.chapters, async (input) => {
+          const out = await def.chat({
+            key: modelCfg.key,
+            model: modelCfg.modelName,
+            system: input.system,
+            user: input.user,
+            maxTokens: 24_000,
+            temperature: 0,
+            timeoutMs: 360_000,
+          });
+          done += 1;
+          redTeamJobs.set(countryId, { status: "running", message: `Adversarial review — ${Math.min(done, reviewed)} of ${reviewed} chapters…` });
+          return out;
+        });
+        findings.push(...res.findings);
+        modelErrors = res.errors;
+      }
+    }
+
+    await sql`delete from review_findings where country_id = ${countryId} and user_id = ${userId}`;
+    for (const f of findings) {
+      await sql`insert into review_findings (id, user_id, country_id, chapter, category, severity, excerpt, note, source)
+        values (${uid()}, ${userId}, ${countryId}, ${f.chapter}, ${f.category}, ${f.severity}, ${f.excerpt}, ${f.note}, ${f.source})`;
+    }
+
+    const high = findings.filter((f) => f.severity === "high").length;
+    const summary =
+      `Red team reviewed ${reviewed} chapters: ${findings.length} finding${findings.length === 1 ? "" : "s"} ` +
+      `(${high} high) — ${findings.filter((f) => f.source === "deterministic").length} deterministic, ` +
+      `${findings.filter((f) => f.source === "model").length} adversarial` +
+      (modelRan ? "" : "; adversarial pass skipped (no active model)") +
+      (modelErrors.length ? `; errors: ${modelErrors.slice(0, 2).join(" | ")}` : "");
+    await writeAudit(userId, countryId, actor.role, actor.name, "red_team", summary);
+    redTeamJobs.set(countryId, { status: "done", message: summary });
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : "Red team failed";
+    redTeamJobs.set(countryId, { status: "error", message: msg });
+    await writeAudit(userId, countryId, actor.role, actor.name, "red_team_error", msg);
+  }
+}
+
 /**
- * Red-team the latest assembled draft: deterministic checks always, the
- * adversarial model pass when a drafting key is active. Findings replace the
- * previous run's set — the panel shows the review of the CURRENT draft.
+ * Kick the red team over the latest assembled draft and return immediately.
+ * Deterministic checks always; the adversarial model pass when a drafting key
+ * is active. Findings replace the previous run's set — the panel shows the
+ * review of the CURRENT draft. Detached: seventeen model calls must never
+ * depend on one HTTP request surviving them (L9; relearned in run 12).
  */
 export const runRedTeam = createServerFn({ method: "POST" })
   .middleware([authMiddleware])
@@ -1614,6 +1692,9 @@ export const runRedTeam = createServerFn({ method: "POST" })
     const owned = await sql<{ id: string }>`
       select id from countries where id = ${data.countryId} and user_id = ${context.userId} and deleted_at is null`;
     if (!owned.length) return { ok: false as const, error: "Country not found" };
+    if (redTeamJobFor(data.countryId).status === "running") {
+      return { ok: true as const, started: false, alreadyRunning: true };
+    }
 
     const drafts = await sql<{ body: string }>`
       select body from drafts where country_id = ${data.countryId} and user_id = ${context.userId} and kind = ${"dar"}
@@ -1625,48 +1706,9 @@ export const runRedTeam = createServerFn({ method: "POST" })
     if (!ws.ok) return { ok: false as const, error: ws.error };
     const claimable = Boolean(ws.workspace.claim?.claimable);
 
-    const { deterministicRedTeam, modelRedTeam, reviewableChapters } = await import("./redteam");
-    const findings = deterministicRedTeam(doc.chapters, claimable);
-
-    const modelCfg = await resolveDraftModel(context.userId);
-    let modelErrors: string[] = [];
-    let modelRan = false;
-    if (modelCfg) {
-      const def = providerDef(modelCfg.provider);
-      if (def) {
-        modelRan = true;
-        const res = await modelRedTeam(doc.chapters, (input) =>
-          def.chat({
-            key: modelCfg.key,
-            model: modelCfg.modelName,
-            system: input.system,
-            user: input.user,
-            maxTokens: 24_000,
-            temperature: 0,
-            timeoutMs: 360_000,
-          }),
-        );
-        findings.push(...res.findings);
-        modelErrors = res.errors;
-      }
-    }
-
-    await sql`delete from review_findings where country_id = ${data.countryId} and user_id = ${context.userId}`;
-    for (const f of findings) {
-      await sql`insert into review_findings (id, user_id, country_id, chapter, category, severity, excerpt, note, source)
-        values (${uid()}, ${context.userId}, ${data.countryId}, ${f.chapter}, ${f.category}, ${f.severity}, ${f.excerpt}, ${f.note}, ${f.source})`;
-    }
-
-    const reviewed = reviewableChapters(doc.chapters).length;
-    const high = findings.filter((f) => f.severity === "high").length;
-    const summary =
-      `Red team reviewed ${reviewed} chapters: ${findings.length} finding${findings.length === 1 ? "" : "s"} ` +
-      `(${high} high) — ${findings.filter((f) => f.source === "deterministic").length} deterministic, ` +
-      `${findings.filter((f) => f.source === "model").length} adversarial` +
-      (modelRan ? "" : "; adversarial pass skipped (no active model)") +
-      (modelErrors.length ? `; errors: ${modelErrors.slice(0, 2).join(" | ")}` : "");
-    await writeAudit(context.userId, data.countryId, data.role, data.actorName, "red_team", summary);
-    return { ok: true as const, findings: findings.length, high, reviewed, summary };
+    redTeamJobs.set(data.countryId, { status: "running", message: "Starting the review…" });
+    void runRedTeamJob(data.countryId, context.userId, { role: data.role, name: data.actorName }, doc, claimable);
+    return { ok: true as const, started: true, alreadyRunning: false };
   });
 
 export const listRedTeamFindings = createServerFn({ method: "GET" })
@@ -1674,10 +1716,11 @@ export const listRedTeamFindings = createServerFn({ method: "GET" })
   .validator((input: { countryId: string }) => input)
   .handler(async ({ context, data }) => {
     const sql = await getSql();
-    return sql<{ id: string; chapter: string; category: string; severity: string; excerpt: string; note: string; source: string; created_at: string }>`
+    const findings = await sql<{ id: string; chapter: string; category: string; severity: string; excerpt: string; note: string; source: string; created_at: string }>`
       select id, chapter, category, severity, excerpt, note, source, created_at from review_findings
       where user_id = ${context.userId} and country_id = ${data.countryId}
       order by case severity when 'high' then 0 when 'medium' then 1 else 2 end, chapter`;
+    return { findings, job: redTeamJobFor(data.countryId) };
   });
 
 /* ---------- deck export ---------- */

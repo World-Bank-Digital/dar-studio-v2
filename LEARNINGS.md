@@ -233,6 +233,35 @@ Starvation is now structurally impossible rather than statistically unlikely.
 **Meta-lesson: zero rejections from a verification gate is not reassurance —
 it means the gate's input dried up upstream. Instrument the whole funnel.**
 
+### L22 — The night the provider gave out: a lost race and a dry pass (runs 10–11)
+**Incident:** run 10 failed on the harness's 30-minute draft deadline — while
+the server-side re-draft completed at minute 30, seconds after the timeout
+fired, on a night the model provider was degraded (one chapter call timed out
+outright; ten chapters kept deterministic). Run 11 then failed the NEW
+zero-findings assertion: both sweeps read zero documents ("fetch failed") —
+after five delivery runs in one night, Jina had escalated from slow answers
+to refused connections, and the sweep passes have no second chance at a
+failed request.
+**Root cause:** two environmental realities the code treated as exceptional.
+(1) Harness deadlines tuned on good-provider nights lose races on bad ones —
+the third deadline lesson this ledger has recorded ("a monitor's timeout is
+not the run's"). (2) A single unretried transient network failure silently
+costs a whole topic; five back-to-back runs turn "transient" into "systemic".
+**Fix:** draft deadline 30 → 45 minutes. All four search fetch sites route
+through `fetchWithRetry`: two retries with backoff on network errors and 429
+ONLY — auth failures and contract errors return immediately, because
+retrying a bad key is noise. And the failure itself validated round-3's
+alarm design: the dry pass was caught by the zero-findings assertion built
+for exactly this class (L17), not discovered in a review three runs later.
+**Meta-lesson: rate limits are a property of the fleet, not the run — a
+harness that passes five times in a night is itself the load test. Give
+retries to transient failures, margins to deadlines, and alarms to
+everything that can run dry silently.**
+**Pinned by:** `search.test.ts` — "search retry on transient failure" (second
+attempt succeeds; persistent 429 surfaces after retries; 401 never retries;
+exhausted retries surface the network error); the deadline comment in
+`qa-delivery.mjs`.
+
 ## Design shifts
 
 ### D1 — Draft-first: gates moved from in front of the work to inside the document
