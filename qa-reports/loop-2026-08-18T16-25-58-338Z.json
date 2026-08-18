@@ -1,0 +1,36 @@
+{
+  "startedAt": "2026-08-18T16:25:58.338Z",
+  "finishedAt": "2026-08-18T18:18:38.157Z",
+  "ok": true,
+  "workspaceId": "d16bde57-7953-4743-bb77-f47455fe586b",
+  "maxAttempts": 4,
+  "attempts": [
+    {
+      "attempt": 1,
+      "startedAt": "2026-08-18T16:25:58.338Z",
+      "exitCode": 0,
+      "ok": true,
+      "resumedFrom": null,
+      "failedStage": null,
+      "error": null,
+      "report": "delivery-2026-08-18T16-25-58-531Z.json",
+      "phases": {
+        "signin": "ran",
+        "country": "ran",
+        "ingest": "ran",
+        "sweeps": "ran",
+        "foresight": "ran",
+        "draftFirst": "ran",
+        "draftFirstAssembled": "ran",
+        "gatesBefore": "ran",
+        "gauntletCleared": "ran",
+        "ladder": "ran",
+        "draft": "ran",
+        "draftAssembled": "ran",
+        "redTeam": "ran",
+        "deck": "ran",
+        "persistence": "ran"
+      }
+    }
+  ]
+}

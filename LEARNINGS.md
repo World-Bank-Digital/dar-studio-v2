@@ -296,6 +296,36 @@ targeting record showing "rice expansion" rejected in one place and "none"
 in another. That last one looks like a real data-rendering inconsistency and
 is now an open thread.
 
+### L24 — The document answered the same question two ways
+**Incident:** the assembled Egypt draft said, of the same Step 3 decision,
+both "Rejected alternatives: (none recorded)" (chapter 10, from the targeting
+table) and "Rejected: Rice expansion" (chapters 2, 9 and 17, from the decision
+row). The red team caught it three times on its first live outing; every
+delivery run since the harness was written had shipped it.
+**Root cause:** Step 3 asks for the same fact twice. The form carried a
+structured "Rejected chains" input feeding `targeting.rejected`, and beneath
+it the ladder-wide free-text "Explicitly rejected options" feeding
+`decisions.rejected` — two inputs, indistinguishable in intent, written to two
+stores, rendered in different chapters, with nothing keeping them in sync.
+Whoever filled one and not the other published a self-contradicting document.
+**Fix:** `reconcileRejections` merges the two before either is written, so an
+empty side takes the populated side's value and both-populated merges without
+duplicates — the stores cannot diverge whatever the caller does (form, script,
+future API client). Step 3 now asks once: the structured field is the single
+input, labelled with where it lands, and the generic field renders only on the
+rungs that need it. The harness gained an assertion that fails when a draft
+contains a "none recorded" targeting summary alongside a named rejection.
+**Meta-lessons: two inputs for one fact is a defect the moment they can
+disagree — the second field is not redundancy, it is a fork in the record.
+And this is the class of bug only a whole-document reader finds: every chapter
+builder was individually correct, every unit test passed, and the contradiction
+existed only in the reading. That is precisely the remit the red team was
+given, and it earned itself on the first pass.**
+**Pinned by:** `decisions.test.ts` (text-only fills the list; list-only fills
+the text; both merge without duplicates; nothing rejected records null, not an
+empty string; both separators); the self-contradiction assertion in
+`qa-delivery.mjs`.
+
 ## Design shifts
 
 ### D1 — Draft-first: gates moved from in front of the work to inside the document

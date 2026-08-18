@@ -71,7 +71,10 @@ function skipStage(name) {
 }
 
 const INGEST_DEADLINE_MS = 90 * 60 * 1000; // WB cascade + verified search + rubric research (variants + citation repair add real minutes)
-const DRAFT_DEADLINE_MS = 45 * 60 * 1000; // 17 prose calls, pool of 4 — run 10 lost a race by seconds when the provider was degraded (draft landed at minute 30)
+const DRAFT_DEADLINE_MS = 75 * 60 * 1000; // 17 prose calls, pool of 4. Twice now the draft has landed within seconds of the
+// deadline on a degraded provider (run 10 at minute 30 of 30; the L24 verification run at minute 45 of 45), which is the
+// signature of a limit tracking the provider rather than the work. The real fix is to detach drafting the way the red team
+// was detached (L9) — until then the margin is generous.
 
 const report = {
   startedAt: new Date().toISOString(),
@@ -400,6 +403,19 @@ try {
     const attributions = (body.match(/Machine-drafted by openrouter:/gi) || []).length;
     const prosed = Math.max(0, attributions - 1);
     const fidelityRejected = (body.match(/rejected by the fidelity check/gi) || []).length;
+
+    // The document must not answer the same question two ways. A live draft
+    // once said both "Rejected alternatives: (none recorded)" and "Rejected:
+    // Rice expansion" because step 3's rejection was written to one of its two
+    // stores (L24) — the red team caught it three times and no unit test could,
+    // because every chapter builder was individually correct.
+    const targetingSaysNone = /Rejected alternatives: \(none recorded\)/.test(body);
+    const decisionNamesOne = /Rejected: \S/.test(body);
+    if (targetingSaysNone && decisionNamesOne) {
+      throw new Error(
+        "the draft contradicts itself on rejected value chains: the targeting summary says none while the decision record names one (L24)",
+      );
+    }
 
     report.phases.draft = {
       chapters: new Set(chapterHeads).size,

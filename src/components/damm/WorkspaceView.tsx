@@ -1010,8 +1010,11 @@ function Steps({ ws, onChange }: { ws: Workspace; onChange: () => Promise<void> 
                   </div>
                 ) : null}
                 <label className="block text-sm">
-                  Rejected chains
+                  Explicitly rejected chains
                   <Input className="mt-1" value={rejChains} onChange={(e) => setRejChains(e.target.value)} />
+                  <span className="mt-1 block text-xs text-subtle">
+                    Comma-separated. Recorded once, on both the decision record and the targeting summary.
+                  </span>
                 </label>
               </>
             ) : null}
@@ -1019,10 +1022,12 @@ function Steps({ ws, onChange }: { ws: Workspace; onChange: () => Promise<void> 
               Notes, including rejected alternatives
               <Textarea className="mt-1" value={notes} onChange={(e) => setNotes(e.target.value)} />
             </label>
-            <label className="block text-sm">
-              Explicitly rejected options
-              <Input className="mt-1" value={rejected} onChange={(e) => setRejected(e.target.value)} />
-            </label>
+            {open === 3 ? null : (
+              <label className="block text-sm">
+                Explicitly rejected options
+                <Input className="mt-1" value={rejected} onChange={(e) => setRejected(e.target.value)} />
+              </label>
+            )}
             <Button type="submit">Record decision</Button>
             {msg ? <p className="text-sm">{msg}</p> : null}
           </form>

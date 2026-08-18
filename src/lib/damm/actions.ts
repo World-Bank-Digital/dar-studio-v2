@@ -23,6 +23,7 @@ import { proposalNote, researchRubric, researchableRubrics } from "./rubric";
 import { opportunisticTopics, practiceTopics, researchFindings, type FindingKind } from "./findings";
 import { explainerSummary } from "./explainer";
 import { teamAdminEmails } from "./teamkeys";
+import { reconcileRejections } from "./decisions";
 import { checkProseFidelity } from "./fidelity";
 import { isPrescriptive, shouldProse } from "./outline";
 import type { Confidence, EvidenceRow, RecordedDecision, Scorecard } from "./types";
@@ -1484,14 +1485,26 @@ export const recordDecision = createServerFn({ method: "POST" })
     }
     if (!data.deciderName.trim()) return { ok: false as const, error: "Decider name is required." };
     if (!data.optionName.trim()) return { ok: false as const, error: "A decision option is required." };
+
+    // Step 3 records rejected value chains in two places — the decision row's
+    // free-text line and the targeting table's structured list — and the draft
+    // renders both. Reconcile before writing so the document cannot answer the
+    // same question two ways, whichever side the caller filled.
+    const reconciled = reconcileRejections({ text: data.rejected, list: data.payload?.rejected });
+    const rejectedText = data.step === 3 ? reconciled.text : data.rejected.trim() || null;
+    const payloadToStore =
+      data.step === 3 && data.payload
+        ? { ...data.payload, rejected: reconciled.list }
+        : data.payload;
+
     await sql`insert into decisions (id, user_id, country_id, step, option_name, decider_name, role, notes, rejected, payload)
       values (${uid()}, ${context.userId}, ${data.countryId}, ${data.step}, ${data.optionName.trim()},
-        ${data.deciderName.trim()}, ${data.role}, ${data.notes.trim() || null}, ${data.rejected.trim() || null},
-        ${data.payload ? JSON.stringify(data.payload) : null})`;
+        ${data.deciderName.trim()}, ${data.role}, ${data.notes.trim() || null}, ${rejectedText},
+        ${payloadToStore ? JSON.stringify(payloadToStore) : null})`;
     if (data.step === 3 && data.payload) {
       await sql`insert into targeting (country_id, user_id, chains, rejected, notes)
         values (${data.countryId}, ${context.userId}, ${JSON.stringify(data.payload.chains ?? [])},
-          ${JSON.stringify(data.payload.rejected ?? [])}, ${data.notes.trim() || null})
+          ${JSON.stringify(reconciled.list)}, ${data.notes.trim() || null})
         on conflict (country_id) do update set chains = excluded.chains, rejected = excluded.rejected, notes = excluded.notes`;
     }
     await sql`update countries set current_step = ${data.step >= 8 ? 8 : data.step + 1}, updated_at = now() where id = ${data.countryId}`;

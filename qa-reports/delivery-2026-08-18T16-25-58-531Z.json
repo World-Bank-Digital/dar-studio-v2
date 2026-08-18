@@ -1,0 +1,150 @@
+{
+  "startedAt": "2026-08-18T16:25:58.531Z",
+  "base": "http://127.0.0.1:8080",
+  "resumed": false,
+  "resumedFrom": null,
+  "workspaceId": null,
+  "phases": {
+    "signin": {
+      "at": "2026-08-18T16:26:00.011Z",
+      "email": "dbcheck@example.com"
+    },
+    "country": {
+      "at": "2026-08-18T16:26:00.923Z",
+      "countryUrl": "http://127.0.0.1:8080/c/d16bde57-7953-4743-bb77-f47455fe586b",
+      "reused": false
+    },
+    "ingest": {
+      "at": "2026-08-18T17:15:27.282Z",
+      "minutes": 49.4
+    },
+    "sweeps": {
+      "at": "2026-08-18T17:15:29.970Z",
+      "findingCards": 54,
+      "practiceSection": true
+    },
+    "foresight": {
+      "at": "2026-08-18T17:15:30.999Z",
+      "uploaded": true
+    },
+    "draftFirst": {
+      "chapters": 17,
+      "annexes": 11,
+      "health": true,
+      "modelPage": true,
+      "undrafted": 0,
+      "noClaim": true,
+      "conditional": true,
+      "citesForesight": true
+    },
+    "draftFirstAssembled": {
+      "at": "2026-08-18T17:35:17.803Z",
+      "chapters": 17,
+      "annexes": 11,
+      "health": true,
+      "modelPage": true,
+      "undrafted": 0,
+      "noClaim": true,
+      "conditional": true,
+      "citesForesight": true
+    },
+    "gatesBefore": {
+      "failing": 9,
+      "ids": [
+        "3.3",
+        "3.11",
+        "4.1",
+        "4.5",
+        "4.9",
+        "5.5",
+        "5.7",
+        "7.9",
+        "7.12"
+      ]
+    },
+    "gauntletCleared": {
+      "at": "2026-08-18T17:35:32.357Z",
+      "humanCleared": 9
+    },
+    "ladder": {
+      "at": "2026-08-18T17:35:36.401Z",
+      "steps": "2-8 recorded"
+    },
+    "draft": {
+      "chapters": 17,
+      "annexes": 11,
+      "notDrafted": 0,
+      "gauntletBlocked": false,
+      "chaptersWithModelProse": 14,
+      "fidelityRejected": 3
+    },
+    "draftAssembled": {
+      "at": "2026-08-18T17:56:29.319Z",
+      "chapters": 17,
+      "annexes": 11,
+      "notDrafted": 0,
+      "gauntletBlocked": false,
+      "chaptersWithModelProse": 14,
+      "fidelityRejected": 3
+    },
+    "redTeam": {
+      "at": "2026-08-18T18:18:35.350Z",
+      "reviewed": 17,
+      "findings": 54,
+      "summary": "Red team reviewed 17 chapters: 54 findings (10 high) — 20 deterministic, 34 adversarial; errors: 1: The model spent the whole token budget on reasoning (24000 tokens) and returned no visible text. Rai"
+    },
+    "deck": {
+      "at": "2026-08-18T18:18:36.423Z",
+      "filename": "DAR-EGY-roadmap-deck.pptx",
+      "bytes": 601386
+    },
+    "persistence": {
+      "at": "2026-08-18T18:18:38.100Z",
+      "csv": true,
+      "reload": true
+    }
+  },
+  "ok": true,
+  "consoleErrors": [],
+  "finishedAt": "2026-08-18T18:18:38.100Z",
+  "log": [
+    "16:25:58 1. sign in as the key-holding account",
+    "16:26:00 ✔ signin {\"email\":\"dbcheck@example.com\"}",
+    "16:26:00 2. create a fresh Egypt workspace",
+    "16:26:00 ✔ country {\"countryUrl\":\"http://127.0.0.1:8080/c/d16bde57-7953-4743-bb77-f47455fe586b\",\"reused\":false}",
+    "16:26:00 3. launch the Step 1 diagnostic (official cascade + verified web search)",
+    "17:15:27 ✔ ingest {\"minutes\":49.4}",
+    "17:15:27 3b. the wide sweeps must have produced cited findings (a silent zero is a broken pass)",
+    "17:15:29    sweeps: 54 findings visible; practice section=true",
+    "17:15:29 ✔ sweeps {\"findingCards\":54,\"practiceSection\":true}",
+    "17:15:29 3c. upload strategic-foresight material; the draft must cite it",
+    "17:15:30 ✔ foresight {\"uploaded\":true}",
+    "17:15:30 4. draft-first: assemble the full DAR immediately, before any human step",
+    "17:35:14    draft-first: chapters=17 annexes=11 health=true model=true undrafted=0 noClaim=true conditional=true foresight=true",
+    "17:35:17 ✔ draftFirstAssembled {\"chapters\":17,\"annexes\":11,\"health\":true,\"modelPage\":true,\"undrafted\":0,\"noClaim\":true,\"conditional\":true,\"citesForesight\":true}",
+    "17:35:17 5. gauntlet: read the failing gates, then clear them as the human",
+    "17:35:18    clearing 3.3 — Unmeasured — machine named gap is not an accounted reading.",
+    "17:35:20    clearing 3.11 — Grade C (55/100) is below A/B and is not a human-marked gap.",
+    "17:35:21    clearing 4.1 — Grade C (55/100) is below A/B and is not a human-marked gap.",
+    "17:35:23    clearing 4.5 — Unmeasured — machine named gap is not an accounted reading.",
+    "17:35:24    clearing 4.9 — Unmeasured — machine named gap is not an accounted reading.",
+    "17:35:25    clearing 5.5 — Unmeasured — machine named gap is not an accounted reading.",
+    "17:35:27    clearing 5.7 — Grade C (55/100) is below A/B and is not a human-marked gap.",
+    "17:35:28    clearing 7.9 — Unmeasured — machine named gap is not an accounted reading.",
+    "17:35:30    clearing 7.12 — Unmeasured — machine named gap is not an accounted reading.",
+    "17:35:32 ✔ gauntletCleared {\"humanCleared\":9}",
+    "17:35:32 6. record steps 2–8",
+    "17:35:36 ✔ ladder {\"steps\":\"2-8 recorded\"}",
+    "17:35:36 7. re-assemble with the validated evidence (live model prose + fidelity gate)",
+    "17:56:29    chapters=17 annexes=11 notDrafted=0 prose=14 fidelityRejected=3",
+    "17:56:29 ✔ draftAssembled {\"chapters\":17,\"annexes\":11,\"notDrafted\":0,\"gauntletBlocked\":false,\"chaptersWithModelProse\":14,\"fidelityRejected\":3}",
+    "17:56:29 7b. red-team the final draft (deterministic + adversarial)",
+    "18:18:35    red team: Red team reviewed 17 chapters: 54 findings (10 high) — 20 deterministic, 34 adversarial; errors: 1: The model spent the whole token budget o",
+    "18:18:35 ✔ redTeam {\"reviewed\":17,\"findings\":54,\"summary\":\"Red team reviewed 17 chapters: 54 findings (10 high) — 20 deterministic, 34 adversarial; errors: 1: ",
+    "18:18:35 7c. export the consulting deck",
+    "18:18:36    deck: DAR-EGY-roadmap-deck.pptx (587 KB)",
+    "18:18:36 ✔ deck {\"filename\":\"DAR-EGY-roadmap-deck.pptx\",\"bytes\":601386}",
+    "18:18:36 8. exports and persistence",
+    "18:18:38 ✔ persistence {\"csv\":true,\"reload\":true}"
+  ]
+}
