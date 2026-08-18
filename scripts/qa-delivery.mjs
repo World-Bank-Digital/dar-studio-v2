@@ -24,9 +24,51 @@ import { join } from "node:path";
 import { chromium } from "playwright";
 import { projectRoot, shotPath } from "./qa-paths.mjs";
 
-const base = process.argv[2] || "http://127.0.0.1:8080";
+const argv = process.argv.slice(2);
+const flag = (name) => {
+  const i = argv.indexOf(name);
+  return i >= 0 && argv[i + 1] && !argv[i + 1].startsWith("--") ? argv[i + 1] : null;
+};
+const base = (argv[0] && !argv[0].startsWith("--") ? argv[0] : null) || "http://127.0.0.1:8080";
 const email = process.env.QA_EMAIL || "dbcheck@example.com";
 const password = process.env.QA_PASSWORD || "TestPass123!";
+
+/**
+ * Resume support. A full pass costs 1.5-2.5 hours; runs 10-12 each threw all
+ * of it away because the harness was fail-fast AND always started a fresh
+ * workspace, so a failure in the last stage re-paid for the first ten. With
+ * --workspace the loop reuses a workspace, and with --from it re-enters at the
+ * stage that failed. Stages before the entry point are skipped, not re-run:
+ * their work is already in the database.
+ *
+ *   node scripts/qa-delivery.mjs --workspace <id> --from redTeam
+ */
+const STAGE_ORDER = [
+  "signin", "country", "ingest", "sweeps", "foresight", "draftFirst",
+  "gauntlet", "ladder", "draft", "redTeam", "deck", "persistence",
+];
+const workspaceId = flag("--workspace");
+const fromStage = flag("--from");
+if (fromStage && !STAGE_ORDER.includes(fromStage)) {
+  console.error(`unknown --from stage "${fromStage}". Known: ${STAGE_ORDER.join(", ")}`);
+  process.exit(2);
+}
+if (fromStage && !workspaceId) {
+  console.error("--from needs --workspace: resuming means re-entering an existing workspace.");
+  process.exit(2);
+}
+const startIdx = fromStage ? STAGE_ORDER.indexOf(fromStage) : 0;
+// signin always runs: the session is not in the database.
+const shouldRun = (name) => name === "signin" || STAGE_ORDER.indexOf(name) >= startIdx;
+let currentStage = "signin";
+function stage(name) {
+  currentStage = name;
+  return shouldRun(name);
+}
+function skipStage(name) {
+  report.phases[name] = { skipped: true, reason: `resumed at ${fromStage}` };
+  note(`\u21ba ${name} skipped — already done in an earlier attempt`);
+}
 
 const INGEST_DEADLINE_MS = 90 * 60 * 1000; // WB cascade + verified search + rubric research (variants + citation repair add real minutes)
 const DRAFT_DEADLINE_MS = 45 * 60 * 1000; // 17 prose calls, pool of 4 — run 10 lost a race by seconds when the provider was degraded (draft landed at minute 30)
@@ -34,6 +76,9 @@ const DRAFT_DEADLINE_MS = 45 * 60 * 1000; // 17 prose calls, pool of 4 — run 1
 const report = {
   startedAt: new Date().toISOString(),
   base,
+  resumed: Boolean(fromStage),
+  resumedFrom: fromStage ?? null,
+  workspaceId: workspaceId ?? null,
   phases: {},
   ok: false,
 };
@@ -168,219 +213,275 @@ try {
   await page.waitForURL((u) => !u.pathname.includes("/login"), { timeout: 20000 });
   phase("signin", { email });
 
-  note("2. create a fresh Egypt workspace");
-  await page.getByRole("button", { name: /^New country$/i }).click();
-  const dialog = page.getByRole("dialog");
-  await dialog.waitFor();
-  await dialog.getByPlaceholder("Country name").fill("Egypt");
-  await page.waitForTimeout(700);
-  await dialog.getByRole("button", { name: /Egypt, Arab Rep/i }).first().click();
-  await page.waitForURL(/\/c\//, { timeout: 20000 });
-  const countryUrl = page.url();
-  phase("country", { countryUrl });
-
-  note("3. launch the Step 1 diagnostic (official cascade + verified web search)");
-  const launch = page.getByRole("button", { name: /Launch Step 1 diagnostic/i }).first();
-  await launch.waitFor({ timeout: 10000 });
-  await launch.click();
-  const ingestStart = Date.now();
-  let ingestDone = false;
-  while (Date.now() - ingestStart < INGEST_DEADLINE_MS) {
-    const done = await page.getByText(/Automated diagnostic complete|Record the Step 2/i).count();
-    const searching = await page.getByText(/Searching official sources|Collecting \d+\/\d+/i).count();
-    if (done > 0 && searching === 0) {
-      ingestDone = true;
-      break;
+  // A named workspace is entered directly — whether this attempt runs the
+  // country stage or resumes past it, every later stage needs to be inside it.
+  if (workspaceId) {
+    await page.goto(`${base}/c/${workspaceId}`, { waitUntil: "networkidle" });
+    await page.getByRole("button", { name: "Guide", exact: true }).first().waitFor({ timeout: 20000 });
+  }
+  if (stage("country")) {
+    if (workspaceId) {
+      note("2. reuse the named Egypt workspace");
+      phase("country", { countryUrl: page.url(), reused: true });
+    } else {
+      note("2. create a fresh Egypt workspace");
+      await page.getByRole("button", { name: /^New country$/i }).click();
+      const dialog = page.getByRole("dialog");
+      await dialog.waitFor();
+      await dialog.getByPlaceholder("Country name").fill("Egypt");
+      await page.waitForTimeout(700);
+      await dialog.getByRole("button", { name: /Egypt, Arab Rep/i }).first().click();
+      await page.waitForURL(/\/c\//, { timeout: 20000 });
+      phase("country", { countryUrl: page.url(), reused: false });
     }
-    await page.waitForTimeout(4000);
-  }
-  await shot("d-01-after-ingest");
-  if (!ingestDone) throw new Error("Step 1 diagnostic did not finish inside the deadline");
-  phase("ingest", { minutes: Math.round((Date.now() - ingestStart) / 6000) / 10 });
+  } else skipStage("country");
 
-  note("3b. the wide sweeps must have produced cited findings (a silent zero is a broken pass)");
-  await tab("findings");
-  await page.getByText(/Public-domain findings/i).waitFor({ timeout: 15000 });
-  await page.waitForTimeout(1500);
-  {
+  if (stage("ingest")) {
+    note("3. launch the Step 1 diagnostic (official cascade + verified web search)");
+    // Idempotent: a workspace whose diagnostic already completed is not
+    // relaunched — re-running a 40-minute ingest to reach a later stage is
+    // exactly the waste resume exists to remove.
+    const alreadyIngested = await page.getByText(/Automated diagnostic complete|Record the Step 2/i).count();
+    const launch = page.getByRole("button", { name: /Launch Step 1 diagnostic/i }).first();
+    if (alreadyIngested > 0 && (await launch.count()) === 0) {
+      note("   Step 1 already complete in this workspace — not relaunching");
+      phase("ingest", { minutes: 0, alreadyComplete: true });
+    } else {
+    await launch.waitFor({ timeout: 10000 });
+    await launch.click();
+    const ingestStart = Date.now();
+    let ingestDone = false;
+    while (Date.now() - ingestStart < INGEST_DEADLINE_MS) {
+      const done = await page.getByText(/Automated diagnostic complete|Record the Step 2/i).count();
+      const searching = await page.getByText(/Searching official sources|Collecting \d+\/\d+/i).count();
+      if (done > 0 && searching === 0) {
+        ingestDone = true;
+        break;
+      }
+      await page.waitForTimeout(4000);
+    }
+    await shot("d-01-after-ingest");
+    if (!ingestDone) throw new Error("Step 1 diagnostic did not finish inside the deadline");
+    phase("ingest", { minutes: Math.round((Date.now() - ingestStart) / 6000) / 10 });
+    }
+  } else skipStage("ingest");
+
+  if (stage("sweeps")) {
+    note("3b. the wide sweeps must have produced cited findings (a silent zero is a broken pass)");
+    await tab("findings");
+    await page.getByText(/Public-domain findings/i).waitFor({ timeout: 15000 });
+    await page.waitForTimeout(1500);
+    {
+      const body = await page.locator("body").innerText();
+      const findingCards = (body.match(/Verified quote: /g) || []).length;
+      const practiceSection = /Recent strategies and practices/.test(body);
+      report.phases.sweeps = { findingCards, practiceSection };
+      note(`   sweeps: ${findingCards} findings visible; practice section=${practiceSection}`);
+      if (!practiceSection) throw new Error("findings tab is missing the practices section");
+      if (findingCards === 0) throw new Error("the wide sweeps stored zero findings — the pass ran dry (L17 class)");
+    }
+    await shot("d-01a-findings");
+    phase("sweeps", report.phases.sweeps);
+  } else skipStage("sweeps");
+
+  if (stage("foresight")) {
+    note("3c. upload strategic-foresight material; the draft must cite it");
+    await tab("uploads");
+    await page.getByText(/Strategic-foresight material/i).waitFor({ timeout: 15000 });
+    {
+      const { writeFileSync, mkdtempSync } = await import("node:fs");
+      const { join: joinPath } = await import("node:path");
+      const { tmpdir } = await import("node:os");
+      const dir = mkdtempSync(joinPath(tmpdir(), "dar-qa-"));
+      const fixture = joinPath(dir, "qa-foresight-scenarios.txt");
+      writeFileSync(
+        fixture,
+        "QA strategic foresight fixture. Scenario Alpha assumes accelerated smallholder platform adoption by 2032; Scenario Beta assumes stalled rural connectivity investment. Prepared for the delivery loop.",
+      );
+      await page.locator('input[type="file"]').setInputFiles(fixture);
+      await page.getByText(/readable characters stored/i).waitFor({ timeout: 20000 });
+    }
+    await shot("d-01a2-foresight");
+    phase("foresight", { uploaded: true });
+  } else skipStage("foresight");
+
+  if (stage("draftFirst")) {
+    note("4. draft-first: assemble the full DAR immediately, before any human step");
+    await tab("exports");
+    await page.getByRole("button", { name: /Assemble draft/i }).click();
+    await page.getByText(/Machine-drafted/i).first().waitFor({ timeout: DRAFT_DEADLINE_MS });
+    await page.waitForTimeout(1500);
+    {
+      const body = await page.locator("body").innerText();
+      const chapters = new Set([...body.matchAll(/^(\d{1,2})\.\s.{4,80}$/gm)].map((m) => Number(m[1]))).size;
+      const annexes = new Set([...body.matchAll(/^[A-K]\.\s.{4,80}$/gm)].map((m) => m[0][0])).size;
+      const health = /Evidence health/.test(body);
+      const modelPage = /THE MODEL THIS RUN EXECUTES/.test(body);
+      const undrafted = (body.match(/is not drafted/gi) || []).length;
+      const noClaim = /no stage claimable/i.test(body);
+      const conditional = /CONDITIONS ON THIS CHAPTER/.test(body);
+      const citesForesight = /qa-foresight-scenarios\.txt/.test(body);
+      report.phases.draftFirst = { chapters, annexes, health, modelPage, undrafted, noClaim, conditional, citesForesight };
+      note(`   draft-first: chapters=${chapters} annexes=${annexes} health=${health} model=${modelPage} undrafted=${undrafted} noClaim=${noClaim} conditional=${conditional} foresight=${citesForesight}`);
+      if (chapters !== 17 || annexes !== 11) throw new Error(`draft-first expected 17+11, saw ${chapters}+${annexes}`);
+      if (!health) throw new Error("draft-first: evidence-health page missing");
+      if (!modelPage) throw new Error("draft-first: the draft must open by explaining the model it runs on");
+      if (undrafted > 0) throw new Error(`draft-first: ${undrafted} sections undrafted`);
+      if (!noClaim) throw new Error("draft-first: the engagement-package rule must still withhold the stage");
+      if (!conditional) throw new Error("draft-first: prescriptive chapters should carry the conditional banner pre-validation");
+      if (!citesForesight) throw new Error("draft-first: the uploaded strategic-foresight material is not cited in the draft");
+    }
+    await shot("d-01b-draft-first");
+    phase("draftFirstAssembled", report.phases.draftFirst);
+  } else skipStage("draftFirst");
+
+  if (stage("gauntlet")) {
+    note("5. gauntlet: read the failing gates, then clear them as the human");
+    let failing = await failingGates();
+    report.phases.gatesBefore = { failing: failing.length, ids: failing.map((f) => f.id) };
+    await shot("d-02-gauntlet-before");
+    for (const gate of failing) {
+      note(`   clearing ${gate.id} — ${gate.why.slice(0, 60)}`);
+      await clearGate(gate.id);
+    }
+    failing = await failingGates();
+    await shot("d-03-gauntlet-after");
+    const clearedText = await page.locator("body").innerText();
+    const cleared = /Cleared — policy chapters may assemble|Gauntlet passed/i.test(clearedText);
+    if (!cleared || failing.length > 0) {
+      throw new Error(`gauntlet still locked after human pass: ${failing.map((f) => `${f.id}(${f.why})`).join("; ")}`);
+    }
+    phase("gauntletCleared", { humanCleared: report.phases.gatesBefore.failing });
+  } else skipStage("gauntlet");
+
+  if (stage("ladder")) {
+    note("6. record steps 2–8");
+    await tab("steps");
+    // Idempotent: the ladder cannot move backwards, so a workspace whose
+    // seven decisions are already recorded has no form to fill — re-entering
+    // this stage on a resumed run must recognise that rather than wait for a
+    // button that will never appear.
+    const ladderAlreadyRecorded = await page.getByText(/The record is adopted/i).count();
+    if (ladderAlreadyRecorded > 0) {
+      note("   steps 2–8 already recorded in this workspace — not re-recording");
+      phase("ladder", { steps: "2-8 recorded", alreadyRecorded: true });
+    } else {
+    await recordStep("Standard assessment", "QA delivery loop: live lending pipeline demonstration. Rejected Defer and Rapid.");
+    await recordStep(null, "Shortlist proposed to counterpart.", {
+      click: ["Wheat", "Cotton", "Citrus (oranges)", "Tomatoes / fresh vegetables"],
+      rejected: "Rice expansion",
+    });
+    await recordStep(null, "Evidence plan: route unmeasured core gates to ITU/GSMA, MALR, NTRA/MCIT.");
+    await recordStep(null, "Demonstration record of government gates. Not an official Government of Egypt decision.");
+    await recordStep(null, "Panel notes: machine-imported official series validated as provisional; human-cleared gates carry demonstration citations.");
+    await recordStep(null, "Envelope scenario recorded as a working assumption for drafting.");
+    await recordStep(null, "Adopt the engagement-package draft for internal review. Version 0.1.");
+    await page.getByText(/The record is adopted/i).waitFor({ timeout: 10000 });
+    phase("ladder", { steps: "2-8 recorded" });
+    }
+  } else skipStage("ladder");
+
+  if (stage("draft")) {
+    note("7. re-assemble with the validated evidence (live model prose + fidelity gate)");
+    await tab("exports");
+    await page.getByRole("button", { name: /Assemble draft/i }).click();
+    await page.getByText(/Machine-drafted/i).first().waitFor({ timeout: DRAFT_DEADLINE_MS });
+    await page.waitForTimeout(1500);
+    await shot("d-04-draft");
+
     const body = await page.locator("body").innerText();
-    const findingCards = (body.match(/Verified quote: /g) || []).length;
-    const practiceSection = /Recent strategies and practices/.test(body);
-    report.phases.sweeps = { findingCards, practiceSection };
-    note(`   sweeps: ${findingCards} findings visible; practice section=${practiceSection}`);
-    if (!practiceSection) throw new Error("findings tab is missing the practices section");
-    if (findingCards === 0) throw new Error("the wide sweeps stored zero findings — the pass ran dry (L17 class)");
-  }
-  await shot("d-01a-findings");
-  phase("sweeps", report.phases.sweeps);
+    const chapterHeads = [...body.matchAll(/^(\d{1,2})\.\s.{4,80}$/gm)].map((m) => Number(m[1]));
+    const annexHeads = [...body.matchAll(/^[A-K]\.\s.{4,80}$/gm)].map((m) => m[0][0]);
+    const notDrafted = (body.match(/is not drafted/gi) || []).length;
+    const gauntletBlocked = /Evidence gauntlet has not passed/i.test(body);
+    // Count per-chapter attributions only. The document header also names the
+    // model, which once made a fully-deterministic draft look like "1 chapter of
+    // prose" (LEARNINGS L13) — so subtract it when present.
+    const attributions = (body.match(/Machine-drafted by openrouter:/gi) || []).length;
+    const prosed = Math.max(0, attributions - 1);
+    const fidelityRejected = (body.match(/rejected by the fidelity check/gi) || []).length;
 
-  note("3c. upload strategic-foresight material; the draft must cite it");
-  await tab("uploads");
-  await page.getByText(/Strategic-foresight material/i).waitFor({ timeout: 15000 });
-  {
-    const { writeFileSync, mkdtempSync } = await import("node:fs");
-    const { join: joinPath } = await import("node:path");
-    const { tmpdir } = await import("node:os");
-    const dir = mkdtempSync(joinPath(tmpdir(), "dar-qa-"));
-    const fixture = joinPath(dir, "qa-foresight-scenarios.txt");
-    writeFileSync(
-      fixture,
-      "QA strategic foresight fixture. Scenario Alpha assumes accelerated smallholder platform adoption by 2032; Scenario Beta assumes stalled rural connectivity investment. Prepared for the delivery loop.",
-    );
-    await page.locator('input[type="file"]').setInputFiles(fixture);
-    await page.getByText(/readable characters stored/i).waitFor({ timeout: 20000 });
-  }
-  await shot("d-01a2-foresight");
-  phase("foresight", { uploaded: true });
+    report.phases.draft = {
+      chapters: new Set(chapterHeads).size,
+      annexes: new Set(annexHeads).size,
+      notDrafted,
+      gauntletBlocked,
+      chaptersWithModelProse: prosed,
+      fidelityRejected,
+    };
+    note(`   chapters=${new Set(chapterHeads).size} annexes=${new Set(annexHeads).size} notDrafted=${notDrafted} prose=${prosed} fidelityRejected=${fidelityRejected}`);
 
-  note("4. draft-first: assemble the full DAR immediately, before any human step");
-  await tab("exports");
-  await page.getByRole("button", { name: /Assemble draft/i }).click();
-  await page.getByText(/Machine-drafted/i).first().waitFor({ timeout: DRAFT_DEADLINE_MS });
-  await page.waitForTimeout(1500);
-  {
-    const body = await page.locator("body").innerText();
-    const chapters = new Set([...body.matchAll(/^(\d{1,2})\.\s.{4,80}$/gm)].map((m) => Number(m[1]))).size;
-    const annexes = new Set([...body.matchAll(/^[A-K]\.\s.{4,80}$/gm)].map((m) => m[0][0])).size;
-    const health = /Evidence health/.test(body);
-    const modelPage = /THE MODEL THIS RUN EXECUTES/.test(body);
-    const undrafted = (body.match(/is not drafted/gi) || []).length;
-    const noClaim = /no stage claimable/i.test(body);
-    const conditional = /CONDITIONS ON THIS CHAPTER/.test(body);
-    const citesForesight = /qa-foresight-scenarios\.txt/.test(body);
-    report.phases.draftFirst = { chapters, annexes, health, modelPage, undrafted, noClaim, conditional, citesForesight };
-    note(`   draft-first: chapters=${chapters} annexes=${annexes} health=${health} model=${modelPage} undrafted=${undrafted} noClaim=${noClaim} conditional=${conditional} foresight=${citesForesight}`);
-    if (chapters !== 17 || annexes !== 11) throw new Error(`draft-first expected 17+11, saw ${chapters}+${annexes}`);
-    if (!health) throw new Error("draft-first: evidence-health page missing");
-    if (!modelPage) throw new Error("draft-first: the draft must open by explaining the model it runs on");
-    if (undrafted > 0) throw new Error(`draft-first: ${undrafted} sections undrafted`);
-    if (!noClaim) throw new Error("draft-first: the engagement-package rule must still withhold the stage");
-    if (!conditional) throw new Error("draft-first: prescriptive chapters should carry the conditional banner pre-validation");
-    if (!citesForesight) throw new Error("draft-first: the uploaded strategic-foresight material is not cited in the draft");
-  }
-  await shot("d-01b-draft-first");
-  phase("draftFirstAssembled", report.phases.draftFirst);
+    if (new Set(chapterHeads).size !== 17) throw new Error(`expected 17 chapters, saw ${new Set(chapterHeads).size}`);
+    if (new Set(annexHeads).size !== 11) throw new Error(`expected 11 annexes, saw ${new Set(annexHeads).size}`);
+    if (gauntletBlocked) throw new Error("draft still reports the gauntlet as unpassed");
+    if (notDrafted > 0) throw new Error(`${notDrafted} sections remain undrafted after a full ladder`);
+    // The deterministic fallback is honest but must not silently become the norm:
+    // when a drafting model is configured, a majority of chapters must carry its
+    // prose (fidelity rejections count as the pipeline working, so they add back).
+    if (prosed + fidelityRejected < 9) {
+      throw new Error(`model prose reached only ${prosed} of 17 chapters (${fidelityRejected} fidelity-rejected) — check the audit tab for provider errors`);
+    }
+    phase("draftAssembled", report.phases.draft);
+  } else skipStage("draft");
 
-  note("5. gauntlet: read the failing gates, then clear them as the human");
-  let failing = await failingGates();
-  report.phases.gatesBefore = { failing: failing.length, ids: failing.map((f) => f.id) };
-  await shot("d-02-gauntlet-before");
-  for (const gate of failing) {
-    note(`   clearing ${gate.id} — ${gate.why.slice(0, 60)}`);
-    await clearGate(gate.id);
-  }
-  failing = await failingGates();
-  await shot("d-03-gauntlet-after");
-  const clearedText = await page.locator("body").innerText();
-  const cleared = /Cleared — policy chapters may assemble|Gauntlet passed/i.test(clearedText);
-  if (!cleared || failing.length > 0) {
-    throw new Error(`gauntlet still locked after human pass: ${failing.map((f) => `${f.id}(${f.why})`).join("; ")}`);
-  }
-  phase("gauntletCleared", { humanCleared: report.phases.gatesBefore.failing });
+  if (stage("redTeam")) {
+    note("7b. red-team the final draft (deterministic + adversarial)");
+    await tab("redteam");
+    await page.getByRole("button", { name: /Run red team/i }).click();
+    // Wait for THIS review to start before waiting for a completion summary.
+    // On a resumed run the panel already shows the previous review's summary,
+    // which would satisfy the completion wait instantly and certify a review
+    // that never ran — the silent-success shape this ledger keeps meeting.
+    await page.getByRole("button", { name: /Reviewing…/i }).waitFor({ timeout: 60_000 });
+    // 17 adversarial chapter reviews at concurrency 4 on a reasoning model; the
+    // job runs detached server-side and the panel polls it, so this wait is on
+    // the rendered completion summary, with margin for degraded-provider nights.
+    await page.getByText(/Red team reviewed \d+ chapters/i).waitFor({ timeout: 40 * 60 * 1000 });
+    {
+      const summaryText = await page.getByText(/Red team reviewed \d+ chapters/i).first().innerText();
+      const m = summaryText.match(/reviewed (\d+) chapters: (\d+) finding/i);
+      report.phases.redTeam = { reviewed: m ? Number(m[1]) : 0, findings: m ? Number(m[2]) : 0, summary: summaryText.slice(0, 200) };
+      note(`   red team: ${summaryText.slice(0, 140)}`);
+      if (!m || Number(m[1]) < 17) throw new Error(`red team reviewed ${m ? m[1] : 0} chapters; expected 17`);
+      if (/adversarial pass skipped/i.test(summaryText)) throw new Error("red team ran without the adversarial pass despite an active model");
+    }
+    await shot("d-04b-redteam");
+    phase("redTeam", report.phases.redTeam);
+  } else skipStage("redTeam");
 
-  note("6. record steps 2–8");
-  await tab("steps");
-  await recordStep("Standard assessment", "QA delivery loop: live lending pipeline demonstration. Rejected Defer and Rapid.");
-  await recordStep(null, "Shortlist proposed to counterpart.", {
-    click: ["Wheat", "Cotton", "Citrus (oranges)", "Tomatoes / fresh vegetables"],
-    rejected: "Rice expansion",
-  });
-  await recordStep(null, "Evidence plan: route unmeasured core gates to ITU/GSMA, MALR, NTRA/MCIT.");
-  await recordStep(null, "Demonstration record of government gates. Not an official Government of Egypt decision.");
-  await recordStep(null, "Panel notes: machine-imported official series validated as provisional; human-cleared gates carry demonstration citations.");
-  await recordStep(null, "Envelope scenario recorded as a working assumption for drafting.");
-  await recordStep(null, "Adopt the engagement-package draft for internal review. Version 0.1.");
-  await page.getByText(/The record is adopted/i).waitFor({ timeout: 10000 });
-  phase("ladder", { steps: "2-8 recorded" });
+  if (stage("deck")) {
+    note("7c. export the consulting deck");
+    await tab("exports");
+    const [deckDownload] = await Promise.all([
+      page.waitForEvent("download", { timeout: 90_000 }).catch(() => null),
+      page.getByRole("button", { name: /Roadmap deck/i }).click(),
+    ]);
+    if (!deckDownload) throw new Error("Deck download did not start");
+    {
+      const path = await deckDownload.path();
+      const { statSync } = await import("node:fs");
+      const size = path ? statSync(path).size : 0;
+      report.phases.deck = { filename: deckDownload.suggestedFilename(), bytes: size };
+      note(`   deck: ${deckDownload.suggestedFilename()} (${Math.round(size / 1024)} KB)`);
+      if (!/\.pptx$/.test(deckDownload.suggestedFilename())) throw new Error("deck export is not a .pptx");
+      if (size < 20_000) throw new Error(`deck file suspiciously small: ${size} bytes`);
+    }
+    phase("deck", report.phases.deck);
+  } else skipStage("deck");
 
-  note("7. re-assemble with the validated evidence (live model prose + fidelity gate)");
-  await tab("exports");
-  await page.getByRole("button", { name: /Assemble draft/i }).click();
-  await page.getByText(/Machine-drafted/i).first().waitFor({ timeout: DRAFT_DEADLINE_MS });
-  await page.waitForTimeout(1500);
-  await shot("d-04-draft");
-
-  const body = await page.locator("body").innerText();
-  const chapterHeads = [...body.matchAll(/^(\d{1,2})\.\s.{4,80}$/gm)].map((m) => Number(m[1]));
-  const annexHeads = [...body.matchAll(/^[A-K]\.\s.{4,80}$/gm)].map((m) => m[0][0]);
-  const notDrafted = (body.match(/is not drafted/gi) || []).length;
-  const gauntletBlocked = /Evidence gauntlet has not passed/i.test(body);
-  // Count per-chapter attributions only. The document header also names the
-  // model, which once made a fully-deterministic draft look like "1 chapter of
-  // prose" (LEARNINGS L13) — so subtract it when present.
-  const attributions = (body.match(/Machine-drafted by openrouter:/gi) || []).length;
-  const prosed = Math.max(0, attributions - 1);
-  const fidelityRejected = (body.match(/rejected by the fidelity check/gi) || []).length;
-
-  report.phases.draft = {
-    chapters: new Set(chapterHeads).size,
-    annexes: new Set(annexHeads).size,
-    notDrafted,
-    gauntletBlocked,
-    chaptersWithModelProse: prosed,
-    fidelityRejected,
-  };
-  note(`   chapters=${new Set(chapterHeads).size} annexes=${new Set(annexHeads).size} notDrafted=${notDrafted} prose=${prosed} fidelityRejected=${fidelityRejected}`);
-
-  if (new Set(chapterHeads).size !== 17) throw new Error(`expected 17 chapters, saw ${new Set(chapterHeads).size}`);
-  if (new Set(annexHeads).size !== 11) throw new Error(`expected 11 annexes, saw ${new Set(annexHeads).size}`);
-  if (gauntletBlocked) throw new Error("draft still reports the gauntlet as unpassed");
-  if (notDrafted > 0) throw new Error(`${notDrafted} sections remain undrafted after a full ladder`);
-  // The deterministic fallback is honest but must not silently become the norm:
-  // when a drafting model is configured, a majority of chapters must carry its
-  // prose (fidelity rejections count as the pipeline working, so they add back).
-  if (prosed + fidelityRejected < 9) {
-    throw new Error(`model prose reached only ${prosed} of 17 chapters (${fidelityRejected} fidelity-rejected) — check the audit tab for provider errors`);
-  }
-  phase("draftAssembled", report.phases.draft);
-
-  note("7b. red-team the final draft (deterministic + adversarial)");
-  await tab("redteam");
-  await page.getByRole("button", { name: /Run red team/i }).click();
-  // 17 adversarial chapter reviews at concurrency 4 on a reasoning model; the
-  // job runs detached server-side and the panel polls it, so this wait is on
-  // the rendered completion summary, with margin for degraded-provider nights.
-  await page.getByText(/Red team reviewed \d+ chapters/i).waitFor({ timeout: 40 * 60 * 1000 });
-  {
-    const summaryText = await page.getByText(/Red team reviewed \d+ chapters/i).first().innerText();
-    const m = summaryText.match(/reviewed (\d+) chapters: (\d+) finding/i);
-    report.phases.redTeam = { reviewed: m ? Number(m[1]) : 0, findings: m ? Number(m[2]) : 0, summary: summaryText.slice(0, 200) };
-    note(`   red team: ${summaryText.slice(0, 140)}`);
-    if (!m || Number(m[1]) < 17) throw new Error(`red team reviewed ${m ? m[1] : 0} chapters; expected 17`);
-    if (/adversarial pass skipped/i.test(summaryText)) throw new Error("red team ran without the adversarial pass despite an active model");
-  }
-  await shot("d-04b-redteam");
-  phase("redTeam", report.phases.redTeam);
-
-  note("7c. export the consulting deck");
-  await tab("exports");
-  const [deckDownload] = await Promise.all([
-    page.waitForEvent("download", { timeout: 90_000 }).catch(() => null),
-    page.getByRole("button", { name: /Roadmap deck/i }).click(),
-  ]);
-  if (!deckDownload) throw new Error("Deck download did not start");
-  {
-    const path = await deckDownload.path();
-    const { statSync } = await import("node:fs");
-    const size = path ? statSync(path).size : 0;
-    report.phases.deck = { filename: deckDownload.suggestedFilename(), bytes: size };
-    note(`   deck: ${deckDownload.suggestedFilename()} (${Math.round(size / 1024)} KB)`);
-    if (!/\.pptx$/.test(deckDownload.suggestedFilename())) throw new Error("deck export is not a .pptx");
-    if (size < 20_000) throw new Error(`deck file suspiciously small: ${size} bytes`);
-  }
-  phase("deck", report.phases.deck);
-
-  note("8. exports and persistence");
-  const [download] = await Promise.all([
-    page.waitForEvent("download", { timeout: 15000 }).catch(() => null),
-    page.getByRole("button", { name: /Evidence CSV/i }).click(),
-  ]);
-  if (!download) throw new Error("Evidence CSV download did not start");
-  await page.reload({ waitUntil: "networkidle" });
-  await tab("steps");
-  await page.getByText(/The record is adopted/i).waitFor({ timeout: 15000 });
-  await shot("d-05-reload");
-  phase("persistence", { csv: true, reload: true });
+  if (stage("persistence")) {
+    note("8. exports and persistence");
+    const [download] = await Promise.all([
+      page.waitForEvent("download", { timeout: 15000 }).catch(() => null),
+      page.getByRole("button", { name: /Evidence CSV/i }).click(),
+    ]);
+    if (!download) throw new Error("Evidence CSV download did not start");
+    await page.reload({ waitUntil: "networkidle" });
+    await tab("steps");
+    await page.getByText(/The record is adopted/i).waitFor({ timeout: 15000 });
+    await shot("d-05-reload");
+    phase("persistence", { csv: true, reload: true });
+  } else skipStage("persistence");
 
   const realErrors = errors.filter(
     (e) => !/hydration|Minified React error #418|#423|#425|Failed to load resource/i.test(e),
@@ -401,8 +502,10 @@ try {
   note("DELIVERY PASS — the studio produced a complete, gate-cleared roadmap.");
 } catch (e) {
   console.error("DELIVERY FAIL:", e.message);
+  console.error("FAILED STAGE:", currentStage);
   await shot("d-fail");
   report.error = e.message;
+  report.failedStage = currentStage;
   report.finishedAt = new Date().toISOString();
   mkdirSync(join(projectRoot, "qa-reports"), { recursive: true });
   writeFileSync(

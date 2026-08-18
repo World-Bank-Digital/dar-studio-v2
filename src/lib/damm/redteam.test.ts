@@ -108,3 +108,47 @@ describe("adversarial pass validation", () => {
     assert.equal(res.findings[0].chapter, "3");
   });
 });
+
+describe("the fidelity gate's own notes are not findings (run-13 false positives)", () => {
+  const REJECTION =
+    "[Model prose for this chapter was rejected by the fidelity check and discarded. " +
+    "Model prose rejected — stage assertions the evidence does not license: is Advanced, are Established.]";
+
+  it("strips the fidelity annotation before review", async () => {
+    const { stripMachineryNotes } = await import("./redteam.ts");
+    const body = `The registry programme is described in the recorded decisions.\n\n${REJECTION}`;
+    const stripped = stripMachineryNotes(body);
+    assert.ok(!stripped.includes("is Advanced"));
+    assert.match(stripped, /^The registry programme/);
+  });
+
+  it("no longer reads the gate's report of a refused claim as a claim", () => {
+    const chapters = [{ n: "10", body: `Sequencing follows the recorded decisions.\n\n${REJECTION}` }];
+    assert.deepEqual(deterministicRedTeam(chapters, false), [], "the machinery note must produce no findings");
+  });
+
+  it("still catches a real stage assertion in the same chapter", () => {
+    const chapters = [{ n: "10", body: `On this evidence the sector is Established.\n\n${REJECTION}` }];
+    const found = deterministicRedTeam(chapters, false);
+    assert.equal(found.length, 1);
+    assert.match(found[0].excerpt, /the sector is Established/);
+  });
+
+  it("keeps the adversarial reviewer's exhibits verifiable against the stripped text", async () => {
+    const { modelRedTeam } = await import("./redteam.ts");
+    let seenBody = "";
+    const res = await modelRedTeam(
+      [{ n: "12", title: "Sequencing", body: `Phase one targets the delta governorates for registry rollout.\n\n${REJECTION}` }],
+      async (input) => {
+        seenBody = input.user;
+        return {
+          text: JSON.stringify([
+            { category: "ambiguity", severity: "low", excerpt: "targets the delta governorates for registry rollout", note: "Scope of the phase-one geography is not defined precisely." },
+          ]),
+        };
+      },
+    );
+    assert.ok(!seenBody.includes("rejected by the fidelity check"), "the reviewer must not see the machinery note");
+    assert.equal(res.findings.length, 1, "an exhibit from the stripped body still verifies");
+  });
+});

@@ -38,6 +38,25 @@ export function reviewableChapters<T extends { n: string }>(chapters: T[]): T[] 
   return chapters.filter((c) => /^\d+$/.test(c.n));
 }
 
+/**
+ * Remove the fidelity gate's own annotation before reviewing a chapter.
+ *
+ * When model prose fails the fidelity check the chapter carries a bracketed
+ * note that QUOTES the offending phrases in order to report them — "…stage
+ * assertions the evidence does not license: is Advanced, are Established".
+ * That note is the safety machinery being honest about what it refused to
+ * publish; it is not the document asserting anything. The first live red-team
+ * run flagged five of these as unclaimable-stage claims (9% of its findings),
+ * which is a guard misreading its sibling guard's audit trail — the L15 class,
+ * where a false positive names a category the guard misunderstood.
+ */
+export function stripMachineryNotes(body: string): string {
+  return body
+    .replace(/\[Model prose for this chapter was rejected by the fidelity check[\s\S]*?\]/g, "")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+}
+
 const COMPARISON_PATTERNS: Array<{ re: RegExp; note: string }> = [
   { re: /\b(?:ranks?|ranked|ranking)\b[^.]{0,80}\b(?:among|against|globally|regionally|countries)\b/i, note: "Cross-country ranking language — prohibited by the model." },
   { re: /\b(?:outperforms?|outpaces?|lags behind|ahead of|behind)\b[^.]{0,60}\b(?:countries|peers|neighbours|neighbors|region)\b/i, note: "Cross-country comparison — prohibited by the model." },
@@ -133,9 +152,10 @@ export function deterministicRedTeam(
 ): RedTeamFinding[] {
   const out: RedTeamFinding[] = [];
   for (const ch of reviewableChapters(chapters)) {
-    out.push(...checkComparisons(ch.n, ch.body));
-    out.push(...checkStageAssertions(ch.n, ch.body, claimable));
-    out.push(...checkOwnerlessRecommendations(ch.n, ch.body));
+    const body = stripMachineryNotes(ch.body);
+    out.push(...checkComparisons(ch.n, body));
+    out.push(...checkStageAssertions(ch.n, body, claimable));
+    out.push(...checkOwnerlessRecommendations(ch.n, body));
   }
   return out;
 }
@@ -204,15 +224,16 @@ export async function modelRedTeam(
     // Contained per chapter — one bad call must not cost the other sixteen
     // reviews (the L20 lesson, applied here from the start).
     try {
+      const body = stripMachineryNotes(ch.body);
       const res = await chat({
         system: RED_TEAM_SYSTEM,
-        user: buildRedTeamPrompt({ chapter: ch.n, title: ch.title, body: ch.body }),
+        user: buildRedTeamPrompt({ chapter: ch.n, title: ch.title, body }),
       });
       if (res.error || !res.text) {
         errors.push(`${ch.n}: ${res.error ?? "no output"}`);
         return;
       }
-      findings.push(...validateRedTeamFindings(res.text, ch.n, ch.body));
+      findings.push(...validateRedTeamFindings(res.text, ch.n, body));
     } catch (err) {
       errors.push(`${ch.n} crashed: ${err instanceof Error ? err.message : String(err)}`);
     }

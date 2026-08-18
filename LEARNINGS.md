@@ -262,6 +262,40 @@ attempt succeeds; persistent 429 surfaces after retries; 401 never retries;
 exhausted retries surface the network error); the deadline comment in
 `qa-delivery.mjs`.
 
+### L23 — The red team's first act was to flag its own safety machinery
+**Incident:** inspecting run 13's 56 red-team findings, 5 (9%) were the same
+false positive: the deterministic stage-assertion check firing on the FIDELITY
+GATE'S rejection notice. When model prose fails the fidelity check the chapter
+carries a bracketed note that quotes the offending phrases in order to report
+them — "Model prose rejected — stage assertions the evidence does not license:
+is Advanced, are Established." The red team read that report of a refused claim
+as a claim. The adversarial pass did it too, filing an "ambiguity" finding
+about a chapter whose prose had been discarded.
+**Root cause:** the reviewer was handed the chapter body verbatim, including
+annotations written BY the guards for the audit trail. Machinery notes and
+document assertions look identical to a regex, and nearly identical to a model.
+**Fix:** `stripMachineryNotes` removes the fidelity annotation before both the
+deterministic scan and the adversarial prompt — the reviewer sees the document,
+not the audit trail — and model exhibits are verified against the same stripped
+text, so an exhibit can never quote a note the reviewer was not shown.
+**Meta-lesson: a new guard must be told which text is the product and which
+text is other guards talking. Layered guards inspect each other's output by
+default, and the reviewer with the widest remit will always be the one that
+mistakes a colleague's report for the thing being reported.** L15's lesson
+holds a second time: each false positive names a category the guard
+misunderstood.
+**Pinned by:** `redteam.test.ts` — "the fidelity gate's own notes are not
+findings" (annotation stripped; no findings from a machinery note; a real
+stage assertion in the same chapter still caught; the adversarial reviewer
+never sees the note and its exhibits still verify).
+**Also observed (not defects):** the surviving 51 findings read as genuine
+editorial work — a pillar labelled Advanced in a chapter that also says no
+stage is asserted; a suppression reason that never names the failing pillar;
+STALE flagged on a 2022 reading while older 2020/2021 figures are not; and a
+targeting record showing "rice expansion" rejected in one place and "none"
+in another. That last one looks like a real data-rendering inconsistency and
+is now an open thread.
+
 ## Design shifts
 
 ### D1 — Draft-first: gates moved from in front of the work to inside the document
