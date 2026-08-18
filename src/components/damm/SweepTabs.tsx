@@ -13,7 +13,7 @@ import { useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
-import { deleteUpload, listFindings, listUploads, uploadForesight } from "@/lib/damm/actions";
+import { deleteUpload, listFindings, listRedTeamFindings, listUploads, runRedTeam, uploadForesight } from "@/lib/damm/actions";
 import { useSessionRole } from "@/lib/session";
 
 type FindingRow = {
@@ -204,6 +204,85 @@ export function ForesightTab({ id }: { id: string }) {
           </ul>
         ) : (
           <p className="mt-2 text-sm text-subtle">Nothing uploaded yet.</p>
+        )}
+      </Card>
+    </div>
+  );
+}
+
+type RedTeamRow = { id: string; chapter: string; category: string; severity: string; excerpt: string; note: string; source: string; created_at: string };
+
+const SEVERITY_TONE: Record<string, "danger" | "warn" | "neutral"> = { high: "danger", medium: "warn", low: "neutral" };
+
+/**
+ * Red-team QC over the latest assembled draft. Deterministic policy checks
+ * always run; the adversarial model pass joins when a drafting key is active.
+ * Findings inform the human editor — nothing here edits the draft.
+ */
+export function RedTeamTab({ id }: { id: string }) {
+  const { role, actorName } = useSessionRole();
+  const [rows, setRows] = useState<RedTeamRow[]>([]);
+  const [busy, setBusy] = useState(false);
+  const [summary, setSummary] = useState<string | null>(null);
+
+  const refresh = () =>
+    listRedTeamFindings({ data: { countryId: id } })
+      .then((r) => setRows(r as RedTeamRow[]))
+      .catch(() => setRows([]));
+  useEffect(() => {
+    void refresh();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [id]);
+
+  return (
+    <div className="space-y-4">
+      <Card>
+        <h2 className="font-display text-xl">Red team</h2>
+        <p className="mt-1 text-sm text-muted">
+          A hostile quality review of the latest assembled draft: prohibited comparison language, stage assertions the
+          engagement-package rule forbids, ownerless recommendations, contradictions and unsupported claims. Every
+          finding exhibits a verbatim excerpt from the chapter it challenges — an exhibit that cannot be located is
+          discarded. Findings guide your edit; they never change the draft.
+        </p>
+        <div className="mt-3 flex flex-wrap items-center gap-3">
+          <Button
+            disabled={busy}
+            onClick={async () => {
+              setBusy(true);
+              setSummary(null);
+              try {
+                const res = await runRedTeam({ data: { countryId: id, role, actorName } });
+                setSummary(res.ok ? res.summary : res.error);
+                if (res.ok) await refresh();
+              } finally {
+                setBusy(false);
+              }
+            }}
+          >
+            {busy ? "Reviewing…" : "Run red team"}
+          </Button>
+          {summary ? <span className="text-sm text-muted">{summary}</span> : null}
+        </div>
+      </Card>
+      <Card>
+        <h3 className="font-display text-lg">Findings</h3>
+        {rows.length ? (
+          <ul className="mt-3 space-y-3">
+            {rows.map((f) => (
+              <li key={f.id} className="rounded-lg border border-border/70 px-4 py-3">
+                <p className="flex flex-wrap items-center gap-2 text-xs text-muted">
+                  <Badge tone={SEVERITY_TONE[f.severity] ?? "neutral"}>{f.severity}</Badge>
+                  <span>Chapter {f.chapter}</span>
+                  <span>· {f.category}</span>
+                  <span>· {f.source === "model" ? "adversarial review" : "policy check"}</span>
+                </p>
+                <p className="mt-2 text-sm">“{f.excerpt}”</p>
+                <p className="mt-1 text-sm text-muted">{f.note}</p>
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <p className="mt-2 text-sm text-subtle">No findings stored. Run the red team after assembling a draft.</p>
         )}
       </Card>
     </div>

@@ -89,6 +89,15 @@ gate clears — recommendations are stated as hypothesis → evidence → decisi
 gate, never as settled advice. And no maturity stage is claimable until you
 validate.
 
+**3b. Red-team the draft — machine, ~10–15 minutes, optional but recommended.**
+*Outputs ▸ Red team* → *Run red team*. A hostile quality review of the final
+document: deterministic policy checks (prohibited comparison language, stage
+assertions the engagement-package rule forbids, ownerless recommendations)
+plus an adversarial model pass per chapter (contradictions, unsupported
+claims, overreach, ambiguity). Every finding exhibits a verbatim excerpt from
+the chapter it challenges — an exhibit that cannot be located verbatim is
+discarded. Findings guide your edit; they never change the draft.
+
 **4. Review and correct — you, as much or as little as you choose.**
 Read the draft. The health page ranks what to strengthen. For each
 machine-researched rubric proposal: confirm it, correct it, or reject it in
@@ -111,9 +120,13 @@ Regenerate after corrections; the health page and the conditional banners
 update to match the strengthened evidence base.
 
 **7. Export — you, 1 minute.**
-Download the draft as HTML and the evidence base as CSV. The result is a
-first-draft DAR: fully cited, honest about its gaps, ready for human
-rewriting and consultation.
+Download the draft as HTML, the evidence base as CSV — and the **roadmap
+deck**: a consulting-style PPTX assembled from the same draft, with an
+action-title slide per chapter, the model explained, read-outs, pillar and
+core-gate tables, sweep findings, comparator practices and the decision
+record. Half-page density per slide; every figure is the draft's own. The
+result is a first-draft DAR: fully cited, honest about its gaps, ready for
+human rewriting and consultation.
 
 Total: a complete draft DAR after one unattended machine run, with your time
 spent reviewing and correcting an argued, cited document — not authoring one
@@ -193,6 +206,21 @@ in a Step 1 pack — which is precisely why no stage is claimable until Step 6.
 it found nothing and routing the indicator to a steward. An *explicit data
 gap* is a human confirming no data exists. The first blocks the gauntlet;
 the second is an accepted, accounted answer.
+
+**Red team** — The optional hostile review of an assembled draft (*Outputs ▸
+Red team*): deterministic policy checks plus an adversarial model pass, every
+finding carrying a verbatim excerpt from the chapter it challenges. Findings
+inform the editor and never modify the document.
+
+**Team keys** — API keys an administrator stores for the whole team
+(*Settings ▸ Team keys*). A personal key always wins; anyone without one runs
+the pipeline on the team key. Administrators are configured by the operator,
+not through the interface.
+
+**Roadmap deck** — The PPTX export of the draft (*Outputs ▸ Draft & exports*):
+one action-titled slide per chapter plus the model, read-outs, gates,
+findings and decision record. Built from the same payload as the document —
+it cannot say what the draft does not.
 
 **Proxy** — A documented near-match (e.g. national 3G coverage standing in
 for a rural cut), always labelled, never promotable to grade A.

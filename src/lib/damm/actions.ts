@@ -22,6 +22,7 @@ import { retrieveVerifiedReadings } from "./retrieval";
 import { proposalNote, researchRubric, researchableRubrics } from "./rubric";
 import { opportunisticTopics, practiceTopics, researchFindings, type FindingKind } from "./findings";
 import { explainerSummary } from "./explainer";
+import { teamAdminEmails } from "./teamkeys";
 import { checkProseFidelity } from "./fidelity";
 import { isPrescriptive, shouldProse } from "./outline";
 import type { Confidence, EvidenceRow, RecordedDecision, Scorecard } from "./types";
@@ -514,6 +515,44 @@ async function loadStoredKey(userId: string, provider: string, kind: "llm" | "se
   }
 }
 
+/* ---------- team keys (admin-managed, shared fallback) ---------- */
+
+
+
+async function isTeamAdmin(userId: string): Promise<boolean> {
+  const emails = teamAdminEmails();
+  if (!emails.length) return false;
+  const sql = await getSql();
+  const rows = await sql<{ email: string }>`select email from "user" where id = ${userId}`;
+  return Boolean(rows[0] && emails.includes(rows[0].email.toLowerCase()));
+}
+
+async function loadTeamKey(provider: string, kind: "llm" | "search"): Promise<ResolvedKey | null> {
+  const sql = await getSql();
+  const rows = await sql<{ provider: string; key_value: string; model_name: string }>`
+    select provider, key_value, model_name from team_keys where provider = ${provider} and kind = ${kind} limit 1`;
+  const row = rows[0];
+  if (!row) return null;
+  try {
+    return { provider: row.provider, key: decryptSecret(row.key_value), modelName: row.model_name };
+  } catch {
+    return null;
+  }
+}
+
+async function anyTeamKey(kind: "llm" | "search"): Promise<ResolvedKey | null> {
+  const sql = await getSql();
+  const rows = await sql<{ provider: string; key_value: string; model_name: string }>`
+    select provider, key_value, model_name from team_keys where kind = ${kind} order by created_at limit 1`;
+  const row = rows[0];
+  if (!row) return null;
+  try {
+    return { provider: row.provider, key: decryptSecret(row.key_value), modelName: row.model_name };
+  } catch {
+    return null;
+  }
+}
+
 /**
  * The web-search credential.
  *
@@ -529,13 +568,16 @@ async function resolveSearchProvider(userId: string): Promise<ResolvedKey | null
   if (active && isSearchProviderId(active)) {
     const stored = await loadStoredKey(userId, active, "search");
     if (stored) return stored;
+    const team = await loadTeamKey(active, "search");
+    if (team) return team;
   }
-  // No explicit choice: use whichever search key exists.
+  // No explicit choice: use whichever search key exists — personal first,
+  // then the admin-managed team keys.
   for (const id of SEARCH_PROVIDER_IDS) {
     const stored = await loadStoredKey(userId, id, "search");
     if (stored) return stored;
   }
-  return null;
+  return anyTeamKey("search");
 }
 
 /**
@@ -1557,6 +1599,269 @@ export const deleteUpload = createServerFn({ method: "POST" })
     return { ok: true as const };
   });
 
+/* ---------- red team ---------- */
+
+/**
+ * Red-team the latest assembled draft: deterministic checks always, the
+ * adversarial model pass when a drafting key is active. Findings replace the
+ * previous run's set — the panel shows the review of the CURRENT draft.
+ */
+export const runRedTeam = createServerFn({ method: "POST" })
+  .middleware([authMiddleware])
+  .validator((input: { countryId: string; role: string; actorName: string }) => input)
+  .handler(async ({ context, data }) => {
+    const sql = await getSql();
+    const owned = await sql<{ id: string }>`
+      select id from countries where id = ${data.countryId} and user_id = ${context.userId} and deleted_at is null`;
+    if (!owned.length) return { ok: false as const, error: "Country not found" };
+
+    const drafts = await sql<{ body: string }>`
+      select body from drafts where country_id = ${data.countryId} and user_id = ${context.userId} and kind = ${"dar"}
+      order by drafted_at desc limit 1`;
+    if (!drafts.length) return { ok: false as const, error: "Assemble a draft first — the red team reviews the final document." };
+    const doc = JSON.parse(drafts[0].body) as { chapters: Array<{ n: string; title: string; body: string }> };
+
+    const ws = await loadWorkspaceFor(context.userId, data.countryId);
+    if (!ws.ok) return { ok: false as const, error: ws.error };
+    const claimable = Boolean(ws.workspace.claim?.claimable);
+
+    const { deterministicRedTeam, modelRedTeam, reviewableChapters } = await import("./redteam");
+    const findings = deterministicRedTeam(doc.chapters, claimable);
+
+    const modelCfg = await resolveDraftModel(context.userId);
+    let modelErrors: string[] = [];
+    let modelRan = false;
+    if (modelCfg) {
+      const def = providerDef(modelCfg.provider);
+      if (def) {
+        modelRan = true;
+        const res = await modelRedTeam(doc.chapters, (input) =>
+          def.chat({
+            key: modelCfg.key,
+            model: modelCfg.modelName,
+            system: input.system,
+            user: input.user,
+            maxTokens: 24_000,
+            temperature: 0,
+            timeoutMs: 360_000,
+          }),
+        );
+        findings.push(...res.findings);
+        modelErrors = res.errors;
+      }
+    }
+
+    await sql`delete from review_findings where country_id = ${data.countryId} and user_id = ${context.userId}`;
+    for (const f of findings) {
+      await sql`insert into review_findings (id, user_id, country_id, chapter, category, severity, excerpt, note, source)
+        values (${uid()}, ${context.userId}, ${data.countryId}, ${f.chapter}, ${f.category}, ${f.severity}, ${f.excerpt}, ${f.note}, ${f.source})`;
+    }
+
+    const reviewed = reviewableChapters(doc.chapters).length;
+    const high = findings.filter((f) => f.severity === "high").length;
+    const summary =
+      `Red team reviewed ${reviewed} chapters: ${findings.length} finding${findings.length === 1 ? "" : "s"} ` +
+      `(${high} high) — ${findings.filter((f) => f.source === "deterministic").length} deterministic, ` +
+      `${findings.filter((f) => f.source === "model").length} adversarial` +
+      (modelRan ? "" : "; adversarial pass skipped (no active model)") +
+      (modelErrors.length ? `; errors: ${modelErrors.slice(0, 2).join(" | ")}` : "");
+    await writeAudit(context.userId, data.countryId, data.role, data.actorName, "red_team", summary);
+    return { ok: true as const, findings: findings.length, high, reviewed, summary };
+  });
+
+export const listRedTeamFindings = createServerFn({ method: "GET" })
+  .middleware([authMiddleware])
+  .validator((input: { countryId: string }) => input)
+  .handler(async ({ context, data }) => {
+    const sql = await getSql();
+    return sql<{ id: string; chapter: string; category: string; severity: string; excerpt: string; note: string; source: string; created_at: string }>`
+      select id, chapter, category, severity, excerpt, note, source, created_at from review_findings
+      where user_id = ${context.userId} and country_id = ${data.countryId}
+      order by case severity when 'high' then 0 when 'medium' then 1 else 2 end, chapter`;
+  });
+
+/* ---------- deck export ---------- */
+
+const DECK_INK = "212B24";
+const DECK_ACCENT = "1F5C3D";
+const DECK_MUTED = "5A685E";
+const DECK_LINE = "DCE1D8";
+const DECK_PAPER = "FAF9F4";
+
+/**
+ * Render the shaped slides with pptxgenjs. Flat and architectural: hairline
+ * rules, uppercase letterspaced kickers, a single green accent, action titles,
+ * sources in the footer. Text and shapes only — no images, by design.
+ */
+async function renderDeck(input: {
+  slides: import("./deck").DeckSlide[];
+  countryName: string;
+}): Promise<string> {
+  const { default: PptxGen } = await import("pptxgenjs");
+  const pptx = new PptxGen();
+  pptx.defineLayout({ name: "WIDE", width: 13.33, height: 7.5 });
+  pptx.layout = "WIDE";
+  pptx.author = "DAR Studio";
+  pptx.title = `Digital Agriculture Roadmap — ${input.countryName}`;
+
+  let pageNo = 0;
+  for (const s of input.slides) {
+    pageNo += 1;
+    const slide = pptx.addSlide();
+    slide.background = { color: s.kind === "section" || s.kind === "closing" ? DECK_ACCENT : DECK_PAPER };
+    const dark = s.kind === "section" || s.kind === "closing";
+    const ink = dark ? "FFFFFF" : DECK_INK;
+    const sub = dark ? "CFE0D5" : DECK_MUTED;
+
+    if (s.kicker) {
+      slide.addText(s.kicker, {
+        x: 0.6, y: 0.42, w: 12.1, h: 0.34,
+        fontFace: "Arial", fontSize: 10.5, color: dark ? "9CC8AD" : DECK_ACCENT,
+        charSpacing: 3, bold: true,
+      });
+    }
+    slide.addText(s.title, {
+      x: 0.6, y: s.kind === "title" ? 2.3 : 0.78, w: 12.1, h: s.kind === "title" ? 1.6 : 1.15,
+      fontFace: "Arial", fontSize: s.kind === "title" ? 40 : s.kind === "section" ? 30 : 20,
+      color: ink, bold: false, lineSpacingMultiple: 1.05,
+    });
+    if (!dark) {
+      slide.addShape(pptx.ShapeType.line, { x: 0.6, y: s.kind === "title" ? 4.05 : 1.98, w: 12.1, h: 0, line: { color: DECK_LINE, width: 0.75 } });
+    }
+
+    const bodyTop = s.kind === "title" ? 4.35 : 2.25;
+    const bullet = { code: "2022" } as const;
+    if (s.table) {
+      const rows = [
+        s.table.headers.map((h) => ({
+          text: h.toUpperCase(),
+          options: { bold: true, color: DECK_MUTED, fontSize: 9.5, charSpacing: 1.5, fill: { color: "EFF3EC" } },
+        })),
+        ...s.table.rows.map((r) => r.map((c) => ({ text: c, options: { color: DECK_INK, fontSize: 11 } }))),
+      ];
+      slide.addTable(rows, {
+        x: 0.6, y: bodyTop, w: 12.1,
+        fontFace: "Arial", border: { type: "solid", color: DECK_LINE, pt: 0.5 },
+        autoPage: false, rowH: 0.32, valign: "middle",
+      });
+    } else if (s.rightBullets?.length) {
+      slide.addText((s.bullets ?? []).map((b) => ({ text: b, options: { bullet, breakLine: true, paraSpaceAfter: 8 } })), {
+        x: 0.6, y: bodyTop, w: 5.9, h: 4.4, fontFace: "Arial", fontSize: 12.5, color: ink, valign: "top",
+      });
+      slide.addText(s.rightBullets.map((b) => ({ text: b, options: { bullet, breakLine: true, paraSpaceAfter: 8 } })), {
+        x: 6.8, y: bodyTop, w: 5.9, h: 4.4, fontFace: "Arial", fontSize: 12.5, color: ink, valign: "top",
+      });
+    } else if (s.bullets?.length) {
+      slide.addText(s.bullets.map((b) => ({ text: b, options: { bullet, breakLine: true, paraSpaceAfter: 10 } })), {
+        x: 0.6, y: bodyTop, w: 12.1, h: 4.4, fontFace: "Arial", fontSize: s.kind === "title" ? 14 : 13, color: ink, valign: "top",
+      });
+    }
+
+    if (s.note) {
+      slide.addText(s.note, { x: 0.6, y: 6.4, w: 12.1, h: 0.4, fontFace: "Arial", fontSize: 10.5, italic: true, color: sub });
+    }
+    if (s.source) {
+      slide.addText(s.source, { x: 0.6, y: 6.95, w: 10.5, h: 0.3, fontFace: "Arial", fontSize: 8.5, color: sub });
+    }
+    slide.addText(String(pageNo), { x: 12.5, y: 6.95, w: 0.5, h: 0.3, fontFace: "Arial", fontSize: 8.5, color: sub, align: "right" });
+  }
+
+  const out = (await pptx.write({ outputType: "base64" })) as string;
+  return out;
+}
+
+/**
+ * Export the roadmap as a consulting-style deck: action titles, half-page
+ * density, the draft's own figures. Uses the LATEST assembled draft's chapter
+ * bodies for the chapter slides; everything else is shaped live from the same
+ * payload the draft renders.
+ */
+export const exportDeck = createServerFn({ method: "POST" })
+  .middleware([authMiddleware])
+  .validator((input: { countryId: string; role: string; actorName: string }) => input)
+  .handler(async ({ context, data }) => {
+    const ws = await loadWorkspaceFor(context.userId, data.countryId);
+    if (!ws.ok) return { ok: false as const, error: ws.error };
+    const w = ws.workspace;
+    const sql = await getSql();
+
+    const drafts = await sql<{ body: string }>`
+      select body from drafts where country_id = ${data.countryId} and user_id = ${context.userId} and kind = ${"dar"}
+      order by drafted_at desc limit 1`;
+    if (!drafts.length) {
+      return { ok: false as const, error: "Assemble a draft first — the deck is built from the draft's chapters." };
+    }
+    const doc = JSON.parse(drafts[0].body) as { chapters: Array<{ n: string; title: string; body: string }> };
+
+    const findingRows = await sql<{
+      kind: string; claim: string; quote: string; source_name: string | null; source_url: string;
+      published_year: number | null; credibility: string | null; pillar_hint: string | null;
+    }>`select kind, claim, quote, source_name, source_url, published_year, credibility, pillar_hint
+       from findings where user_id = ${context.userId} and country_id = ${data.countryId} order by created_at desc limit 200`;
+    const uploadRows = await sql<{ filename: string; chars: number; content: string }>`
+      select filename, chars, content from uploads
+      where user_id = ${context.userId} and country_id = ${data.countryId} order by uploaded_at desc limit 10`;
+
+    const { buildDeckSlides, slidesForChapters, closingSlides } = await import("./deck");
+    const payload = deckPayloadFromWorkspace(w, findingRows, uploadRows);
+    const slides = [
+      ...buildDeckSlides(payload),
+      ...slidesForChapters(payload, doc.chapters),
+      ...closingSlides(payload),
+    ];
+    const base64 = await renderDeck({ slides, countryName: w.name });
+    await writeAudit(context.userId, data.countryId, data.role, data.actorName, "deck_exported",
+      `Roadmap deck exported: ${slides.length} slides from the latest draft.`);
+    return { ok: true as const, base64, filename: `DAR-${w.iso3}-roadmap-deck.pptx`, slides: slides.length };
+  });
+
+/** Shape the workspace into the DraftPayload fields the deck reads. */
+function deckPayloadFromWorkspace(
+  w: Workspace,
+  findingRows: Array<{ kind: string; claim: string; quote: string; source_name: string | null; source_url: string; published_year: number | null; credibility: string | null; pillar_hint: string | null }>,
+  uploadRows: Array<{ filename: string; chars: number; content: string }>,
+): DraftPayload {
+  return {
+    countryName: w.name,
+    iso3: w.iso3,
+    generatedAt: new Date().toISOString(),
+    modelVersion: model.version,
+    assessmentYear: model.assessment_year,
+    currentStep: w.openStep,
+    mandateRecorded: w.decisions.some((d) => d.step === 5),
+    validationRecorded: w.decisions.some((d) => d.step === 6),
+    scorecard: w.scorecard,
+    claim: w.claim,
+    chapters: w.chapters,
+    decisions: w.decisions,
+    evidence: model.indicators.map((ind) => {
+      const e = w.evidence.find((r) => r.indicatorId === ind.id);
+      const suggested = e?.suggestedLevel ?? suggestedLevel(ind, e?.value ?? null);
+      const final = e ? finalLevel({ dataGap: e.dataGap, assessorLevel: e.assessorLevel, suggestedLevel: suggested }) : null;
+      return {
+        id: ind.id, name: ind.name, pillar: ind.pillar, role: ind.role,
+        value: e?.value ?? null, year: e?.observationYear ?? null,
+        source: e?.sourceName ?? null, sourceUrl: e?.sourceUrl ?? null,
+        confidence: e?.confidence ?? null, provenance: e?.provenance ?? null,
+        proxy: e?.isProxy ?? false, proxyNote: e?.proxyNote ?? null,
+        dataGap: e?.dataGap ?? false, gapSteward: e?.gapSteward ?? null,
+        suggested, assessor: e?.assessorLevel ?? null, final,
+        stale: e ? isStale(ind, e, model.assessment_year, final) : false,
+        gate: ind.gate,
+      };
+    }),
+    targeting: w.targeting,
+    gauntletPassed: w.gauntlet.passed,
+    gauntletSummary: w.gauntlet.summary,
+    findings: findingRows.map((f) => ({
+      kind: f.kind === "practice" ? ("practice" as const) : ("opportunistic" as const),
+      claim: f.claim, quote: f.quote, sourceName: f.source_name, sourceUrl: f.source_url,
+      publishedYear: f.published_year, credibility: f.credibility, pillarHint: f.pillar_hint,
+    })),
+    foresight: uploadRows.map((u) => ({ filename: u.filename, chars: u.chars, excerpt: u.content.slice(0, 1200) })),
+  };
+}
+
 export const listFindings = createServerFn({ method: "GET" })
   .middleware([authMiddleware])
   .validator((input: { countryId: string }) => input)
@@ -1602,6 +1907,8 @@ export const getSettings = createServerFn({ method: "GET" })
       last_test_ok: boolean | null;
     }>`select id, provider, kind, fingerprint, last4, model_name, encrypted, last_test_ok
        from api_keys where user_id = ${context.userId} order by kind, provider`;
+    const teamKeys = await sql<{ id: string; provider: string; kind: string; last4: string; model_name: string; created_at: string }>`
+      select id, provider, kind, last4, model_name, created_at from team_keys order by kind, provider`;
     return {
       role: rows[0]?.acting_role ?? "TTL",
       actorName: rows[0]?.actor_name ?? "",
@@ -1613,6 +1920,10 @@ export const getSettings = createServerFn({ method: "GET" })
       /** Any key written before encryption was switched on, so it can be re-saved. */
       plaintextKeyCount: keys.filter((k) => !k.encrypted).length,
       keys,
+      /** Whether this user may manage team keys (DAR_ADMIN_EMAILS). */
+      isTeamAdmin: await isTeamAdmin(context.userId),
+      /** Admin-managed shared keys — identity only, never the key material. */
+      teamKeys,
     };
   });
 
@@ -1730,6 +2041,65 @@ export const saveApiKey = createServerFn({ method: "POST" })
     };
   });
 
+/**
+ * Save a TEAM key: admin only (DAR_ADMIN_EMAILS). Same encryption and
+ * save-time verification as a personal key; used by every team member as the
+ * fallback whenever they hold no personal key of that kind.
+ */
+export const saveTeamKey = createServerFn({ method: "POST" })
+  .middleware([authMiddleware])
+  .validator((input: { provider: string; key: string; modelName?: string; kind?: "llm" | "search" }) => input)
+  .handler(async ({ context, data }) => {
+    if (!(await isTeamAdmin(context.userId))) {
+      return { ok: false as const, error: "Team keys can only be managed by an administrator (DAR_ADMIN_EMAILS)." };
+    }
+    const key = data.key.trim();
+    if (key.length < 8) return { ok: false as const, error: "Key looks too short." };
+    const kind = data.kind ?? "llm";
+    if (kind === "llm" && !providerDef(data.provider)) {
+      return { ok: false as const, error: `Unknown model provider “${data.provider}”.` };
+    }
+    if (kind === "search" && !isSearchProviderId(data.provider)) {
+      return { ok: false as const, error: `Unknown search provider “${data.provider}”.` };
+    }
+    const sql = await getSql();
+    const modelName = kind === "search" ? "" : (data.modelName?.trim() || defaultModelFor(data.provider));
+    const stored = encryptSecret(key);
+    await sql`delete from team_keys where provider = ${data.provider} and kind = ${kind}`;
+    await sql`insert into team_keys (id, kind, provider, key_value, fingerprint, last4, model_name, created_by)
+      values (${uid()}, ${kind}, ${data.provider}, ${stored}, ${fingerprintSecret(key)}, ${key.slice(-4)}, ${modelName}, ${context.userId})`;
+
+    const warnings: string[] = [];
+    if (!isEncrypted(stored)) {
+      warnings.push("Stored without encryption — set DAR_KEY_SECRET in the environment to protect keys at rest.");
+    }
+    let verified: boolean | null = null;
+    if (kind === "llm") {
+      const check = await verifyProviderKey(data.provider, key, modelName);
+      verified = check.ok;
+      if (!check.ok && check.error) warnings.push(check.error);
+      if (check.warning) warnings.push(check.warning);
+    }
+    await writeAudit(context.userId, null, "Admin", "team-keys", "team_key_saved", `${kind} key for ${data.provider} (…${key.slice(-4)}) stored for the team.`);
+    return { ok: true as const, encrypted: isEncrypted(stored), verified, warning: warnings.length ? warnings.join(" ") : undefined };
+  });
+
+export const deleteTeamKey = createServerFn({ method: "POST" })
+  .middleware([authMiddleware])
+  .validator((input: { id: string }) => input)
+  .handler(async ({ context, data }) => {
+    if (!(await isTeamAdmin(context.userId))) {
+      return { ok: false as const, error: "Team keys can only be managed by an administrator (DAR_ADMIN_EMAILS)." };
+    }
+    const sql = await getSql();
+    const rows = await sql<{ provider: string; kind: string }>`
+      delete from team_keys where id = ${data.id} returning provider, kind`;
+    if (rows.length) {
+      await writeAudit(context.userId, null, "Admin", "team-keys", "team_key_removed", `${rows[0].kind} key for ${rows[0].provider} removed from the team.`);
+    }
+    return { ok: true as const };
+  });
+
 export const deleteApiKey = createServerFn({ method: "POST" })
   .middleware([authMiddleware])
   .validator((input: { id: string }) => input)
@@ -1777,12 +2147,19 @@ async function resolveDraftModel(userId: string): Promise<ResolvedKey | null> {
   const settings = await sql<{ active_provider: string | null }>`
     select active_provider from user_settings where user_id = ${userId}`;
   const active = settings[0]?.active_provider;
-  if (!active) return null;
   if (active === "platform-xai") {
     if (!process.env.XAI_API_KEY) return null;
     return { provider: "xai", key: process.env.XAI_API_KEY, modelName: "grok-4.5" };
   }
-  return loadStoredKey(userId, active, "llm");
+  // Personal key first; the admin-managed team key is the fallback, so a
+  // member with no personal configuration still gets a working pipeline.
+  if (active) {
+    const personal = await loadStoredKey(userId, active, "llm");
+    if (personal) return personal;
+    const teamSame = await loadTeamKey(active, "llm");
+    if (teamSame) return teamSame;
+  }
+  return anyTeamKey("llm");
 }
 
 /**

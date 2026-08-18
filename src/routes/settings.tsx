@@ -6,7 +6,7 @@ import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { authClient } from "@/lib/auth/client";
 import { useCurrentUserState } from "@/lib/auth/use-current-user";
-import { deleteApiKey, getSettings, listProviders, saveApiKey, saveSettings, testApiKey } from "@/lib/damm/actions";
+import { deleteApiKey, getSettings, listProviders, saveApiKey, saveSettings, testApiKey, saveTeamKey, deleteTeamKey } from "@/lib/damm/actions";
 import { ACTING_ROLES, useSessionRole } from "@/lib/session";
 
 export const Route = createFileRoute("/settings")({ component: SettingsPage });
@@ -46,6 +46,8 @@ function SettingsInner() {
   const [searchProvider, setSearchProvider] = useState("exa");
   const [searchKey, setSearchKey] = useState("");
   const [msg, setMsg] = useState<string | null>(null);
+  const [isAdmin, setIsAdmin] = useState(false);
+  const [teamKeys, setTeamKeys] = useState<TeamKey[]>([]);
 
   async function refresh() {
     const s = await getSettings();
@@ -55,6 +57,8 @@ function SettingsInner() {
     setActive(s.activeProvider);
     setActiveSearch(s.activeSearchProvider);
     setKeys(s.keys as StoredKey[]);
+    setIsAdmin(Boolean(s.isTeamAdmin));
+    setTeamKeys((s.teamKeys ?? []) as TeamKey[]);
   }
 
   useEffect(() => {
@@ -263,10 +267,139 @@ function SettingsInner() {
         <KeyList keys={searchKeys} labelFor={(id) => searchProviders.find((p) => p.id === id)?.label ?? id} onChange={refresh} setMsg={setMsg} />
       </Card>
 
+      <TeamKeysCard
+        isAdmin={isAdmin}
+        teamKeys={teamKeys}
+        modelProviders={modelProviders}
+        searchProviders={searchProviders}
+        onChange={refresh}
+        setMsg={setMsg}
+      />
+
       <PasskeysCard setMsg={setMsg} />
 
       {msg ? <p className="mt-3 text-sm">{msg}</p> : null}
     </div>
+  );
+}
+
+type TeamKey = { id: string; provider: string; kind: string; last4: string; model_name: string; created_at: string };
+
+/**
+ * Admin-managed keys the whole team inherits. A member with a personal key
+ * keeps using it; anyone without one falls back to these. Only identity is
+ * ever shown — the key material stays on the server.
+ */
+function TeamKeysCard({
+  isAdmin,
+  teamKeys,
+  modelProviders,
+  searchProviders,
+  onChange,
+  setMsg,
+}: {
+  isAdmin: boolean;
+  teamKeys: TeamKey[];
+  modelProviders: ProviderOption[];
+  searchProviders: ProviderOption[];
+  onChange: () => Promise<void> | void;
+  setMsg: (m: string | null) => void;
+}) {
+  const [kind, setKind] = useState<"llm" | "search">("llm");
+  const [provider, setProvider] = useState("openrouter");
+  const [keyValue, setKeyValue] = useState("");
+  const [modelName, setModelName] = useState("");
+  const options = kind === "llm" ? modelProviders : searchProviders;
+
+  return (
+    <Card className="mt-4">
+      <h2 className="font-display text-xl">Team keys</h2>
+      <p className="mt-2 text-sm text-muted">
+        Keys an administrator stores for the whole team. Your personal keys above always win; when you hold no
+        personal key of a kind, the pipeline runs on the team key instead.
+        {isAdmin ? " You are an administrator and can manage them here." : " Administrators are configured by the operator (DAR_ADMIN_EMAILS)."}
+      </p>
+
+      {teamKeys.length ? (
+        <ul className="mt-3 space-y-2">
+          {teamKeys.map((k) => (
+            <li key={k.id} className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-border/70 px-4 py-2 text-sm">
+              <span>
+                {(k.kind === "search" ? searchProviders : modelProviders).find((p) => p.id === k.provider)?.label ?? k.provider}
+                {" · "}
+                {k.kind === "search" ? "web search" : k.model_name} · …{k.last4}
+              </span>
+              {isAdmin ? (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={async () => {
+                    const res = await deleteTeamKey({ data: { id: k.id } });
+                    setMsg(res.ok ? "Team key removed." : res.error);
+                    await onChange();
+                  }}
+                >
+                  Remove
+                </Button>
+              ) : null}
+            </li>
+          ))}
+        </ul>
+      ) : (
+        <p className="mt-3 text-sm text-subtle">No team keys stored.</p>
+      )}
+
+      {isAdmin ? (
+        <>
+          <div className="mt-4 grid gap-2 sm:grid-cols-4">
+            <select
+              className="h-11 rounded-sm border border-border bg-surface px-3 text-sm"
+              value={kind}
+              onChange={(e) => {
+                const next = e.target.value === "search" ? "search" : "llm";
+                setKind(next);
+                const first = (next === "llm" ? modelProviders : searchProviders)[0];
+                if (first) {
+                  setProvider(first.id);
+                  setModelName(next === "llm" ? ((first as ProviderOption & { defaultModel?: string }).defaultModel ?? "") : "");
+                }
+              }}
+            >
+              <option value="llm">Model</option>
+              <option value="search">Web search</option>
+            </select>
+            <select
+              className="h-11 rounded-sm border border-border bg-surface px-3 text-sm"
+              value={provider}
+              onChange={(e) => setProvider(e.target.value)}
+            >
+              {options.map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.label}
+                </option>
+              ))}
+            </select>
+            {kind === "llm" ? (
+              <Input placeholder="Model id" value={modelName} onChange={(e) => setModelName(e.target.value)} />
+            ) : (
+              <span />
+            )}
+            <Input type="password" placeholder="API key" value={keyValue} onChange={(e) => setKeyValue(e.target.value)} autoComplete="off" />
+          </div>
+          <Button
+            className="mt-3"
+            onClick={async () => {
+              const res = await saveTeamKey({ data: { provider, key: keyValue, modelName, kind } });
+              setMsg(res.ok ? (res.warning ?? "Team key stored for everyone.") : res.error);
+              setKeyValue("");
+              await onChange();
+            }}
+          >
+            Store team key
+          </Button>
+        </>
+      ) : null}
+    </Card>
   );
 }
 

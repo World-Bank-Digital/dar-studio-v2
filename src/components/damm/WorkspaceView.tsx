@@ -21,6 +21,7 @@ import {
   ingestTick,
   launchDiagnostic,
   listAudit,
+  exportDeck,
   recordDecision,
   refreshPublicEvidence,
   runDossierSearch,
@@ -29,7 +30,7 @@ import {
 } from "@/lib/damm/actions";
 import { model } from "@/lib/damm/model";
 import { modelExplainer } from "@/lib/damm/explainer";
-import { FindingsTab, ForesightTab } from "./SweepTabs";
+import { FindingsTab, ForesightTab, RedTeamTab } from "./SweepTabs";
 import { finalLevel, formatObserved, formatPct, formatScore, isStale, suggestedLevel } from "@/lib/damm/scoring";
 import { nextAction } from "@/lib/damm/ladder";
 import { chainSuggestions } from "@/lib/damm/chains";
@@ -51,6 +52,7 @@ const TAB_IDS = [
   "steps",
   "memo",
   "exports",
+  "redteam",
   "outline",
   "audit",
 ] as const;
@@ -87,6 +89,7 @@ const NAV_GROUPS: Array<{ name: string; tabs: Array<{ id: Tab; label: string }> 
     name: "Outputs",
     tabs: [
       { id: "exports", label: "Draft & exports" },
+      { id: "redteam", label: "Red team" },
       { id: "outline", label: "Outline" },
       { id: "audit", label: "Audit" },
     ],
@@ -240,6 +243,7 @@ export function WorkspaceView({ id }: { id: string }) {
         {tab === "dossier" ? <DossierTab ws={ws} onChange={refresh} /> : null}
         {tab === "findings" ? <FindingsTab id={ws.id} /> : null}
         {tab === "uploads" ? <ForesightTab id={ws.id} /> : null}
+        {tab === "redteam" ? <RedTeamTab id={ws.id} /> : null}
         {tab === "steps" ? <Steps ws={ws} onChange={refresh} /> : null}
         {tab === "outline" ? <Outline ws={ws} /> : null}
         {tab === "evidence" ? <EvidenceTab ws={ws} onChange={refresh} /> : null}
@@ -1586,6 +1590,35 @@ function Exports({ ws }: { ws: Workspace }) {
             onClick={() => download(`${ws.iso3}-model.json`, JSON.stringify(model, null, 2), "application/json")}
           >
             Model configuration
+          </Button>
+          <Button
+            variant="outline"
+            disabled={busy}
+            onClick={async () => {
+              setBusy(true);
+              setErr(null);
+              try {
+                const res = await exportDeck({ data: { countryId: ws.id, role, actorName } });
+                if (!res.ok) {
+                  setErr(res.error);
+                  return;
+                }
+                const bytes = Uint8Array.from(atob(res.base64), (c) => c.charCodeAt(0));
+                const blob = new Blob([bytes], {
+                  type: "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+                });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement("a");
+                a.href = url;
+                a.download = res.filename;
+                a.click();
+                URL.revokeObjectURL(url);
+              } finally {
+                setBusy(false);
+              }
+            }}
+          >
+            {busy ? "Building deck…" : "Roadmap deck (PPTX)"}
           </Button>
         </div>
       </Card>

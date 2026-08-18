@@ -71,6 +71,7 @@ const NAV = {
   uploads: ["Evidence", "Foresight"],
   steps: ["Decisions", "Steps 2\u20138"],
   exports: ["Outputs", "Draft & exports"],
+  redteam: ["Outputs", "Red team"],
 };
 async function tab(name) {
   const [group, sub] = NAV[name];
@@ -332,6 +333,40 @@ try {
     throw new Error(`model prose reached only ${prosed} of 17 chapters (${fidelityRejected} fidelity-rejected) — check the audit tab for provider errors`);
   }
   phase("draftAssembled", report.phases.draft);
+
+  note("7b. red-team the final draft (deterministic + adversarial)");
+  await tab("redteam");
+  await page.getByRole("button", { name: /Run red team/i }).click();
+  // 17 adversarial chapter reviews at concurrency 4 on a reasoning model.
+  await page.getByText(/Red team reviewed \d+ chapters/i).waitFor({ timeout: 25 * 60 * 1000 });
+  {
+    const summaryText = await page.getByText(/Red team reviewed \d+ chapters/i).first().innerText();
+    const m = summaryText.match(/reviewed (\d+) chapters: (\d+) finding/i);
+    report.phases.redTeam = { reviewed: m ? Number(m[1]) : 0, findings: m ? Number(m[2]) : 0, summary: summaryText.slice(0, 200) };
+    note(`   red team: ${summaryText.slice(0, 140)}`);
+    if (!m || Number(m[1]) < 17) throw new Error(`red team reviewed ${m ? m[1] : 0} chapters; expected 17`);
+    if (/adversarial pass skipped/i.test(summaryText)) throw new Error("red team ran without the adversarial pass despite an active model");
+  }
+  await shot("d-04b-redteam");
+  phase("redTeam", report.phases.redTeam);
+
+  note("7c. export the consulting deck");
+  await tab("exports");
+  const [deckDownload] = await Promise.all([
+    page.waitForEvent("download", { timeout: 90_000 }).catch(() => null),
+    page.getByRole("button", { name: /Roadmap deck/i }).click(),
+  ]);
+  if (!deckDownload) throw new Error("Deck download did not start");
+  {
+    const path = await deckDownload.path();
+    const { statSync } = await import("node:fs");
+    const size = path ? statSync(path).size : 0;
+    report.phases.deck = { filename: deckDownload.suggestedFilename(), bytes: size };
+    note(`   deck: ${deckDownload.suggestedFilename()} (${Math.round(size / 1024)} KB)`);
+    if (!/\.pptx$/.test(deckDownload.suggestedFilename())) throw new Error("deck export is not a .pptx");
+    if (size < 20_000) throw new Error(`deck file suspiciously small: ${size} bytes`);
+  }
+  phase("deck", report.phases.deck);
 
   note("8. exports and persistence");
   const [download] = await Promise.all([
