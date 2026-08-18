@@ -280,6 +280,54 @@ conditional banner on prescriptive chapters, inline grades/PROXY/STALE flags,
 and the health page — provenance made impossible to miss, instead of work
 made impossible to reach.
 
+### D4 — Team keys, a red team, and the roadmap as a deck (user decision, 2026-08-18)
+**What changed:** three additions around the pipeline. (1) **Team BYOK keys**
+(`team_keys`, migration 0007): an administrator — defined by the operator
+through `DAR_ADMIN_EMAILS`, never through the interface — stores keys the
+whole team inherits. Resolution is personal key first, team key as fallback,
+in both the model and search paths; the Settings card shows identity only
+(provider, …last4) to non-admins. Same encryption and save-time verification
+as personal keys (the L6 rule). (2) **Red team** (`review_findings`,
+Outputs ▸ Red team): deterministic policy checks — prohibited comparison
+language, stage assertions while no stage is claimable, ownerless
+prescriptive recommendations — plus an adversarial model pass per chapter
+(contradiction, unsupported claim, overreach, ambiguity). A finding must
+exhibit a verbatim excerpt from the chapter it challenges, checked with the
+same quote discipline as evidence citations; an unlocatable exhibit kills the
+finding. Runs as a DETACHED job with polled status; per-chapter crash
+containment from the start (L20). Findings inform the editor; nothing edits
+the draft. (3) **Roadmap deck** (pptxgenjs, Draft & exports; also
+`scripts/export-deck.ts <countryId>`): action-title slides at half-page
+density — model explainer, evidence health, read-outs, pillar and gate
+tables, one slide per chapter with its own takeaway and evidence anchors,
+sweep findings, comparator practices, foresight uploads, decision record,
+and a closing slide restating the prohibitions. Shaped from the same payload
+as the document, so the deck cannot say what the draft does not. Text and
+shapes only — no images, which also keeps pptxgenjs's image parser
+(image-size, two open DoS advisories) away from any input.
+**Run-12 sequel to L9:** the first red-team implementation ran seventeen
+adversarial model calls inside one HTTP request; a degraded-provider night
+pushed the pass beyond every request-scoped wait and the run died at the
+harness deadline with no findings written. The review now runs detached with
+a polled job (the dossier-job pattern) — the lesson L9 recorded for prose
+generation, relearned in a new seam.
+**Validated (delivery run 13, DELIVERY PASS, zero console errors):** red team
+reviewed 17 chapters and produced 56 findings (11 high; 16 deterministic, 40
+adversarial — each with a verbatim exhibit), surviving a slow provider that
+killed one chapter's review with the L14 diagnosis naming itself; the deck
+exported at 29 slides / 577 KB and passed the harness's file checks; 75 sweep
+findings the same run. Team-key resolution is pinned at unit level and the
+admin card verified live; the fallback path awaits a second live account to
+exercise it end to end.
+**Pinned by:** `teamkeys.test.ts` (admins are configured, not
+self-appointed), `redteam.test.ts` (scope excludes model/health/annexes;
+comparison, stage and ownerless checks with verbatim exhibits; fabricated
+exhibits dropped; junk categories rejected; crash containment),
+`deck.test.ts` (action titles, band-definition vs claim, conditional
+flagging, annexes excluded, prohibitions on the closing slide), and the two
+`qa-delivery.mjs` phases (red team must review 17 chapters with the
+adversarial pass on; the deck download must be a plausible .pptx).
+
 ### D3 — The pipeline explains itself, then casts three nets (user decision, 2026-08-18)
 **What changed:** the run sequence is now: (1) explain the DAMM — a
 deterministic explainer computed from the model configuration opens the run,

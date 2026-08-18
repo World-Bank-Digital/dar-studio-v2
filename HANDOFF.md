@@ -22,15 +22,27 @@ design shifts D1–D3); the methodology deck regenerates via
 **Repo state:** branch `rebuild/byok-delivery-2026-08`, pushed to
 `github.com/rsudan/dar-studio-v2`. `main` still holds only the original
 import commit `84a0c9d` — merging is the user's call and has not been asked
-for. 297 unit tests, clean typecheck/lint/production build at HEAD. The
-ledger runs L1–L21 + D1–D3 (L19 round-3 funnel levers, L20 the catalogue
-crash, L21 the memory-quote diagnosis + foreign-government guard, D3 the
-pipeline revision). Migration `0006_findings_uploads.sql` adds the
-`findings` and `uploads` tables. New deps: `pdf-parse` v2, `mammoth`.
-**Run 9 (DELIVERY PASS)** validated the revised pipeline end to end: 42/97
-machine-levelled, 19 rubric proposals (5 repair-recovered), 59 opportunistic
-+ 11 practice findings, foresight upload cited by the draft, model page
-opening the document, ingest 34.9 min including both sweeps.
+for. 319 unit tests, clean typecheck/lint/production build at HEAD. The
+ledger runs L1–L22 + D1–D4. Migrations through
+`0007_team_keys_redteam.sql` (findings, uploads, team_keys,
+review_findings). New deps: `pdf-parse` v2, `mammoth`, `pptxgenjs` (which
+pulls `image-size` carrying two DoS advisories in image parsers — the deck
+embeds no images, so that code path never sees input).
+
+**Feature state (all user-directed, all live-validated):**
+- **Pipeline (D3, run 9 PASS):** explainer → 97 indicators → opportunistic
+  sweep → practice research → foresight uploads → draft opening with the
+  model page. Run 9: 42/97 machine-levelled, 19 rubric proposals (5
+  repair-recovered), 70 findings.
+- **Team keys / red team / deck (D4, run 13 PASS):** admin-managed shared
+  keys (`DAR_ADMIN_EMAILS`; personal wins, team is the fallback — fallback
+  path still needs a second live account for an end-to-end proof); detached
+  red-team job (17 chapters, 56 findings — 11 high — in run 13); pptxgenjs
+  deck export (29 slides, 577 KB; also `scripts/export-deck.ts <countryId>`).
+- **Resilience (L22, runs 10–12):** search fetches retry transient network
+  failures and 429 twice with backoff; harness deadlines are 90 min ingest /
+  45 min draft / 40 min red team; the zero-findings sweep alarm and the
+  detached-job pattern both earned their keep the same night.
 
 ## Environment
 
@@ -173,3 +185,12 @@ needs an alarm (L13).
 - QA workspaces are NOT auto-deleted by successor runs — soft-delete each
   run's Egypt card after reading its funnel (`update countries set
   deleted_at = now() where id = '…'`).
+- **Deck from any workspace (soft-deleted included):**
+  `node --env-file=.env scripts/export-deck.ts <countryId> [out.pptx]` —
+  same modules as the in-app export, byte-identical output.
+- **Five delivery runs in one night rate-limits Jina into refused
+  connections** (L22). Retries absorb blips, not sustained throttling —
+  space heavy runs, or expect a slow ingest and trust the deadlines.
+- Long model loops must NEVER live inside one HTTP request (L9, relearned
+  in run 12): use the detached-job + polled-status pattern (ingest, dossier,
+  red team all follow it).

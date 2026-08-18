@@ -1725,94 +1725,6 @@ export const listRedTeamFindings = createServerFn({ method: "GET" })
 
 /* ---------- deck export ---------- */
 
-const DECK_INK = "212B24";
-const DECK_ACCENT = "1F5C3D";
-const DECK_MUTED = "5A685E";
-const DECK_LINE = "DCE1D8";
-const DECK_PAPER = "FAF9F4";
-
-/**
- * Render the shaped slides with pptxgenjs. Flat and architectural: hairline
- * rules, uppercase letterspaced kickers, a single green accent, action titles,
- * sources in the footer. Text and shapes only — no images, by design.
- */
-async function renderDeck(input: {
-  slides: import("./deck").DeckSlide[];
-  countryName: string;
-}): Promise<string> {
-  const { default: PptxGen } = await import("pptxgenjs");
-  const pptx = new PptxGen();
-  pptx.defineLayout({ name: "WIDE", width: 13.33, height: 7.5 });
-  pptx.layout = "WIDE";
-  pptx.author = "DAR Studio";
-  pptx.title = `Digital Agriculture Roadmap — ${input.countryName}`;
-
-  let pageNo = 0;
-  for (const s of input.slides) {
-    pageNo += 1;
-    const slide = pptx.addSlide();
-    slide.background = { color: s.kind === "section" || s.kind === "closing" ? DECK_ACCENT : DECK_PAPER };
-    const dark = s.kind === "section" || s.kind === "closing";
-    const ink = dark ? "FFFFFF" : DECK_INK;
-    const sub = dark ? "CFE0D5" : DECK_MUTED;
-
-    if (s.kicker) {
-      slide.addText(s.kicker, {
-        x: 0.6, y: 0.42, w: 12.1, h: 0.34,
-        fontFace: "Arial", fontSize: 10.5, color: dark ? "9CC8AD" : DECK_ACCENT,
-        charSpacing: 3, bold: true,
-      });
-    }
-    slide.addText(s.title, {
-      x: 0.6, y: s.kind === "title" ? 2.3 : 0.78, w: 12.1, h: s.kind === "title" ? 1.6 : 1.15,
-      fontFace: "Arial", fontSize: s.kind === "title" ? 40 : s.kind === "section" ? 30 : 20,
-      color: ink, bold: false, lineSpacingMultiple: 1.05,
-    });
-    if (!dark) {
-      slide.addShape(pptx.ShapeType.line, { x: 0.6, y: s.kind === "title" ? 4.05 : 1.98, w: 12.1, h: 0, line: { color: DECK_LINE, width: 0.75 } });
-    }
-
-    const bodyTop = s.kind === "title" ? 4.35 : 2.25;
-    const bullet = { code: "2022" } as const;
-    if (s.table) {
-      const rows = [
-        s.table.headers.map((h) => ({
-          text: h.toUpperCase(),
-          options: { bold: true, color: DECK_MUTED, fontSize: 9.5, charSpacing: 1.5, fill: { color: "EFF3EC" } },
-        })),
-        ...s.table.rows.map((r) => r.map((c) => ({ text: c, options: { color: DECK_INK, fontSize: 11 } }))),
-      ];
-      slide.addTable(rows, {
-        x: 0.6, y: bodyTop, w: 12.1,
-        fontFace: "Arial", border: { type: "solid", color: DECK_LINE, pt: 0.5 },
-        autoPage: false, rowH: 0.32, valign: "middle",
-      });
-    } else if (s.rightBullets?.length) {
-      slide.addText((s.bullets ?? []).map((b) => ({ text: b, options: { bullet, breakLine: true, paraSpaceAfter: 8 } })), {
-        x: 0.6, y: bodyTop, w: 5.9, h: 4.4, fontFace: "Arial", fontSize: 12.5, color: ink, valign: "top",
-      });
-      slide.addText(s.rightBullets.map((b) => ({ text: b, options: { bullet, breakLine: true, paraSpaceAfter: 8 } })), {
-        x: 6.8, y: bodyTop, w: 5.9, h: 4.4, fontFace: "Arial", fontSize: 12.5, color: ink, valign: "top",
-      });
-    } else if (s.bullets?.length) {
-      slide.addText(s.bullets.map((b) => ({ text: b, options: { bullet, breakLine: true, paraSpaceAfter: 10 } })), {
-        x: 0.6, y: bodyTop, w: 12.1, h: 4.4, fontFace: "Arial", fontSize: s.kind === "title" ? 14 : 13, color: ink, valign: "top",
-      });
-    }
-
-    if (s.note) {
-      slide.addText(s.note, { x: 0.6, y: 6.4, w: 12.1, h: 0.4, fontFace: "Arial", fontSize: 10.5, italic: true, color: sub });
-    }
-    if (s.source) {
-      slide.addText(s.source, { x: 0.6, y: 6.95, w: 10.5, h: 0.3, fontFace: "Arial", fontSize: 8.5, color: sub });
-    }
-    slide.addText(String(pageNo), { x: 12.5, y: 6.95, w: 0.5, h: 0.3, fontFace: "Arial", fontSize: 8.5, color: sub, align: "right" });
-  }
-
-  const out = (await pptx.write({ outputType: "base64" })) as string;
-  return out;
-}
-
 /**
  * Export the roadmap as a consulting-style deck: action titles, half-page
  * density, the draft's own figures. Uses the LATEST assembled draft's chapter
@@ -1845,7 +1757,7 @@ export const exportDeck = createServerFn({ method: "POST" })
       select filename, chars, content from uploads
       where user_id = ${context.userId} and country_id = ${data.countryId} order by uploaded_at desc limit 10`;
 
-    const { buildDeckSlides, slidesForChapters, closingSlides } = await import("./deck");
+    const { buildDeckSlides, slidesForChapters, closingSlides, renderDeck } = await import("./deck");
     const payload = deckPayloadFromWorkspace(w, findingRows, uploadRows);
     const slides = [
       ...buildDeckSlides(payload),
