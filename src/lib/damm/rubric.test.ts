@@ -53,7 +53,8 @@ function egyptProposal(overrides: Record<string, unknown> = {}) {
 describe("rubric research targets", () => {
   it("covers the anchored rubrics and leaves quantitative and context indicators alone", () => {
     const targets = researchableRubrics(model.indicators);
-    assert.equal(targets.length, 42, "anchored capability + evidence-quality rubrics");
+    const qualitative = model.indicators.filter((i) => !["Quantitative threshold", "Context profile (not aggregated)"].includes(i.method)).length;
+    assert.equal(targets.length, qualitative, "every qualitative indicator is a research target");
     assert.ok(targets.some((i) => i.id === "3.3"));
     assert.ok(!targets.some((i) => i.id === "2.1"), "quantitative indicators are the search pass's job");
     assert.ok(!targets.some((i) => i.id === "1.5"), "context profile items are never rubric-scored");

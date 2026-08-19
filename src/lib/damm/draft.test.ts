@@ -1,17 +1,12 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
-import { dirname, join } from "node:path";
-import { fileURLToPath } from "node:url";
 import { describe, it } from "node:test";
-import type { DammModel } from "./types.ts";
 import { scoreAssessment } from "./scoring.ts";
 import { assembleDeterministicDraft , payloadForPrompt } from "./draft.ts";
 import { emptyEvidenceRows } from "./draft.ts";
 import { chapterReadiness } from "./ladder.ts";
 import { claimableStage } from "./scoring.ts";
+import { model } from "./model.ts";
 
-const here = dirname(fileURLToPath(import.meta.url));
-const model = JSON.parse(readFileSync(join(here, "../../data/model_v1_3.json"), "utf8")) as DammModel;
 
 describe("draft honesty", () => {
   it("thin evidence does not state a claimable stage and emits gap notes", () => {
@@ -219,7 +214,7 @@ describe("draft-first architecture", () => {
     const doc = assembleDeterministicDraft(model, fullPayload());
     assert.equal(doc.chapters[0].n, "model");
     assert.match(doc.chapters[0].body, /THE MODEL THIS RUN EXECUTES/);
-    assert.match(doc.chapters[0].body, /97 indicators/);
+    assert.ok(doc.chapters[0].body.includes(`${model.indicators.length} indicators`));
     assert.equal(doc.chapters[1].n, "health");
     const body = doc.chapters[1].body;
     assert.match(body, /no stage claimable/i);

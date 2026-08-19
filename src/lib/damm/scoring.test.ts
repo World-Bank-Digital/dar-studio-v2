@@ -16,11 +16,9 @@ import {
   suggestedLevel,
 } from "./scoring.ts";
 import { regressionRows } from "./fixture.ts";
+import { model } from "./model.ts";
 
 const here = dirname(fileURLToPath(import.meta.url));
-const model = JSON.parse(
-  readFileSync(join(here, "../../data/model_v1_3.json"), "utf8"),
-) as DammModel;
 
 function row(partial: Partial<EvidenceRow> & { indicatorId: string }): EvidenceRow {
   return {
@@ -146,37 +144,44 @@ describe("scoring regression — full fixture", () => {
     // C1 levels: 4,3,3,3,3,4,2,3,4,3,2 → 34/11 = 3.0909...
     assert.ok(c1 !== null);
     assert.equal(Number(c1!.toFixed(6)), Number((34 / 11).toFixed(6)));
-    // C2: 3,3,3,2,3,3,2,2,2,3,2,2 → 30/12 = 2.5
-    assert.equal(c2, 30 / 12);
+    // C2: 30 over the v1.3 twelve, +2 for v1.5's 3.13 (value 30 → L2) → 32/13
+    assert.equal(c2, 32 / 13);
     // C3: 3,3,2,3,2,2,3,2,3,2,2,3,2 → 32/13
     assert.equal(c3, 32 / 13);
     // C4: 1.9=3, 5.1=2, 5.2=3, 5.3=2, 5.4=2, 5.5=3, 5.6=2, 5.7=3, 5.8=2, 5.9=2, 5.10=3, 5.11=3, 5.12=2
-    // 3+2+3+2+2+3+2+3+2+2+3+3+2 = 32 / 13
-    assert.equal(c4, 32 / 13);
-    // E1: 2,2,3,3,2,2,2,2,3,2,3,2,2 = 30/13
-    assert.equal(e1, 30 / 13);
+    // 3+2+3+2+2+3+2+3+2+2+3+3+2 = 32, +3 for v1.5's 5.13 (value 25 → L3) → 35/14
+    assert.equal(c4, 35 / 14);
+    // E1: 30 over thirteen, +3 for v1.5's 6.14 core gate (assessor L3) → 33/14
+    assert.equal(e1, 33 / 14);
     // E2: 2,2,2,2,2,2,2,2,3,2,2,3 = 26/12
     assert.equal(e2, 26 / 12);
-    // O1: 3,3,3,3,2,2,2,2,2,2,2,2,2,2,2 = 34/15
-    assert.equal(o1, 34 / 15);
+    // O1: 34 over fifteen, +2 (8.16 assessor L2) +2 (8.17 value 30 → L2) → 38/17
+    assert.equal(o1, 38 / 17);
 
-    const cms = 0.25 * c1! + 0.3 * c2! + 0.25 * c3! + 0.2 * c4!;
-    const ems = 0.55 * e1! + 0.45 * e2!;
+    // Weights come from the model, not from literals: v1.5 rebalanced E1/E2
+    // from 55/45 to 70/30, and a hardcoded weight here would have passed while
+    // the engine computed something else.
+    const w = (id: string) => model.pillars[id].weight!;
+    const cms = w("C1") * c1! + w("C2") * c2! + w("C3") * c3! + w("C4") * c4!;
+    const ems = w("E1") * e1! + w("E2") * e2!;
     assert.equal(Number(card.cms.score!.toFixed(10)), Number(cms.toFixed(10)));
     assert.equal(Number(card.ems.score!.toFixed(10)), Number(ems.toFixed(10)));
     assert.equal(card.oes.score, o1);
 
-    // cms ≈ 2.69 → Stage 3 (cms >= 2.6, and cms < 3.4)
-    assert.ok(card.cms.score! >= 2.6);
-    assert.ok(card.cms.score! < 3.4);
-    assert.equal(card.stage.code, "STAGE_3");
-    assert.equal(card.stage.label, "Stage 3 - Ecosystem scaling");
+    // cms ≈ 2.69 clears the Stage 2 floor (2.6) but not the Stage 3 floor
+    // (3.4), so the fixture is Stage 2. Until the v1.5 migration this asserted
+    // Stage 3 — the cascade read each stageN threshold as that stage's ceiling
+    // rather than its floor and returned one stage too high (LEARNINGS L25).
+    assert.ok(card.cms.score! >= model.stage_thresholds.stage2_cms);
+    assert.ok(card.cms.score! < model.stage_thresholds.stage3_cms);
+    assert.equal(card.stage.code, "STAGE_2");
+    assert.equal(card.stage.label, "Stage 2 - Capability building");
 
     assert.equal(card.unmeasuredCoreGates, 0);
     assert.equal(card.coreGateFailures, 0);
     // Stale: 1.5 (max_age 2, year 2021 → 5>2) and 8.5 (max_age 3, year 2021 → 5>3)
     assert.equal(card.staleCount, 2);
-    assert.equal(card.levelledCount, 89);
+    assert.equal(card.levelledCount, 94); // 89 + the five v1.5 indicators
   });
 
   it("C0 is never aggregated", () => {

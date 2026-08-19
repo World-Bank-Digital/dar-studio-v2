@@ -2,17 +2,17 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { scoreEvidence } from "./evidenceScore.ts";
 import { mandatoryEntries, REGISTRY } from "./registry.ts";
+import { model } from "./model.ts";
 
 describe("indicator registry", () => {
-  it("covers every DAMM indicator and marks exactly the 13 core gates as mandatory", () => {
-    assert.equal(REGISTRY.length, 97);
+  it("covers every DAMM indicator and marks exactly the model's core gates as mandatory", () => {
+    assert.equal(REGISTRY.length, model.indicators.length);
     const mandatory = mandatoryEntries();
-    assert.equal(mandatory.length, 13);
-    assert.deepEqual(
-      mandatory.map((m) => m.id),
-      ["2.1", "2.5", "2.9", "3.3", "3.11", "4.1", "4.2", "4.5", "4.9", "5.5", "5.7", "7.9", "7.12"],
-    );
-    assert.equal(mandatory.filter((m) => m.kind === "quantitative").length, 5);
+    assert.equal(mandatory.length, model.core_gates.length);
+    // The gate list is the model's, not a copy of it: v1.5 added 6.14 and a
+    // duplicated literal here would have silently disagreed with the engine.
+    assert.deepEqual(mandatory.map((m) => m.id).sort(), [...model.core_gates].sort());
+    assert.ok(mandatory.filter((m) => m.kind === "quantitative").length >= 5);
     assert.ok(mandatory.every((m) => m.definition.length > 20 && m.nationalFirst && m.internationalFallback));
   });
 });

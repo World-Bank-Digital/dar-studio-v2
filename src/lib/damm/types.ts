@@ -1,7 +1,13 @@
 export type IndicatorRole = "Context" | "Capability" | "Ecosystem" | "Outcome";
 export type PillarId = "C0" | "C1" | "C2" | "C3" | "C4" | "E1" | "E2" | "O1";
 export type Direction = "Higher" | "Lower" | "N/A";
-export type Confidence = "High" | "Medium" | "Low/Estimated";
+/**
+ * v1.5 renames "Low/Estimated" to "Low" and adds "Data Gap" as an explicit
+ * fourth tag weighted 0 — a gap is now recorded rather than left blank, so
+ * the evidence-adequacy calculation can distinguish "no data" from "not yet
+ * looked at". The old label is retained so historical rows still parse.
+ */
+export type Confidence = "High" | "Medium" | "Low" | "Data Gap" | "Low/Estimated";
 export type Provenance =
   | "machine-imported"
   | "assessor"
@@ -56,6 +62,9 @@ export interface Band {
 }
 
 export interface StageThresholds {
+  stage5_cms?: number;
+  stage5_ems?: number;
+  stage5_oes?: number;
   stage2_cms: number;
   stage3_cms: number;
   stage3_ems: number;
@@ -105,8 +114,17 @@ export interface MethodChainStep {
 export interface GlossaryEntry {
   term: string;
   name: string;
-  short: string;
+  /** v1.5 drops the short label; optional so both versions parse. */
+  short?: string;
   text: string;
+}
+
+export interface ProcessStep {
+  step: number;
+  name: string;
+  executor: string;
+  output: string;
+  guidance: string;
 }
 
 export interface DammModel {
@@ -120,6 +138,12 @@ export interface DammModel {
   confidence_weights: Record<string, number>;
   bands: Band[];
   stage_thresholds: StageThresholds;
+  /** v1.5: foundation-minus-transformation gap above which leapfrog fragility is flagged. */
+  leapfrog_gap?: number;
+  /** v1.5: the 4-step process ladder that replaces the 8-rung decision ladder. */
+  process_ladder?: ProcessStep[];
+  /** v1.5: where the government mandate sits relative to the workbook. */
+  mandate_note?: string | null;
   assessment_year: number;
   indicators: IndicatorDef[];
   ladder: LadderRung[];

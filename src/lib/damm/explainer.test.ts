@@ -43,6 +43,6 @@ describe("model explainer (pipeline revision point 2)", () => {
   it("summarises to one audit line", () => {
     const s = explainerSummary();
     assert.ok(s.length < 300);
-    assert.ok(s.includes("97 indicators"));
+    assert.ok(s.includes(`${model.indicators.length} indicators`));
   });
 });

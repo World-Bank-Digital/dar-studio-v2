@@ -119,6 +119,14 @@ export function regressionRows(model: DammModel): EvidenceRow[] {
     "8.13": { assessor: 2, year: 2024, conf: "Medium" },
     "8.14": { value: 15, year: 2025, conf: "Medium" }, // L2
     "8.15": { value: 35, year: 2025, conf: "Low/Estimated" }, // L2
+    // v1.5 additions. 6.14 is a core gate: an unpopulated core gate suppresses
+    // the stage entirely, so a fixture that omits it can no longer score — and
+    // the demo pack must clear its own readiness gate (LEARNINGS L1).
+    "3.13": { value: 30, year: 2025, conf: "Medium" },
+    "5.13": { value: 25, year: 2025, conf: "Medium" },
+    "6.14": { assessor: 3, year: 2025, conf: "High" }, // gate
+    "8.16": { assessor: 2, year: 2025, conf: "Medium" },
+    "8.17": { value: 30, year: 2025, conf: "Low/Estimated" },
   };
 
   return model.indicators.map((ind) => {

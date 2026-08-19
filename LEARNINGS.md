@@ -336,6 +336,36 @@ nothing. The demo pack (Step 1 pre-completed) turned a two-hour re-run into a
 two-minute check. **When a harness walks a fixed sequence, resetting into the
 middle of it is not a smaller version of the test — it is a different one.**
 
+### L25 — The stage cascade read every threshold as a ceiling instead of a floor
+**Incident:** migrating to DAMM v1.5 surfaced that the engine scored the
+regression fixture Stage 3 where the methodology scores it Stage 2, and would
+have scored Egypt (CMS 3.07) Stage 3 against the workbook's Stage 2. Every
+stage the app has ever reported was one too high.
+**Root cause:** `stageN_cms` is the FLOOR a read-out must reach to be AT stage
+N. The cascade treated it as the CEILING of stage N — "if CMS < stage3_cms
+return Stage 3" — so a country sitting between two floors was labelled with
+the stage above it. v1.3's config carried the numbers without their meaning,
+and the test that pinned the behaviour encoded the same misreading in its own
+comment ("cms >= 2.6, and cms < 3.4 → Stage 3"), so the pin defended the bug.
+Nothing detected it because the arithmetic was internally consistent; only an
+external statement of the same model — v1.5's Config sheet, which spells out
+"CMS needed for Stage 2" — could contradict it.
+**Fix:** the cascade now computes the highest stage whose floors are all met,
+using v1.5's explicit Stage-5 floors (CMS 4.5 / EMS 4.2 / OES 3.4) rather than
+reusing the Stage-4 numbers. Verified by scoring the workbook's own 102 Egypt
+readings through the engine: CMS 3.07, EMS 2.90, OES 2.41, Stage 2, 0 gates at
+L1, 0 unmeasured — identical to the workbook.
+**Meta-lessons: a maturity model that overstates is worse than one that
+understates, so the DIRECTION of an off-by-one matters as much as its
+existence. And a regression pin written from the same misunderstanding as the
+code does not pin the behaviour, it protects the bug — the only cure is an
+independent statement of the same rule, which is exactly what a methodology
+document is for.**
+**Pinned by:** `scoring.test.ts` — the fixture now asserts Stage 2 with the
+floors read from `model.stage_thresholds`, and the pillar weights are read
+from `model.pillars` so v1.5's E1/E2 rebalance (55/45 → 70/30) could not pass
+while the engine computed something else.
+
 ## Design shifts
 
 ### D1 — Draft-first: gates moved from in front of the work to inside the document
@@ -353,6 +383,42 @@ unusable rigorous tool produces zero rigour in practice.
 conditional banner on prescriptive chapters, inline grades/PROXY/STALE flags,
 and the health page — provenance made impossible to miss, instead of work
 made impossible to reach.
+
+### D5 — DAMM v1.5: the model moves, and the process gets a diagnostic package (user decision, 2026-08-20)
+**What changed:** the app now reads DAMM **v1.5** (102 indicators, 14 core
+gates, E1/E2 at 70/30, explicit Stage-5 floors, a leapfrog-fragility gap of
+1.5, and "Data Gap" as an explicit confidence tag weighted 0). v1.5 is a clean
+superset of v1.3 — all 97 indicators retained, five added, none removed.
+Vocabulary follows: "anchored rubric" becomes "qualitative indicator".
+**Why:** v1.5 is where the methodology has actually converged, and its worked
+Egypt example is materially better than anything the app had produced — 92 of
+102 readings against the app's best of 42. Comparing the two explained the
+app's fill-rate struggle: the workbook also carries only ~42 numeric values,
+and its entire advantage is ~50 QUALITATIVE indicators scored by an assessor
+reading anchors. The app had been trying to automate the one thing v1.5 says
+must not be automated ("the machine does not have enough context to score
+qualitative indicators reliably"). Three sessions of retrieval engineering
+(L19–L21) were chasing a target the methodology had already ruled out.
+**The four process decisions (user-directed, on the principle "smooth
+progression, no unnecessary complexity"):** the provisional stage is shown,
+watermarked, with public claiming still blocked; the 8-rung decision ladder is
+retired in favour of v1.5's 4-step process ladder, keeping only the targeting
+record that chapter 10 consumes; an unattended run still produces a Diagnostic
+Package, with unvalidated qualitative rows flagged and coverage reported twice
+(validated, and provisional); and the Egypt assessment is imported as the
+baseline for Egypt only.
+**Country isolation, restated as a rule:** an import is bound to its ISO3 — a
+workbook whose country is Egypt can only load into an Egypt workspace. Egypt's
+assessment is an example of FORM for other countries and never a source of
+data. The single deliberate exception is practice research, which collects
+other countries' strategies as labelled comparators that can never populate an
+indicator.
+**Migration tooling:** `scripts/extract-damm.py` turns a scoring workbook into
+the app's config, so a version bump is a re-run rather than hand-editing 102
+indicators. Model counts in tests are now derived from the config for the same
+reason — eight test literals encoding "97" and "13" all failed on the bump,
+which is the L20 lesson (a catalogue's own contents are the test fixture)
+applied to versioning.
 
 ### D4 — Team keys, a red team, and the roadmap as a deck (user decision, 2026-08-18)
 **What changed:** three additions around the pipeline. (1) **Team BYOK keys**

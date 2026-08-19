@@ -191,12 +191,18 @@ export function computeStage(model: DammModel, card: Omit<Scorecard, "stage">): 
       reason: `${coreGateFailures} core gate${coreGateFailures === 1 ? "" : "s"} at Level 1. Foundations are not tradeable.`,
     };
   }
+  // v1.5 semantics: `stageN_*` is the FLOOR a read-out must reach to be AT
+  // stage N, and the achieved stage is the highest N whose floors are all
+  // met. v1.3's code read each threshold as the CEILING of its own stage,
+  // which returned one stage too high — Egypt at CMS 3.07 scored Stage 3
+  // where the workbook scores Stage 2. A maturity model that overstates is
+  // worse than one that understates, so the direction of that error mattered.
   if (cms.score === null || cms.score < th.stage2_cms) {
     return {
-      code: "STAGE_2",
-      label: "Stage 2 - Capability building",
+      code: "STAGE_1",
+      label: "Stage 1 - Foundation constrained",
       rated: true,
-      reason: `CMS is below the Stage 3 threshold (${th.stage2_cms}).`,
+      reason: `CMS ${cms.score === null ? "is not rated" : `(${cms.score.toFixed(2)}) is below the Stage 2 floor (${th.stage2_cms})`}.`,
     };
   }
   if (ems.coverage < gates.ems_min) {
@@ -204,45 +210,61 @@ export function computeStage(model: DammModel, card: Omit<Scorecard, "stage">): 
       code: "NOT_RATED_EMS",
       label: "NOT RATED - ecosystem evidence insufficient for staging",
       rated: false,
-      reason: "Ecosystem coverage is below the configured minimum required to move past Stage 2.",
+      reason: "Ecosystem coverage is below the configured minimum required to stage beyond Stage 2.",
     };
   }
-  if (cms.score < th.stage3_cms || ems.score === null || ems.score < th.stage3_ems) {
+  const meetsStage3 = cms.score >= th.stage3_cms && ems.score !== null && ems.score >= th.stage3_ems;
+  if (!meetsStage3) {
+    return {
+      code: "STAGE_2",
+      label: "Stage 2 - Capability building",
+      rated: true,
+      reason: `CMS ${cms.score.toFixed(2)} / EMS ${ems.score === null ? "not rated" : ems.score.toFixed(2)} — below the Stage 3 floors (CMS ${th.stage3_cms}, EMS ${th.stage3_ems}).`,
+    };
+  }
+  // Stage 4 and above require outcome evidence, not just capability.
+  if (oes.coverage < gates.cms_min) {
+    return {
+      code: "STAGE_3_THIN_OES",
+      label: "Stage 3 - Ecosystem scaling (outcome evidence insufficient to stage higher)",
+      rated: true,
+      reason: `OES coverage is below ${gates.cms_min}. Stage 4 and above are withheld.`,
+    };
+  }
+  const meetsStage4 =
+    cms.score >= th.stage4_cms &&
+    ems.score !== null && ems.score >= th.stage4_ems &&
+    oes.score !== null && oes.score >= th.stage4_oes;
+  if (!meetsStage4) {
     return {
       code: "STAGE_3",
       label: "Stage 3 - Ecosystem scaling",
       rated: true,
-      reason: "Capability has cleared Stage 2 but CMS or EMS is below the Stage 4 threshold.",
+      reason: `Below the Stage 4 floors (CMS ${th.stage4_cms}, EMS ${th.stage4_ems}, OES ${th.stage4_oes}).`,
     };
   }
-  const oesMin = gates.cms_min;
-  if (oes.coverage < oesMin) {
-    return {
-      code: "STAGE_4_THIN_OES",
-      label: "Stage 4 - Integrated scale (outcome evidence insufficient for Stage 5)",
-      rated: true,
-      reason: `OES coverage is below ${oesMin}. Stage 5 is withheld.`,
-    };
-  }
-  if (
-    cms.score < th.stage4_cms ||
-    ems.score === null ||
-    ems.score < th.stage4_ems ||
-    oes.score === null ||
-    oes.score < th.stage4_oes
-  ) {
+  // v1.5 introduces explicit Stage-5 floors; v1.3 reused the Stage-4 numbers
+  // and so promoted to Stage 5 too readily. Fall back to them only if absent.
+  const s5cms = th.stage5_cms ?? th.stage4_cms;
+  const s5ems = th.stage5_ems ?? th.stage4_ems;
+  const s5oes = th.stage5_oes ?? th.stage4_oes;
+  const meetsStage5 =
+    cms.score >= s5cms &&
+    ems.score !== null && ems.score >= s5ems &&
+    oes.score !== null && oes.score >= s5oes;
+  if (!meetsStage5) {
     return {
       code: "STAGE_4",
       label: "Stage 4 - Integrated scale",
       rated: true,
-      reason: "CMS, EMS or OES is below the Stage 5 threshold.",
+      reason: `Below the Stage 5 floors (CMS ${s5cms}, EMS ${s5ems}, OES ${s5oes}).`,
     };
   }
   return {
     code: "STAGE_5",
     label: "Stage 5 - Transformative & inclusive",
     rated: true,
-    reason: "All read-outs and gates clear the Stage 5 cascade.",
+    reason: "All read-outs and gates clear the Stage 5 floors.",
   };
 }
 

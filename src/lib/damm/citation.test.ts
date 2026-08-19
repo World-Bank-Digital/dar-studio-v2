@@ -4,6 +4,7 @@ import { citationError, isHttpUrl, nextProvenance } from "./citation.ts";
 import { economyByName, FALLBACK_ECONOMIES } from "./countries.ts";
 import { parseWbLatest, ingestQueue } from "./ingest.ts";
 import { chainSuggestions } from "./chains.ts";
+import { model } from "./model.ts";
 
 describe("citation gate", () => {
   it("accepts only http(s) URLs", () => {
@@ -92,7 +93,7 @@ describe("Egypt is a first-class economy", () => {
 describe("ingest catalogue", () => {
   it("maps every indicator and keeps World Bank series fetchable", () => {
     const queue = ingestQueue();
-    assert.equal(queue.length, 97);
+    assert.equal(queue.length, model.indicators.length);
     const fetchable = queue.filter((s) => s.kind !== "named-gap");
     assert.ok(fetchable.length >= 20);
     assert.ok(fetchable.every((s) => Boolean(s.sourceName)));

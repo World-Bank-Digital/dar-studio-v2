@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { parseData360Latest, parseOwidLatest, ingestQueue } from "./ingest.ts";
 import { sourceFor } from "./sources.ts";
+import { model } from "./model.ts";
 
 describe("Data360 parser", () => {
   const body = {
@@ -121,7 +122,7 @@ describe("OWID parser", () => {
 describe("source cascade", () => {
   it("lists official exact series before documented proxies and research fallbacks", () => {
     const queue = ingestQueue();
-    assert.equal(queue.length, 97);
+    assert.equal(queue.length, model.indicators.length);
     const fetchable = queue.filter((s) => s.kind !== "named-gap");
     assert.ok(fetchable.length >= 20);
     const itu = ["2.1", "2.2", "2.3", "2.5"];

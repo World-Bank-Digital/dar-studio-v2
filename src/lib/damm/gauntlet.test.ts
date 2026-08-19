@@ -24,7 +24,7 @@ const strong = {
 };
 
 describe("evidence gauntlet", () => {
-  it("fails a desk pack with silent named gaps on the 13 gates", () => {
+  it("fails a desk pack with silent named gaps on the core gates", () => {
     const rows = census({
       "2.9": strong,
     });
@@ -42,11 +42,16 @@ describe("evidence gauntlet", () => {
     assert.match(series?.reading ?? "", /%/);
   });
 
-  it("passes only when 11 gates are A/B and the rest are human data gaps", () => {
-    const filled = ["2.1", "2.5", "2.9", "3.3", "3.11", "4.1", "4.2", "4.5", "4.9", "5.5", "5.7"];
+  it("passes only when the populated gates are A/B and the rest are human data gaps", () => {
+    // Derived from the model: v1.5 added a fourteenth core gate, and a literal
+    // list here left it an unaccounted silent gap while the test still claimed
+    // a pass. The two marked as human data gaps are the last two in the list.
+    const gates = [...model.core_gates];
+    const gapped = gates.slice(-2);
+    const filled = gates.slice(0, -2);
     const overrides: Record<string, Partial<EvidenceRow>> = {
-      "7.9": { dataGap: true, provenance: "assessor", notes: "No ministry CISO report this cycle" },
-      "7.12": { dataGap: true, provenance: "assessor", notes: "Consent policy not yet issued" },
+      [gapped[0]]: { dataGap: true, provenance: "assessor", notes: "No ministry CISO report this cycle" },
+      [gapped[1]]: { dataGap: true, provenance: "assessor", notes: "Consent policy not yet issued" },
     };
     for (const id of filled) {
       overrides[id] = {
@@ -64,8 +69,8 @@ describe("evidence gauntlet", () => {
       };
     }
     const g = evaluateGauntlet(census(overrides), "EGY");
-    assert.equal(g.populated, 11);
-    assert.equal(g.accounted, 13);
+    assert.equal(g.populated, filled.length);
+    assert.equal(g.accounted, gates.length);
     assert.equal(g.silentGaps.length, 0);
     assert.ok(g.gradeAB >= g.abNeeded);
     assert.equal(g.passed, true);
@@ -73,7 +78,7 @@ describe("evidence gauntlet", () => {
 
   it("does not let a C/D reading sneak through without a human gap mark", () => {
     const overrides: Record<string, Partial<EvidenceRow>> = {};
-    for (const id of ["2.1", "2.5", "2.9", "3.3", "3.11", "4.1", "4.2", "4.5", "4.9", "5.5", "5.7", "7.9", "7.12"]) {
+    for (const id of model.core_gates) {
       overrides[id] = {
         value: 50,
         observationYear: 2015,

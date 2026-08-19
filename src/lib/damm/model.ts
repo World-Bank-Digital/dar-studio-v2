@@ -1,5 +1,5 @@
 import type { DammModel, IndicatorDef, PillarDef, PillarId } from "./types.ts";
-import raw from "../../data/model_v1_3.json" with { type: "json" };
+import raw from "../../data/model_v1_5.json" with { type: "json" };
 
 export const model = raw as DammModel;
 

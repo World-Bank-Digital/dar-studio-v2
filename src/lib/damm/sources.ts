@@ -239,6 +239,14 @@ export const SOURCE_MAP: SourceSpec[] = [
   { indicatorId: "8.13", kind: "named-gap", sourceName: "Impact-evidence register", steward: "Evidence panel / independent challenger", gapNote: "Scores the QUALITY of income-impact evidence, not the size of claimed impact." },
   { indicatorId: "8.14", kind: "named-gap", sourceName: "Climate-service reach statistics", steward: "Met service / Ministry of Agriculture", gapNote: "Farmers using digital climate services." },
   { indicatorId: "8.15", kind: "named-gap", sourceName: "Environmental-sustainability assessment", steward: "Environment ministry / Ministry of Agriculture", gapNote: "Environmental sustainability of digital agriculture systems." },
+
+  // v1.5 additions. All five are Local source type: no global series exists,
+  // so each is a named gap routed to the steward who holds the answer.
+  { indicatorId: "3.13", kind: "named-gap", sourceName: "National open-data portal / agricultural statistics catalogue", steward: "Statistics office", gapNote: "Share of national agricultural statistics published machine-readable. Audit the national open-data portal." },
+  { indicatorId: "5.13", kind: "named-gap", sourceName: "Extension service HR records", steward: "Ministry of Agriculture", gapNote: "Female share of extension officers. Ministry HR or extension-agency staffing records." },
+  { indicatorId: "6.14", kind: "named-gap", sourceName: "Agri-fintech / mobile-money market review", steward: "Central bank / Ministry of Agriculture", gapNote: "CORE GATE. Qualitative: operational agri-fintech rails reaching smallholders, with interoperability evidence." },
+  { indicatorId: "8.16", kind: "named-gap", sourceName: "Digital advisory adoption survey (sex-disaggregated)", steward: "Ministry of Agriculture / Statistics office", gapNote: "Gender-disaggregated adoption of digital advisories is a local survey item." },
+  { indicatorId: "8.17", kind: "named-gap", sourceName: "Climate advisory reach assessment", steward: "Meteorological service / Ministry of Agriculture", gapNote: "Share of farmers receiving actionable seasonal advisories. Local survey or met-service reach data." },
 ];
 
 export function sourceFor(id: string): SourceSpec | undefined {
