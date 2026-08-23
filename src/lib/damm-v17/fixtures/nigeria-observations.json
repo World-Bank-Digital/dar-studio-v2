@@ -1,0 +1,458 @@
+{
+ "1.1": {
+  "value": 3494.89275307711,
+  "cls": "Measured",
+  "level": 3,
+  "year": 2025,
+  "src": "World Bank WDI NV.AGR.EMPL.KD",
+  "tier": "T1"
+ },
+ "1.2": {
+  "value": 1558,
+  "cls": "Measured",
+  "level": 2,
+  "year": 2024,
+  "src": "World Bank WDI AG.YLD.CREL.KG",
+  "tier": "T1"
+ },
+ "1.3": {
+  "value": 33.5336954038865,
+  "cls": "Measured",
+  "level": 2,
+  "year": 2025,
+  "src": "World Bank WDI SL.AGR.EMPL.ZS (ILO modeled estimate)",
+  "tier": "T1"
+ },
+ "1.4": {
+  "value": 119.85,
+  "cls": "Measured",
+  "level": 4,
+  "year": 2022,
+  "src": "World Bank WDI AG.PRD.FOOD.XD",
+  "tier": "T1"
+ },
+ "1.5": {
+  "value": "Cereals only, APHLIS dry-weight postharvest loss estimates 2022 (cumulative harvest, drying, handling, storage, transport, market): maize 17.4%, sorghum 12.3%, rice 11.7%, millet 9.5% (range 9.5-17.4%). No all-crop natio",
+  "cls": "Documented",
+  "level": 3,
+  "year": 2022,
+  "src": "APHLIS - Postharvest losses in Nigeria 2022, dry weight losses (%)",
+  "tier": "T1"
+ },
+ "1.6": {
+  "value": "No national 'formal market access' share exists. FAO Smallholder Data Portrait (LSMS-ISA 2012/13): 100% of crop-selling smallholder households sold through informal channels (formal-channel participation ~0%); 94% sold i",
+  "cls": "Documented",
+  "level": 1,
+  "year": 2013,
+  "src": "FAO Small Family Farms Country Factsheet - Nigeria (Smallholder Data Portrait, LSMS survey 2013), FAO 2018, I9930EN",
+  "tier": "T2"
+ },
+ "1.7": {
+  "value": "7% of smallholder households were credit beneficiaries (FAO Smallholder Data Portrait, LSMS-ISA 2012/13; 'other farms' 6%). Fresher national survey (EFInA A2F 2023): ~2% of farmers borrowed from formal providers in the p",
+  "cls": "Documented",
+  "level": 1,
+  "year": 2013,
+  "src": "FAO Small Family Farms Country Factsheet - Nigeria (Smallholder Data Portrait, LSMS survey 2013), FAO 2018, I9930EN",
+  "tier": "T2"
+ },
+ "1.8": {
+  "value": "No national estimate. Regional T2 evidence: survey of smallholder farmers in Nigeria's North Central and Northwest zones (CABI Agriculture and Bioscience, Sept 2023; fieldwork 2022) - 87.2% had adopted at least one clima",
+  "cls": "Documented",
+  "level": null,
+  "year": 2022,
+  "src": "State of climate smart agriculture (CSA) practices in the North Central and Northwest zones Nigeria - CABI Agriculture and Bioscience (2023)",
+  "tier": "T2"
+ },
+ "8.1": {
+  "value": 19.9,
+  "cls": "Measured",
+  "level": 2,
+  "year": 2023,
+  "src": "World Bank WDI SN.ITK.DEFC.ZS",
+  "tier": "T1"
+ },
+ "8.5": {
+  "value": "SDG 5.a.1(b): women are 31.6% of owners or rights-bearers of agricultural land (Nigeria GHS-Panel Wave 4, 2018/19; earlier waves 24.0% in 2013, 23.4% in 2016). SDG 5.a.1(a): 23.5% of the female agricultural population ho",
+  "cls": "Documented",
+  "level": null,
+  "year": 2019,
+  "src": "UN SDG Global Database - indicator 5.a.1, Nigeria (series SP_GNP_WNOWNS and SP_LGL_LNDAGSEC; source: NBS General Household Survey Panel)",
+  "tier": "T1"
+ },
+ "2.1": {
+  "value": "Rural 4G population coverage: 48% (2024, GSMA geospatial coverage modeling). National population coverage as at Dec 2024 (NCC Table 3): 2G 95.31%, 3G 89.42%, 4G LTE 84.60%, 5G 13.28%. A rural 3G-or-above figure is not p",
+  "cls": "Documented",
+  "level": 3,
+  "year": 2024,
+  "src": "GSMA, Sub-Saharan Africa 2024 Year in Review (Jan 2025), p.9 — geospatial analysis: Nigeria 4G coverage 41% (2019) to 84% (2024), rural 48%",
+  "tier": "T4"
+ },
+ "2.4": {
+  "value": 41.21139908,
+  "cls": "Measured",
+  "level": 3,
+  "year": 2024,
+  "src": "World Bank WDI IT.NET.USER.ZS",
+  "tier": "T1"
+ },
+ "2.5": {
+  "value": 1.56,
+  "cls": "Measured",
+  "level": 4,
+  "year": 2025,
+  "src": "ITU DataHub — Data-only mobile broadband basket (2GB/month), Nigeria, % of GNI per capita, 2025 observation (price data collected 2025)",
+  "tier": "T1"
+ },
+ "2.7": {
+  "value": 28.9,
+  "cls": "Measured",
+  "level": 2,
+  "year": 2024,
+  "src": "NBS / World Bank LSMS, Nigeria General Household Survey–Panel Wave 5 (2023/24) Survey Report, Table 3.15 'Household Assets by place of residence' (p.102): smartphone — rural 28.9%, urban 57.1%, national 37.8% (share of households)",
+  "tier": "T1"
+ },
+ "2.9": {
+  "value": 23.5,
+  "cls": "Measured",
+  "level": 2,
+  "year": 2024,
+  "src": "World Bank WDI EG.ELC.ACCS.RU.ZS",
+  "tier": "T1"
+ },
+ "2.11": {
+  "value": "Device financing schemes EXIST and multiple are operating. (a) Telco-led/commercial (operating): MTN Nigeria + Intelligra BNPL smartphone financing (launched Oct 2022; 6–12-month instalments, bundled data/airtime); Globa",
+  "cls": "Documented",
+  "level": 3,
+  "year": 2026,
+  "src": "CREDICORP (FGN) — C.L.I.C.K.D. programme page (official, undated; accessed 2026-08-22); GSMA, Accelerating Smartphone Adoption in Africa (Nov 2025), Nigeria chapter p.60",
+  "tier": "T3"
+ },
+ "3.1": {
+  "value": 0.4815,
+  "cls": "Measured",
+  "level": 3,
+  "year": 2024,
+  "src": "UN E-Government Knowledgebase — Nigeria country profile (UN E-Government Survey 2024)",
+  "tier": "T1"
+ },
+ "3.3": {
+  "value": "National Digital Farmers Registry: NIN-anchored FMAFS-NIMC farmer registry + G2P biometric card project launched 16 Jan 2025; National Stakeholder Workshop on registry best practices / farmer-data harmonisation held 20 N",
+  "cls": "Documented",
+  "level": 2,
+  "year": 2025,
+  "src": "NIMC press release: FMAFS/NIMC NIN-Enabled Farmer Registry & G2P Card Project (16 Jan 2025)",
+  "tier": "T3"
+ },
+ "3.4": {
+  "value": "National digital cadastre: Announced, not operating. FG-World Bank National Land Registration, Documentation and Titling Programme (NLRDTP, branded 'Land4Growth') agreement signed 11 Sep 2024; National (Digital) Land Inf",
+  "cls": "Documented",
+  "level": 2,
+  "year": 2025,
+  "src": "FMHUD: FG Partners World Bank To Develop National Land Digital System (14 Nov 2024)",
+  "tier": "T3"
+ },
+ "3.5": {
+  "value": "NBS Microdata Catalog operating: 107 studies (checked 22 Aug 2026), including NASC 2022 agricultural census microdata (30,546 EAs; 767/774 LGAs; DDI/XML/JSON metadata; 5,342 downloads) and NASS 2023 with public-use files",
+  "cls": "Documented",
+  "level": null,
+  "year": 2026,
+  "src": "NBS Microdata Catalog — National Agricultural Sample Census 2022 (NGA-NBS-NASC-2022)",
+  "tier": "T1"
+ },
+ "3.6": {
+  "value": "NiMet operational national service: 2026 Seasonal Climate Prediction unveiled 10 Feb 2026 — annual national product with state-level onset/cessation, dry-spell and temperature detail explicitly directed at farmers and ra",
+  "cls": "Documented",
+  "level": 4,
+  "year": 2026,
+  "src": "NiMet: NiMet Unveils 2026 Seasonal Climate Prediction (10 Feb 2026)",
+  "tier": "T3"
+ },
+ "3.7": {
+  "value": "Satellite/EO in agriculture is institutionally adopted but operationally early. NASRDA (Dept of Space Science Applications) has an MoU with FMAFS to supply satellite imagery, real-time monitoring and technical leadership",
+  "cls": "Documented",
+  "level": 3,
+  "year": 2026,
+  "src": "Space in Africa: NASRDA Opens Three-Day Workshop on Satellite-Based Irrigation Mapping in Nigeria (4 Mar 2026)",
+  "tier": "T4"
+ },
+ "3.8": {
+  "value": "Nigerian Farmers Soil Health Scheme (NFSHS) launched by President Tinubu (FMAFS, reported 15 Oct 2025) with three components: soil health cards, soil-testing laboratories, and the Nigeria Soil Information System (NiSIS)",
+  "cls": "Documented",
+  "level": 3,
+  "year": 2026,
+  "src": "FMAFS: FG Begins Validation of First National Soil Policy, Using Ward-Level Data (Jul 2026)",
+  "tier": "T3"
+ },
+ "3.11": {
+  "value": "No published agricultural data interoperability standard or schema found after active refutation attempts. Nearest artifacts, none ag-specific and none an adopted ag-data standard: Nigeria e-Government Interoperability F",
+  "cls": "Documented",
+  "level": 1,
+  "year": 2026,
+  "src": "NITDA: Nigeria e-Government Interoperability Framework (Ne-GIF) — nearest adjacent artifact, government-wide only",
+  "tier": "T3"
+ },
+ "4.1": {
+  "value": "NDPA 2023 in force (assented 12 June 2023, per official Act text); NDPC operational and enforcing: GAID 2025 issued 20 March 2025 (signed by National Commissioner Olatunji); NDPC Annual Report 2025 records 146 investigat",
+  "cls": "Documented",
+  "level": 4,
+  "year": 2025,
+  "src": "NDPA 2023 (Act text); NDPC Annual Report 2025 (146 investigations, 306 DPCOs); GAID 2025",
+  "tier": "T3"
+ },
+ "4.2": {
+  "value": 0.824,
+  "cls": "Measured",
+  "level": 5,
+  "year": 2024,
+  "src": "ITU Global Cybersecurity Index 2024 (5th edition), Nigeria country profile, report p.45",
+  "tier": "T1"
+ },
+ "4.3": {
+  "value": 43.33,
+  "cls": "Measured",
+  "level": 3,
+  "year": 2024,
+  "src": "Oxford Insights Government AI Readiness Index 2024 (report, full rankings table)",
+  "tier": "T4"
+ },
+ "4.4": {
+  "value": "No adopted national digital agriculture strategy as of Aug 2026. The Nigeria Digital Agriculture Strategy (NDAS) 2020-2030 remains a DRAFT (Nov 2020) on NITDA's site, still framed as open for stakeholder input. The opera",
+  "cls": "Documented",
+  "level": 2,
+  "year": 2026,
+  "src": "NITDA - Draft National Digital Agriculture Strategy (NDAS) page + draft PDF (Nov 2020)",
+  "tier": "T3"
+ },
+ "4.5": {
+  "value": "Absent - refutation attempted and failed. No agricultural data governance framework (sector rules on agricultural data sharing, ownership, or access) was found in force. NASIP 2026 (the sector's flagship plan) contains n",
+  "cls": "Documented",
+  "level": 1,
+  "year": 2026,
+  "src": "National Agri-food Systems Investment Plan (NASIP) 2026, FMAFS - full text checked (negative finding)",
+  "tier": "T3"
+ },
+ "4.6": {
+  "value": "Final National Artificial Intelligence Strategy published September 2025 (81 pp, FMCIDE, hosted on NCAIR/NITDA official site, dated 19-09-2025, no draft watermark; the August 2024 predecessor was watermarked DRAFT). Agri",
+  "cls": "Documented",
+  "level": 3,
+  "year": 2025,
+  "src": "National Artificial Intelligence Strategy, September 2025 (FMCIDE/NCAIR)",
+  "tier": "T3"
+ },
+ "4.7": {
+  "value": 79.0803710088225,
+  "cls": "Measured",
+  "level": 4,
+  "year": 2024,
+  "src": "World Bank Identification for Development (ID4D) — ID ownership, total (% of population ages 15+), Nigeria",
+  "tier": "T1"
+ },
+ "4.9": {
+  "value": "No standing inter-ministerial body coordinating digital agriculture (FMAFS + FMCIDE/NITDA) found - refutation attempted. Coordination is project-based and multiplying: FMAFS-NIMC NIN-enabled Farmer Registry & G2P Card pr",
+  "cls": "Documented",
+  "level": 1,
+  "year": 2026,
+  "src": "FMAFS - Nigeria launches National Digital Farmers Registry (workshop + Multi-Stakeholder Knowledge-Sharing Platform), 20 Nov 2025",
+  "tier": "T3"
+ },
+ "5.2": {
+  "value": 70.4100036621094,
+  "cls": "Measured",
+  "level": 3,
+  "year": 2024,
+  "src": "World Bank WDI SE.ADT.LITR.ZS",
+  "tier": "T1"
+ },
+ "5.3": {
+  "value": 9.74153350922586,
+  "cls": "Measured",
+  "level": null,
+  "year": 2011,
+  "src": "World Bank WDI SE.TER.ENRR",
+  "tier": "T1"
+ },
+ "5.4": {
+  "value": "PROXY (rural population, not farmers - construct defect logged): MICS 2021 measured basic digital-skill tasks with rural/gender splits; rural shares in single digits to low teens",
+  "cls": "Documented",
+  "level": null,
+  "year": 2021,
+  "src": "World Bank-Mastercard Foundation 'Digital Skills in Nigeria' (MICS 2021/NBS-UNICEF)",
+  "tier": "T2"
+ },
+ "5.5": {
+  "value": "Operating — NAERLS (federal extension agency under FMAFS, at ABU Zaria) has run a dedicated e-Extension department since January 2017, operating the National Farmers Helpline call center (Hausa/Igbo/Yoruba/English, natio",
+  "cls": "Documented",
+  "level": 3,
+  "year": 2026,
+  "src": "FMINO official release: FMAFS and ACReSAL Partner with World Bank to Transition ; NAERLS e-Extension & NFHL pages",
+  "tier": "T3"
+ },
+ "5.7": {
+  "value": "Absent as a standing unit — FMAFS's official published structure (11 service departments, 12 technical departments, 3 units) names no digital, ICT, data, e-agriculture or AI department or unit. Digital-agriculture functi",
+  "cls": "Documented",
+  "level": 1,
+  "year": 2026,
+  "src": "FMAFS — Structure (official ministry organogram page)",
+  "tier": "T3"
+ },
+ "5.8": {
+  "value": "Operating (generic digital-talent pipeline; agtech-specific bridging undocumented) — the federal 3MTT (3 Million Technical Talent) programme, run by the Federal Ministry of Communications, Innovation & Digital Economy wi",
+  "cls": "Documented",
+  "level": 3,
+  "year": 2026,
+  "src": "3MTT — official programme site (FMCIDE/NITDA)",
+  "tier": "T3"
+ },
+ "5.12": {
+  "value": "DATA GAP — searched: NCC Baseline Study on the Level of Digital Skills in Nigeria (RD-1) — read; measures women's general digital skills, no digital-agriculture workforce split; GSMA AgriTech programme page attempted for women-in-agritech workforce data (HTTP 403, unretrievable at capture). No NBS or ILO series for digital-ag workforce gender composition was located before the session's search budget was exhausted. Accessed 2026-08-22.",
+  "cls": "Gap",
+  "level": null,
+  "year": 2026,
+  "src": "Structured source search, 22 August 2026",
+  "tier": ""
+ },
+ "6.1": {
+  "value": 21.1,
+  "cls": "Measured",
+  "level": 1,
+  "year": 2025,
+  "src": "WIPO Global Innovation Index 2025, Executive Version — GII 2025 rankings table (row: '105 Nigeria 21.1 18 11')",
+  "tier": "T1"
+ },
+ "6.3": {
+  "value": "DATA GAP — searched World Bank B-READY covered-economies page (Nigeria absent from the 2024 cohort of 50 and the 2025 cohort of +52; Nigeria listed in the planned 2026 cohort of +62), B-READY reports/publications pages (latest published edition as of 2026-08-22 is B-READY 2025; the 2026 edition that first covers Nigeria is not yet released). No B-READY score for Nigeria exists.",
+  "cls": "Gap",
+  "level": null,
+  "year": 2026,
+  "src": "Structured source search, 22 August 2026",
+  "tier": ""
+ },
+ "6.4": {
+  "value": "Operating, funded agtech cohort with named ventures: ThriveAgric (named in AgFunder H1-2024 Africa report coverage), Crop2Cash (GSMA Innovation Fund grantee; 500,000+ smallholders reached), Hello Tractor (GSMA grantee, N",
+  "cls": "Documented",
+  "level": 3,
+  "year": 2024,
+  "src": "AgFunder Developing Markets AgriFoodTech Investment Report 2025 (via AgFunderNews report summary, 2024 data)",
+  "tier": "T4"
+ },
+ "6.9": {
+  "value": "Multiple named PPPs in digital agriculture, mostly newly signed: (1) FMAFS + Cooperative Federation of Nigeria + Seamfix Ltd MOU (12 Aug 2026) to deploy the National Cooperative Digital Identity System — National Coopera",
+  "cls": "Documented",
+  "level": 3,
+  "year": 2026,
+  "src": "FMAFS: FG signs MOU to deploy National Cooperative Digital Identity System (12 Aug 2026)",
+  "tier": "T3"
+ },
+ "6.12": {
+  "value": "Absent — no registered agriculture digital public good found in Nigerian national use. The DPG registry's agriculture-relevant entries (farmOS, FarmStack, FAO Digital Services Portfolio — AgriMarketplace and Weather & Cr",
+  "cls": "Documented",
+  "level": 1,
+  "year": 2024,
+  "src": "DPG Alliance registry dataset, digitalpublicgoods/ entries (repo archived Aug 2024)",
+  "tier": "T4"
+ },
+ "6.13": {
+  "value": "Interim (2024): 88% of Nigerian MSMEs use smartphones in business operations; 57% desktop/laptop; construct does not map to 'digital tools adoption %'. World Bank Enterprise Surveys NEW Nigeria baseline (fieldwork Feb-Sep 2025, 1,043 firms) released Oct 2025 - digital module to be pulled at refresh",
+  "cls": "Documented",
+  "level": null,
+  "year": 2024,
+  "src": "GSMA/industry MSME survey (interim); WB Enterprise Surveys Nigeria 2025",
+  "tier": "T4"
+ },
+ "6.14": {
+  "value": "Agri-fintech rails present and operating with quantified smallholder reach on one rail: Crop2Cash (USSD CashCard — digital identity, input finance, payments for unbanked farmers) 'has reached over 500,000 smallholder far",
+  "cls": "Documented",
+  "level": 3,
+  "year": 2024,
+  "src": "GSMA M4D blog: 'Ensuring food security by solving the agricultural information gap' (29 Aug 2024; Crop2Cash figures)",
+  "tier": "T4"
+ },
+ "3.9": {
+  "value": "At least one digital advisory platform verified above the 10k-user bar: Crop2Cash — 500,000+ smallholder farmers reached via USSD-based advisory (climate-smart content) plus marketplace/finance (reported by GSMA, grantee",
+  "cls": "Documented",
+  "level": 4,
+  "year": 2024,
+  "src": "GSMA M4D blog: 'Ensuring food security by solving the agricultural information gap' (29 Aug 2024)",
+  "tier": "T4"
+ },
+ "3.10": {
+  "value": "Operating agricultural e-commerce/marketplace platforms, with stale or self-reported scale figures: AFEX (commodities exchange with digital trading platform, Abuja/Lagos) — 'over 300,000 farmers on our platform' per its",
+  "cls": "Documented",
+  "level": 3,
+  "year": 2022,
+  "src": "AgFunderNews: 'Q&A: AFEX's $100m bond aims to unlock climate-smart capital for Nigeria's ag sector' (14 Jan 2022)",
+  "tier": "T4"
+ },
+ "7.2": {
+  "value": "National Agro-Productivity System (NAPS) — billed as Nigeria's first national crop-monitoring platform powered by satellite imagery and AI (5-day-refresh imagery, automatic farm identification, real-time yield/land-use/f",
+  "cls": "Judged",
+  "level": 2,
+  "year": 2026,
+  "src": "Space in Africa: 'Nigeria to Deploy AI and Satellite-Powered Crop Monitoring System' (21 Jul 2026)",
+  "tier": "T5"
+ },
+ "7.12": {
+  "value": "General cross-sector AI/automated-decision safeguards adopted and in force; nothing agriculture-specific. NDPC General Application and Implementation Directive (GAID) 2025 under NDPA 2023 (document dated 20 Mar 2025; law",
+  "cls": "Documented",
+  "level": 3,
+  "year": 2025,
+  "src": "NDPC, Nigeria Data Protection Act — General Application and Implementation Directive (GAID) 2025, 20 March 2025 (official PDF)",
+  "tier": "T3"
+ },
+ "8.2": {
+  "value": 52.2155914465012,
+  "cls": "Measured",
+  "level": 3,
+  "year": 2024,
+  "src": "World Bank WDI FX.OWN.TOTL.FE.ZS (Global Findex wave)",
+  "tier": "T1"
+ },
+ "8.4": {
+  "value": 32.8,
+  "cls": "Measured",
+  "level": 3,
+  "year": 2024,
+  "src": "World Bank Global Findex Database 2025 — Mobile money account (% age 15+), Nigeria, 2024",
+  "tier": "T1"
+ },
+ "8.6": {
+  "value": 4.1,
+  "cls": "Measured",
+  "level": 4,
+  "year": 2024,
+  "src": "World Bank Global Findex Database 2025 — Own a mobile phone (% age 15+), Nigeria 2024: women 81.70 (con1.1), men 85.84 (con1.2); gap = 4.1 pp (derived by subtraction)",
+  "tier": "T1"
+ },
+ "8.9": {
+  "value": "No national percentage measured. Closest datum with real provenance (stale, 2018-19): CTA/Dalberg 'Digitalisation of African Agriculture Report 2018-2019', Nigeria annex — ~0.5 million users of D4Ag solutions headquarter",
+  "cls": "Documented",
+  "level": null,
+  "year": 2019,
+  "src": "CTA/Dalberg, The Digitalisation of African Agriculture Report 2018-2019, Nigeria annex pp. 181-184 and endnote 172 (verified in full text)",
+  "tier": "T4"
+ },
+ "8.11": {
+  "value": "DATA GAP — searched: T1 ITU/NBS/Findex (no statistic on language coverage of digital agriculture services exists); T2 none located; T3 FMAFS/NAERLS (no service-language audit or registry published); T4 GSMA (gsma.com 403/404 to all fetches 2026-08-22), CTA/Dalberg D4Ag 2019 full text grepped for local-language evidence (mentions are Ghana/India examples — Farmerline, Esoko IVR, MyAgriGuru — no Nigeria share or count). No source names a percentage of Nigerian digital-ag services available in local languages.",
+  "cls": "Gap",
+  "level": null,
+  "year": 2026,
+  "src": "Structured source search, 22 August 2026",
+  "tier": ""
+ },
+ "8.12": {
+  "value": "Independent, peer-reviewed impact evidence EXISTS for digital agriculture in Nigeria. Anchor study (content verified at capture): Arouna, Michler, Yergo & Saito (2021), 'One size fits all? Experimental evidence on the digi",
+  "cls": "Documented",
+  "level": 3,
+  "year": 2021,
+  "src": "Arouna, Michler, Yergo & Saito (2021), American Journal of Agricultural Economics 103(2): 596-619, doi:10.1111/ajae.12151",
+  "tier": "T2"
+ },
+ "8.17": {
+  "value": "DATA GAP — searched: T1 WDI/FAOSTAT (no climate-advisory-reach series); T3 NiMet: website unreachable 2026-08-22 (nimet.gov.ng returns a 307 redirect loop; www.nimet.gov.ng refuses connections), so SCP 2026 dissemination documentation could not be checked for a reach figure; T3 NAERLS: 2025 Agricultural Performance Survey release read — reports production, prices and climate risks but no percentage of farmers receiving weather/climate advisories, and the full APS PDF is not linked; T2: no national peer-reviewed reach estimate located at capture.",
+  "cls": "Gap",
+  "level": null,
+  "year": 2026,
+  "src": "Structured source search, 22 August 2026",
+  "tier": ""
+ }
+}

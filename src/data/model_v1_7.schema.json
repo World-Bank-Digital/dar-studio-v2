@@ -1,0 +1,137 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://worldbank.org/dar/damm/v1.7/model.schema.json",
+  "title": "DAMM model file",
+  "description": "The canonical machine-readable Digital Agriculture Maturity Model. Model only: indicator metadata and rules. Country observations, assessments and outputs are separate payloads.",
+  "type": "object",
+  "required": ["model", "version", "revision", "ratified", "config", "pillars", "layers",
+               "use_cases", "evidence_classes", "source_tiers", "bands", "binding_rules",
+               "indicators", "open_decisions", "prohibitions"],
+  "properties": {
+    "model": { "const": "DAMM" },
+    "version": { "type": "string", "pattern": "^\\d+\\.\\d+$" },
+    "revision": { "type": "integer", "minimum": 1,
+      "description": "Bump on every change to a ratifiable value. Consumers pin on version+revision." },
+    "ratified": { "type": "boolean",
+      "description": "False while any entry in open_decisions is unresolved. A consumer must not present unratified values as settled." },
+    "generated_from": { "type": "string" },
+    "prohibitions": { "type": "array", "minItems": 4, "items": { "type": "string" } },
+    "config": {
+      "type": "object",
+      "required": ["assessment_year", "staleness_years", "readiness_threshold", "leapfrog_threshold", "rounding"],
+      "properties": {
+        "assessment_year": { "type": "integer" },
+        "staleness_years": { "type": "integer", "minimum": 1 },
+        "readiness_threshold": { "type": "number" },
+        "leapfrog_threshold": { "type": "number" },
+        "rounding": { "const": "half-up" }
+      }
+    },
+    "pillars": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "object",
+        "required": ["name", "reading"],
+        "properties": {
+          "name": { "type": "string" },
+          "reading": { "enum": ["need", "capability", "outcome"],
+            "description": "How the pillar is read. A 'need' pillar is NOT digital maturity: a low reading is a large opportunity." }
+        }
+      }
+    },
+    "layers": { "type": "array", "items": { "enum": ["Foundation", "Enablers", "Transformation", "Outcomes"] } },
+    "use_cases": { "type": "object", "additionalProperties": { "type": "string" } },
+    "evidence_classes": {
+      "type": "array", "minItems": 4,
+      "items": {
+        "type": "object",
+        "required": ["id", "derived_from", "levels"],
+        "properties": { "id": { "enum": ["Measured", "Documented", "Judged", "Gap"] } }
+      }
+    },
+    "source_tiers": {
+      "type": "object",
+      "required": ["T1", "T2", "T3", "T4", "T5"],
+      "additionalProperties": { "type": "string" }
+    },
+    "bands": {
+      "type": "array", "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["name", "lo", "hi"],
+        "properties": {
+          "name": { "type": "string" },
+          "lo": { "type": "number" },
+          "hi": { "type": "number" }
+        }
+      },
+      "description": "Half-open [lo, hi). Governed by open decision 13.1."
+    },
+    "binding_rules": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "rule", "ratified"],
+        "properties": {
+          "id": { "type": "string" },
+          "rule": { "type": "string" },
+          "ratified": { "type": "boolean" },
+          "decision": { "type": "string" }
+        }
+      }
+    },
+    "indicators": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["id", "name", "pillar", "layer", "use_cases", "tags", "prerequisite", "method", "direction", "thresholds"],
+        "properties": {
+          "id": { "type": "string", "pattern": "^\\d+\\.\\d+$" },
+          "name": { "type": "string" },
+          "pillar": { "type": "string" },
+          "layer": { "enum": ["Foundation", "Enablers", "Transformation", "Outcomes"] },
+          "use_cases": { "type": "array", "items": { "type": "string" } },
+          "tags": { "type": "array", "items": { "type": "string" } },
+          "prerequisite": {
+            "type": ["string", "null"],
+            "description": "UNIVERSAL | UC:<comma-list> | DELIVERY | null"
+          },
+          "method": { "enum": ["threshold", "ladder"] },
+          "direction": { "enum": ["higher-is-better", "lower-is-better", null] },
+          "thresholds": {
+            "type": ["array", "null"],
+            "items": { "type": "number" },
+            "minItems": 4, "maxItems": 4,
+            "description": "Four cut-points; level = 1 + how many are met."
+          },
+          "absorbs": { "type": "array", "items": { "type": "string" } },
+          "thresholds_ratified": { "type": "boolean",
+            "description": "Present and false where the cut-points are still test values (13.6)." },
+          "ratification": {
+            "type": "object",
+            "required": ["open_question", "decision"],
+            "properties": {
+              "open_question": { "type": "string" },
+              "severity": { "enum": ["asserts-falsehood", "construct-drift", "unit-ambiguity"] },
+              "decision": { "type": "string" }
+            },
+            "description": "Present where the row carries an open definitional question (13.5)."
+          }
+        }
+      }
+    },
+    "open_decisions": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "title", "governs"],
+        "properties": {
+          "id": { "type": "string", "pattern": "^13\\.\\d+$" },
+          "title": { "type": "string" },
+          "governs": { "type": "array", "items": { "type": "string" } }
+        }
+      }
+    }
+  }
+}
