@@ -16,9 +16,7 @@
     "test": "node --experimental-strip-types --test src/lib/**/*.test.ts src/lib/damm/*.test.ts scripts/**/*.test.mjs",
     "lint": "eslint .",
     "format": "prettier --write .",
-    "qa:delivery": "node scripts/qa-delivery.mjs",
-    "qa:auth": "node scripts/qa-auth.mjs",
-    "qa:loop": "node scripts/qa-loop.mjs"
+    "qa:auth": "node scripts/qa-auth.mjs"
   },
   "dependencies": {
     "@better-auth/passkey": "^1.6.29",

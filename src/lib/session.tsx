@@ -1,6 +1,5 @@
 import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
-import { getSettings, saveSettings } from "@/lib/damm/actions";
-import { model } from "@/lib/damm/model";
+import { getSettings, saveSettings } from "@/lib/damm-v17/actions";
 import { useCurrentUser } from "@/lib/auth/use-current-user";
 
 type Session = {
@@ -55,4 +54,19 @@ export function useSessionRole() {
   return ctx;
 }
 
-export const ACTING_ROLES = model.roles;
+/**
+ * Acting roles are part of the engagement chassis, not the model: who may act
+ * is an app concern, while the model only records who did.
+ */
+export const ACTING_ROLES = [
+  "TTL",
+  "Assessment lead",
+  "Evidence panel",
+  "Digital authority",
+  "Statistics office",
+  "Private-sector panel",
+  "Farmer representative",
+  "Independent challenger",
+  "Steering committee",
+  "Model steward",
+];

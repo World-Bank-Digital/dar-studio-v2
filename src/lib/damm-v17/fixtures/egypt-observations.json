@@ -5,7 +5,8 @@
   "level": 4,
   "year": 2025,
   "src": "World Bank WDI NV.AGR.EMPL.KD",
-  "tier": "T1"
+  "tier": "T1",
+  "url": "https://api.worldbank.org/v2/country/EGY/indicator/NV.AGR.EMPL.KD?format=json&mrnev=1&per_page=5"
  },
  "1.2": {
   "value": 7402.2,
@@ -13,7 +14,8 @@
   "level": 5,
   "year": 2023,
   "src": "World Bank WDI AG.YLD.CREL.KG",
-  "tier": "T1"
+  "tier": "T1",
+  "url": "https://api.worldbank.org/v2/country/EGY/indicator/AG.YLD.CREL.KG?format=json&mrnev=1&per_page=5"
  },
  "1.3": {
   "value": 17.5246443528294,
@@ -21,7 +23,8 @@
   "level": 3,
   "year": 2025,
   "src": "World Bank WDI SL.AGR.EMPL.ZS (ILO modeled estimate)",
-  "tier": "T1"
+  "tier": "T1",
+  "url": "https://api.worldbank.org/v2/country/EGY/indicator/SL.AGR.EMPL.ZS?format=json&mrnev=1&per_page=5"
  },
  "1.4": {
   "value": 109.07,
@@ -29,7 +32,8 @@
   "level": 3,
   "year": 2022,
   "src": "World Bank WDI AG.PRD.FOOD.XD",
-  "tier": "T1"
+  "tier": "T1",
+  "url": "https://api.worldbank.org/v2/country/EGY/indicator/AG.PRD.FOOD.XD?format=json&mrnev=1&per_page=5"
  },
  "1.5": {
   "value": "No single national post-harvest loss rate exists. Cereals (labelled, admissible): ~10% pre- and post-harvest losses (SADS 2030, estimate c.2009); wheat losses in traditional shona storage 10-20% (FAO 2019). Horticulture:",
@@ -37,7 +41,8 @@
   "level": 4,
   "year": 2019,
   "src": "FAO (2019), Food loss and waste in Egypt, CA4310EN, FAO Representation in Egypt",
-  "tier": "T2"
+  "tier": "T2",
+  "url": "https://openknowledge.fao.org/server/api/core/bitstreams/3d94597d-cc5c-420a-8faa-0fe284d5c921/content"
  },
  "1.6": {
   "value": "No national figure. Upper Egypt (regional, labelled): 6% of surveyed smallholder households participate in contract farming (farm household survey Apr-May 2018, seven Upper Egypt governorates, n=2,237 households; IFPRI).",
@@ -45,7 +50,8 @@
   "level": 1,
   "year": 2018,
   "src": "Tabe-Ojong, M.P. Jr. & Abay, K.A. (2023), Smallholder farmers' participation in profitable value chains and contract farming: Evidence from irrigated agriculture in Egypt, IFPRI MENA Working Paper 42",
-  "tier": "T2"
+  "tier": "T2",
+  "url": "https://cgspace.cgiar.org/items/b1bc85c0-7505-4fb7-9957-d7588eea9756"
  },
  "1.7": {
   "value": "No direct '% of farmers with agricultural credit' figure exists for Egypt. Nearest labelled figures: only 2.3% of rural individuals aged 15+ had loans from formal financial institutions (ELMPS 2018, CAPMAS national panel",
@@ -53,7 +59,8 @@
   "level": 1,
   "year": 2018,
   "src": "Mansour, S., Samak, N. & Gad, N. (2024), Credit Choices in Rural Egypt: A Comparative Study of Formal and Informal Borrowing, Journal of Risk and Financial Management 17(11): 487",
-  "tier": "T2"
+  "tier": "T2",
+  "url": "https://doi.org/10.3390/jrfm17110487"
  },
  "1.8": {
   "value": "No all-practice national CSA rate. Practice-specific (labelled): raised-bed wheat cultivation tripled 113,500 ha (2013/14) to 334,000 ha (2016/17) ~46% of wheat area; laser levelling and deficit-irrigation adoption documented",
@@ -61,7 +68,8 @@
   "level": null,
   "year": 2017,
   "src": "USDA GAIN Egypt grain report (primary PDF); FAO/WB corroboration",
-  "tier": "T4"
+  "tier": "T4",
+  "url": "https://apps.fas.usda.gov/newgainapi/api/report/downloadreportbyfilename?filename=Grain%20and%20Feed%20Annual_Cairo_Egypt_3-15-2017.pdf"
  },
  "8.1": {
   "value": 9.4,
@@ -69,7 +77,8 @@
   "level": 3,
   "year": 2023,
   "src": "World Bank WDI SN.ITK.DEFC.ZS",
-  "tier": "T1"
+  "tier": "T1",
+  "url": "https://api.worldbank.org/v2/country/EGY/indicator/SN.ITK.DEFC.ZS?format=json&mrnev=1&per_page=5"
  },
  "8.5": {
   "value": 3.94,
@@ -77,7 +86,8 @@
   "level": null,
   "year": 2010,
   "src": "FAOSTAT, World Census of Agriculture domain — Egypt, item 'Civil holders, female', element 'Percent of total persons (holders)', Agricultural Census 2009/10 (CAPMAS)",
-  "tier": "T1"
+  "tier": "T1",
+  "url": "https://bulks-faostat.fao.org/production/World_Census_Agriculture_E_All_Data.zip"
  },
  "2.1": {
   "value": "DATA GAP — no rural-specific mobile broadband coverage is published for Egypt by ITU, NTRA or MCIT. Context (not scored): national population coverage at least 3G = 99.8% (ITU DataHub, 2025)",
@@ -85,7 +95,8 @@
   "level": null,
   "year": 2025,
   "src": "Structured source search, 22 August 2026",
-  "tier": ""
+  "tier": "",
+  "url": ""
  },
  "2.4": {
   "value": 74.64839935,
@@ -93,7 +104,8 @@
   "level": 4,
   "year": 2024,
   "src": "World Bank WDI IT.NET.USER.ZS",
-  "tier": "T1"
+  "tier": "T1",
+  "url": "https://api.worldbank.org/v2/country/EGY/indicator/IT.NET.USER.ZS?format=json&mrnev=1&per_page=5"
  },
  "2.5": {
   "value": 0.9,
@@ -101,7 +113,8 @@
   "level": 5,
   "year": 2025,
   "src": "ITU DataHub — Other ICT price baskets: Data-only mobile-broadband basket (2GB) (2021-2024 definition), % of GNI p.c. — Egypt (accessed 2026-08-22)",
-  "tier": "T1"
+  "tier": "T1",
+  "url": "https://datahub.itu.int/data/?e=EGY&i=100123&s=34593"
  },
  "2.7": {
   "value": 67.4,
@@ -109,7 +122,8 @@
   "level": 4,
   "year": 2022,
   "src": "MCIT ICT Indicators Quarterly Bulletin, June 2022 (Q2 2022), p.6 — 'Households with Smartphone according to (Urban/Rural)', reporting the MCIT/CAPMAS 'ICT usage in household and individuals' survey 2021-2022",
-  "tier": "T3"
+  "tier": "T3",
+  "url": "https://mcit.gov.eg/Upcont/Documents/Publications_2482022000_ICT_Indicators_Quarterly_Bulletin_Q2_2022_24082022.pdf"
  },
  "2.9": {
   "value": 100,
@@ -117,7 +131,8 @@
   "level": 5,
   "year": 2024,
   "src": "World Bank WDI EG.ELC.ACCS.RU.ZS",
-  "tier": "T1"
+  "tier": "T1",
+  "url": "https://api.worldbank.org/v2/country/EGY/indicator/EG.ELC.ACCS.RU.ZS?format=json&mrnev=1&per_page=5"
  },
  "2.11": {
   "value": "No government or telco device-financing/subsidy scheme targeting low-income or rural users found for Egypt (searched 2026-08-22). What exists instead: (1) commercial telco handset installments — Telecom Egypt 'WE Gold' p",
@@ -125,7 +140,8 @@
   "level": 1,
   "year": 2026,
   "src": "NTRA (tra.gov.eg) — 'Start of the installment service for fees due on mobile phones imported from abroad through consumer finance companies' (Arabic, 6 April 2026); NTRA — 'End of exceptional exemption on imported mobile phones' (21 Jan 2026)",
-  "tier": "T3"
+  "tier": "T3",
+  "url": "https://www.tra.gov.eg/ar/%D8%A8%D8%AF%D8%A1-%D8%AA%D8%B7%D8%A8%D9%8A%D9%82-%D8%AE%D8%AF%D9%85%D8%A9-%D8%AA%D9%82%D8%B3%D9%8A%D8%B7-%D8%A7%D9%84%D8%B1%D8%B3%D9%88%D9%85-%D8%A7%D9%84%D9%85%D8%B3%D8%AA%D8%AD%D9%82%D8%A9-%D8%B9/"
  },
  "3.1": {
   "value": 0.6699,
@@ -133,7 +149,8 @@
   "level": 4,
   "year": 2024,
   "src": "UN E-Government Knowledgebase — Egypt country profile (E-Government Survey 2024)",
-  "tier": "T1"
+  "tier": "T1",
+  "url": "https://publicadministration.un.org/egovkb/en-us/Data/Country-Information/id/53-Egypt"
  },
  "3.3": {
   "value": "National farmer registry EXISTS and is OPERATING: the MALR 'Farmer Card' (كارت الفلاح) smart-card system is the national electronic agricultural holding registry. MALR spokesperson (via SIS, 28 Mar 2026): ~5 million farm",
@@ -141,7 +158,8 @@
   "level": 4,
   "year": 2026,
   "src": "SIS (State Information Service): 'Agriculture spokesperson: continued efforts to ensure support reaches farmers through the Farmer Card' [Arabic], 28 March 2026",
-  "tier": "T3"
+  "tier": "T3",
+  "url": "https://sis.gov.eg/ar/%D8%A7%D9%84%D9%85%D8%B1%D9%83%D8%B2-%D8%A7%D9%84%D8%A5%D8%B9%D9%84%D8%A7%D9%85%D9%8A/%D8%A7%D9%84%D8%A3%D8%AE%D8%A8%D8%A7%D8%B1/%D9%85%D8%AA%D8%AD%D8%AF%D8%AB-%D8%A7%D9%84%D8%B2%D8%B1%D8%A7%D8%B9%D8%A9-%D8%AC%D9%87%D9%88%D8%AF-%D9%85%D8%B3%D8%AA%D9%85%D8%B1%D8%A9-%D9%84%D8%B6%D9%85%D8%A7%D9%86-%D9%88%D8%B5%D9%88%D9%84-%D8%A7%D9%84%D8%AF%D8%B9%D9%85-%D9%84%D9%84%D9%85%D8%B2%D8%A7%D8%B1%D8%B9%D9%8A%D9%86-%D9%85%D9%86-%D8%AE%D9%84%D8%A7%D9%84-%D9%83%D8%A7%D8%B1%D8%AA-%D8%A7%D9%84%D9%81%D9%84%D8%A7%D8%AD/"
  },
  "3.4": {
   "value": "Digital land registration is ADOPTED but not yet a comprehensive operating digital cadastre. New: Law No. 88 of 2025 (signed 18 June 2025; Official Gazette issue 24-bis, 17 June 2025) establishes a unified national elect",
@@ -149,7 +167,8 @@
   "level": 3,
   "year": 2025,
   "src": "SIS: 'President El-Sisi Signs Law Establishing National Real Estate Identification Number Database' (Law 88/2025), June 2025",
-  "tier": "T3"
+  "tier": "T3",
+  "url": "https://sis.gov.eg/Story/209329/President-El--Sisi-Signs-Law-Establishing-National-Real-Estate-Identification-Number-Database?lang=en-us"
  },
  "3.5": {
   "value": "Open agricultural data is ADOPTED in policy but the national open-data portal is NOT yet live. Egypt's first Open Data Policy (issued by the National Council for Artificial Intelligence, 2025; prepared by MCIT; reported",
@@ -157,7 +176,8 @@
   "level": 2,
   "year": 2025,
   "src": "Open Data Policy, Arab Republic of Egypt — issued by the National Council for Artificial Intelligence, 2025 (official PDF on ai.gov.eg)",
-  "tier": "T3"
+  "tier": "T3",
+  "url": "https://ai.gov.eg/SynchedFiles/en/Resources/Open%20Data%20Policy.pdf"
  },
  "3.6": {
   "value": "Weather/climate data infrastructure is OPERATING with ag-tailored services. The Egyptian Meteorological Authority (EMA) is the operational national met service (official site www.ema.gov.eg resolves; agrometeorology is a",
@@ -165,7 +185,8 @@
   "level": 4,
   "year": 2026,
   "src": "SIS: 'Agriculture issues its recommendations to farmers on dealing with the unstable weather wave in the coming days' [Arabic] (CLAC/ARC advisory)",
-  "tier": "T3"
+  "tier": "T3",
+  "url": "https://sis.gov.eg/ar/%D8%A7%D9%84%D9%85%D8%B1%D9%83%D8%B2-%D8%A7%D9%84%D8%A5%D8%B9%D9%84%D8%A7%D9%85%D9%8A/%D8%A7%D9%84%D8%A3%D8%AE%D8%A8%D8%A7%D8%B1/%D8%A7%D9%84%D8%B2%D8%B1%D8%A7%D8%B9%D8%A9-%D8%AA%D8%B5%D8%AF%D8%B1-%D8%AA%D9%88%D8%B5%D9%8A%D8%A7%D8%AA%D9%87%D8%A7-%D9%84%D9%84%D9%85%D8%B2%D8%A7%D8%B1%D8%B9%D9%8A%D9%86-%D9%81%D9%8A-%D9%83%D9%8A%D9%81%D9%8A%D8%A9-%D8%A7%D9%84%D8%AA%D8%B9%D8%A7%D9%85%D9%84-%D9%85%D8%B9-%D9%85%D9%88%D8%AC%D8%A9-%D8%A7%D9%84%D8%B7%D9%82%D8%B3-%D8%BA%D9%8A%D8%B1-%D9%85%D8%B3%D8%AA%D9%82%D8%B1%D8%A9-%D8%AE%D9%84%D8%A7%D9%84-%D8%A7%D9%84%D8%A3%D9%8A%D8%A7%D9%85-%D8%A7%D9%84%D9%82%D8%A7%D8%AF%D9%85%D8%A9/"
  },
  "3.7": {
   "value": "Satellite/EO integration in agriculture is OPERATING beyond pilots. T3 (MALR press conference, 6 Dec 2021): MALR and MCIT used AI to inventory the cropped area of each crop on the ground ('completed the summer-season cro",
@@ -173,7 +194,8 @@
   "level": 4,
   "year": 2024,
   "src": "MALR: 'Ministers of Agriculture and Communications announce pilot launch of digital transformation services in the agricultural sector' [Arabic], 6 December 2021 (includes completed AI crop-area inventory)",
-  "tier": "T3"
+  "tier": "T3",
+  "url": "https://moa.gov.eg/highlights/%D8%AE%D8%AF%D9%85%D8%A7%D8%AA-%D8%A7%D9%84%D8%AA%D8%AD%D9%88%D9%84-%D8%A7%D9%84%D8%B1%D9%82%D9%85%D9%89/"
  },
  "3.8": {
   "value": "No operating national digital soil map/database service found — best-verified status is ABSENT for a public national digital soil information service, with legacy and research assets: FAO Soils Portal hosts legacy (digit",
@@ -181,7 +203,8 @@
   "level": 1,
   "year": 2026,
   "src": "FAO Soils Portal — Regional and National Soil Maps and Databases (Egypt legacy maps)",
-  "tier": "T1"
+  "tier": "T1",
+  "url": "https://www.fao.org/soils-portal/data-hub/soil-maps-and-databases/regional-and-national-soil-maps-and-databases/en/"
  },
  "3.11": {
   "value": "No published agricultural data interoperability standards/schemas found for Egypt — ABSENT after active refutation attempt. Nearest instruments, none ag-specific: (1) Open Data Policy (NCAI, 2025, T3) mandates cross-gove",
@@ -189,7 +212,8 @@
   "level": 1,
   "year": 2026,
   "src": "Open Data Policy, Arab Republic of Egypt (NCAI, 2025) — closest instrument; no ag-specific standard exists",
-  "tier": "T3"
+  "tier": "T3",
+  "url": "https://ai.gov.eg/SynchedFiles/en/Resources/Open%20Data%20Policy.pdf"
  },
  "4.1": {
   "value": "Personal Data Protection Law No. 151/2020 in force since October 2020; Executive Regulations issued by Decree No. 816/2025 of the Minister of Communications and Information Technology on 1 November 2025, published in the",
@@ -197,7 +221,8 @@
   "level": 3,
   "year": 2025,
   "src": "Shalakany Law Office, \"New Executive Regulations for Egypt's Personal Data Protection Law\" (Dec 2025) — full-text analysis of Decree 816/2025",
-  "tier": "T4"
+  "tier": "T4",
+  "url": "https://shalakany.com/wp-content/uploads/2025/12/New-Executive-Regulations-for-Egypts-Personal-Data-Protection-Law-.pdf"
  },
  "4.2": {
   "value": 100,
@@ -205,7 +230,8 @@
   "level": 5,
   "year": 2024,
   "src": "ITU Global Cybersecurity Index 2024 (5th edition) — Egypt in Tier 1 'Role-modelling' (score band 95-100); exact score 100/100 per NTRA announcement",
-  "tier": "T1"
+  "tier": "T1",
+  "url": "https://www.itu.int/dms_pub/itu-d/opb/hdb/D-HDB-GCI.01-2024-PDF-E.pdf"
  },
  "4.3": {
   "value": 55.63,
@@ -213,7 +239,8 @@
   "level": 3,
   "year": 2024,
   "src": "Oxford Insights Government AI Readiness Index 2024 — Full rankings annex: Egypt total 55.63 (Government 68.98, Technology Sector 42.13, Data & Infrastructure 55.77)",
-  "tier": "T4"
+  "tier": "T4",
+  "url": "https://oxfordinsights.com/wp-content/uploads/2024/12/2024-Government-AI-Readiness-Index.pdf"
  },
  "4.4": {
   "value": "No dedicated national digital agriculture strategy identified as of August 2026. Digital agriculture exists as components inside broader frameworks: (a) the updated Sustainable Agricultural Development Strategy (SADS 203",
@@ -221,7 +248,8 @@
   "level": 1,
   "year": 2021,
   "src": "MCIT press release, 'ICT Minister, Agriculture Minister follow up on joint digital transformation projects', 9 June 2021",
-  "tier": "T3"
+  "tier": "T3",
+  "url": "https://mcit.gov.eg/en/Media_Center/Press_Room/Press_Releases/63422"
  },
  "4.5": {
   "value": "No agricultural data governance framework (sector-specific rules on agricultural data sharing, ownership or use) identified — refutation attempt failed. The general PDPL 151/2020 and its Executive Regulations (Decree 816",
@@ -229,7 +257,8 @@
   "level": 1,
   "year": 2026,
   "src": "OECD, Policies for the Future of Farming and Food in Egypt (agricultural policy review — no agricultural data governance instrument appears)",
-  "tier": "T2"
+  "tier": "T2",
+  "url": "https://www.oecd.org/en/publications/policies-for-the-future-of-farming-and-food-in-egypt_cab0cefd-en/full-report/trends-and-evaluation-of-agricultural-policy-in-egypt_416e1bd0.html"
  },
  "4.6": {
   "value": "Egypt National AI Strategy, 2nd edition (2025-2030), unveiled January 2025 (1st edition 2021), explicitly includes agriculture: named among strategic sectors for AI integration ('agriculture, manufacturing, defense, educ",
@@ -237,7 +266,8 @@
   "level": 4,
   "year": 2025,
   "src": "Egypt National Artificial Intelligence Strategy, Second Edition 2025-2030 (official English text, ai.gov.eg, 16 Jan 2025)",
-  "tier": "T3"
+  "tier": "T3",
+  "url": "https://ai.gov.eg/SynchedFiles/en/Resources/AIstrategy%20English%2016-1-2025-1.pdf"
  },
  "4.7": {
   "value": 98.8,
@@ -245,7 +275,8 @@
   "level": 5,
   "year": 2024,
   "src": "World Bank Identification for Development (ID4D) Data — ID ownership, total (% of population ages 15+), Egypt, 2024 observation: 98.78 (API value 98.7781785562663; source 89, indicator ID.OWN.TOTL.ZS; 2025 dataset update based on the Global Findex 2024 survey round)",
-  "tier": "T1"
+  "tier": "T1",
+  "url": "https://api.worldbank.org/v2/country/EGY/indicator/ID.OWN.TOTL.ZS?format=json&source=89"
  },
  "4.9": {
   "value": "No gazetted standing inter-ministerial committee for digital agriculture identified; what exists and is documented is a continuous de facto coordination mechanism between MALR and MCIT: recurring joint ministerial review",
@@ -253,7 +284,8 @@
   "level": 4,
   "year": 2021,
   "src": "MCIT press release, 9 June 2021 — ICT and Agriculture Ministers follow up on joint digital transformation projects (portfolio listed; MALR digital transformation unit created)",
-  "tier": "T3"
+  "tier": "T3",
+  "url": "https://mcit.gov.eg/en/Media_Center/Press_Room/Press_Releases/63422"
  },
  "5.2": {
   "value": 79.4531619498685,
@@ -261,7 +293,8 @@
   "level": 3,
   "year": 2022,
   "src": "World Bank WDI SE.ADT.LITR.ZS",
-  "tier": "T1"
+  "tier": "T1",
+  "url": "https://api.worldbank.org/v2/country/EGY/indicator/SE.ADT.LITR.ZS?format=json&mrnev=1&per_page=5"
  },
  "5.3": {
   "value": 38.0398346509947,
@@ -269,7 +302,8 @@
   "level": null,
   "year": 2025,
   "src": "World Bank WDI SE.TER.ENRR",
-  "tier": "T1"
+  "tier": "T1",
+  "url": "https://api.worldbank.org/v2/country/EGY/indicator/SE.TER.ENRR?format=json&mrnev=1&per_page=5"
  },
  "5.4": {
   "value": "No national farmer-specific digital-literacy rate is published for Egypt. Best available evidence (regional, single-source): IFPRI RCT baseline phone survey, Minya & Beni Suef governorates, Jul-Sep 2023, n=3,332 farmers:",
@@ -277,7 +311,8 @@
   "level": null,
   "year": 2023,
   "src": "Abdelaziz, F. & Abay, K.A. (2025). Digital literacy training to promote diffusion of digital agricultural tools to smallholder farmers: Evidence from a randomized intervention in Egypt. IFPRI Discussion Paper 2359 (baseline survey Jul-Sep 2023)",
-  "tier": "T2"
+  "tier": "T2",
+  "url": "https://cgspace.cgiar.org/items/18a9ca8e-af59-4f88-a5e1-4b7a2a9155cd"
  },
  "5.5": {
   "value": "Government digital-extension channels are operating: El-Mufeed (FAO/MALR digital advisory app, launched 2020, content produced with ARC, presented to extension agents from all governorates) and Hudhud AI farmer assistant",
@@ -285,7 +320,8 @@
   "level": 4,
   "year": 2025,
   "src": "IFPRI Policy Note Dec 2025 (Digital Services Portfolio/El-Mufeed operating); UN Egypt/FAO-MALR programme page",
-  "tier": "T2"
+  "tier": "T2",
+  "url": "https://cgspace.cgiar.org/server/api/core/bitstreams/d4a33acc-564a-4e4c-a413-81ba3ebd4d90/content"
  },
  "5.7": {
   "value": "A joint MALR-MCIT digital transformation program has been operating since 6 Dec 2021 (Hudhud AI assistant; agricultural e-portal with 20 services in trial operation; AI/satellite crop mapping; quarantine mechanisation; d",
@@ -293,7 +329,8 @@
   "level": null,
   "year": 2021,
   "src": "MCIT-MALR joint press release, 'Digital Transformation Services in Agriculture Announced' (6 December 2021)",
-  "tier": "T3"
+  "tier": "T3",
+  "url": "https://mcit.gov.eg/en/Media_Center/Press_Room/Press_Releases/64824"
  },
  "5.8": {
   "value": "No dedicated agtech/digital-agriculture university degree or certificate program was identified for Egypt. Citable pipeline elements: (1) Digital Egypt Builders Initiative (DEBI, MCIT, launched Sept 2020 in the President",
@@ -301,7 +338,8 @@
   "level": 3,
   "year": 2024,
   "src": "MCIT, Digital Egypt Builders Initiative (DEBI) program page",
-  "tier": "T3"
+  "tier": "T3",
+  "url": "https://mcit.gov.eg/en/Human_Capacity/MCIT/Digital_Egypt_Builders_Initiative"
  },
  "5.12": {
   "value": "DATA GAP — searched WDI/ILO female-agricultural-employment series and MCIT/CAPMAS ICT gender indicators (T1: population-level only, no digital-ag workforce breakdown); FAO Country Gender Assessment of the Agriculture and Rural Sector - Egypt (2022) and FAO Status of Women in Agrifood Systems (2023) (T2: no extension or digital-ag workforce gender share); moa.gov.eg / MALR publications (T3: nothing); GFRAS Worldwide Extension Study Egypt profile and JICA Egypt Country Gender Profile 2018 (T4: extension-staff proxies only, underlying data 2011). Searched 2026-08.",
@@ -309,7 +347,8 @@
   "level": null,
   "year": 2026,
   "src": "Structured source search, 22 August 2026",
-  "tier": ""
+  "tier": "",
+  "url": ""
  },
  "6.1": {
   "value": 24.7,
@@ -317,7 +356,8 @@
   "level": 1,
   "year": 2025,
   "src": "WIPO Global Innovation Index 2025 (full report), GII 2025 rankings table p.18: \"86 Egypt 24.7\"",
-  "tier": "T2"
+  "tier": "T2",
+  "url": "https://www.wipo.int/web-publications/global-innovation-index-2025/assets/89507/global-innovation-index-2025-en.pdf"
  },
  "6.3": {
   "value": "DATA GAP — Egypt is not covered in B-READY 2024 (51 economies) nor in B-READY 2025 (interim edition, 101 economies). Egypt is listed as economy #16 of 71 in the Third B-READY Report cohort (2026 full edition), which is not yet published as of 2026-08-22. Searched: World Bank B-READY publications page; official 'List of Economies Proposed for Inclusion in the First Three Editions of the B-READY Report' (thedocs.worldbank.org); B-READY 2025 report record (documents.worldbank.org); B-READY Methodology Handbook Third Edition (Jan 2026) confirming the 2026 rollout is in progress.",
@@ -325,7 +365,8 @@
   "level": null,
   "year": 2026,
   "src": "Structured source search, 22 August 2026",
-  "tier": ""
+  "tier": "",
+  "url": ""
  },
  "6.4": {
   "value": "Operating agtech venture ecosystem: Egypt is one of Africa's 'big three' agrifoodtech markets (with Kenya and Nigeria); 22 agrifoodtech deals totalling USD 26M in 2024 (+2,775% YoY after a depressed 2023), vs USD 112M ac",
@@ -333,7 +374,8 @@
   "level": 3,
   "year": 2024,
   "src": "AgFunder, Developing Markets AgriFoodTech Investment Report 2025 (Africa: investment by country p.49; top-funded companies pp.53-54; investor list p.80)",
-  "tier": "T4"
+  "tier": "T4",
+  "url": "https://omnivore.vc/uploads/developing_markets_agrifoodtech_investment_report_2025_4_61f213a206.pdf"
  },
  "6.9": {
   "value": "Multiple operating digital-agriculture partnerships with named partners: 'Agri Misr' e-platform (launched 13 Jul 2021: MALR + Ministry of Planning + Agricultural Bank of Egypt + eFinance Investment Group/eAswaaq); FAO x",
@@ -341,7 +383,8 @@
   "level": 4,
   "year": 2025,
   "src": "IFPRI Policy Note (Dec 2025): Digital Agricultural Technology in Egypt — Insights from App Developers (Abdallah, Abdelhadi & Karachiwalla)",
-  "tier": "T2"
+  "tier": "T2",
+  "url": "https://cgspace.cgiar.org/server/api/core/bitstreams/d4a33acc-564a-4e4c-a413-81ba3ebd4d90/content"
  },
  "6.12": {
   "value": "One registered digital public good is operating in Egyptian agriculture: El-Mufeed, the Egypt deployment of the FAO Digital Services Portfolio (a DPG listed on the Digital Public Goods Alliance registry), run with MALR s",
@@ -349,7 +392,8 @@
   "level": 4,
   "year": 2025,
   "src": "FAO e-Agriculture: Proud Contributor Since 2022 — FAO in the 2025 State of the Digital Public Goods Ecosystem Report (DPGA registry includes the FAO Digital Services Portfolio)",
-  "tier": "T1"
+  "tier": "T1",
+  "url": "https://www.fao.org/e-agriculture/news/proud-contributor-2022-fao-leading-innovation-2025-state-digital-public-goods-ecosystem-report"
  },
  "6.13": {
   "value": "DATA GAP — no SME/agribusiness-specific digital-tool adoption percentage exists for Egypt. Searched in order: (1) CAPMAS/MCIT ICT-usage-in-enterprises survey (2019/20, economy-wide only: >70% of surveyed enterprises use computers/internet — no agribusiness breakout), as summarized in OECD 'SME and Entrepreneurship Policy in Egypt' (SME Digitalisation chapter); (2) World Bank Enterprise Surveys Egypt — no agricultural digital-tool adoption indicator; (3) UNDP Digital Agribusiness Map Egypt (2025) — publishes regional agri-tech adoption estimates (Delta 15%, Northern Coastal 10%, Upper Egypt 5%, Desert 3%) but these are farm-level regional estimates, not SME/agribusiness firm-level adoption; (4) IFPRI Dec 2025 policy note and A2K4D/AUC Mar 2025 report — qualitative only; (5) ITU DataHub — no enterprise agribusiness series.",
@@ -357,7 +401,8 @@
   "level": null,
   "year": 2026,
   "src": "Structured source search, 22 August 2026",
-  "tier": ""
+  "tier": "",
+  "url": ""
  },
  "6.14": {
   "value": "Operating agri-fintech rails with documented smallholder reach: national Farmer Card converted to a Meeza payment card on ABE/e-finance rails — 4.2 million smart farmer cards issued (Minister of Agriculture statement, 7",
@@ -365,7 +410,8 @@
   "level": 4,
   "year": 2025,
   "src": "IFPRI Policy Note (Dec 2025): Digital Agricultural Technology in Egypt — Insights from App Developers (harvest-linked finance platform, 5,000-6,000 active farmers/month)",
-  "tier": "T2"
+  "tier": "T2",
+  "url": "https://cgspace.cgiar.org/server/api/core/bitstreams/d4a33acc-564a-4e4c-a413-81ba3ebd4d90/content"
  },
  "3.9": {
   "value": "Multiple digital advisory platforms operating, several above 10k users (platform-reported, compiled by IFPRI): Mahsoly and AlMorshed Poultry 100K+ users each; several other advisory platforms 10K+; farm-management platfo",
@@ -373,7 +419,8 @@
   "level": 4,
   "year": 2025,
   "src": "IFPRI Policy Note (Dec 2025): Digital Agricultural Technology in Egypt — Insights from App Developers",
-  "tier": "T2"
+  "tier": "T2",
+  "url": "https://cgspace.cgiar.org/server/api/core/bitstreams/d4a33acc-564a-4e4c-a413-81ba3ebd4d90/content"
  },
  "3.10": {
   "value": "Multiple agricultural e-commerce/marketplace platforms operating: Mahsoly (crops and land marketplace with El-Obour wholesale price feed; >100K reported users), Mahaseel, Khodarcom, Khodar Supply, Cropsa (aggregation/mar",
@@ -381,7 +428,8 @@
   "level": 4,
   "year": 2025,
   "src": "IFPRI Policy Note (Dec 2025): Digital Agricultural Technology in Egypt — Insights from App Developers",
-  "tier": "T2"
+  "tier": "T2",
+  "url": "https://cgspace.cgiar.org/server/api/core/bitstreams/d4a33acc-564a-4e4c-a413-81ba3ebd4d90/content"
  },
  "7.2": {
   "value": "AI-enabled agricultural solutions deployed but with limited verified reach: Hudhud (MALR x MCIT Arabic AI assistant: chatbot + photo-based pest/disease identification), pilot-launched Dec 2021, live on Google Play (publi",
@@ -389,7 +437,8 @@
   "level": 3,
   "year": 2025,
   "src": "A2K4D/American University in Cairo (MENA AI Observatory), AI Applications for Food Security in Egypt: Practices, Opportunities, and Challenges (Nagla Rizk, March 2025)",
-  "tier": "T4"
+  "tier": "T4",
+  "url": "https://menaobservatory.ai/storage/CHOmuyRvzMEC5LmRtmNQMZHpjlZbEM-metaQTJLNEQgLSBNRU5BIEFJIC0gRm9vZCBTZWN1cml0eSAtIEVneXB0IC0gVjIucGRm-.pdf"
  },
  "7.12": {
   "value": "No agriculture/AI-specific consent or farmer-data-rights safeguards exist beyond the general regime. General regime now operational: PDPL 151/2020 became enforceable in practice with Executive Regulations issued by Minis",
@@ -397,7 +446,8 @@
   "level": 1,
   "year": 2025,
   "src": "Egyptian Charter for Responsible AI v1.0 (NCAI, 2023) — official PDF, ai.gov.eg (full-text searched: no agriculture/farmer provisions)",
-  "tier": "T3"
+  "tier": "T3",
+  "url": "https://ai.gov.eg/SynchedFiles/en/Resources/Egyptian%20Charter%20For%20Responsible%20AI.pdf"
  },
  "8.2": {
   "value": 40.2142182329493,
@@ -405,7 +455,8 @@
   "level": 3,
   "year": 2024,
   "src": "World Bank WDI FX.OWN.TOTL.FE.ZS (Global Findex wave)",
-  "tier": "T1"
+  "tier": "T1",
+  "url": "https://api.worldbank.org/v2/country/EGY/indicator/FX.OWN.TOTL.FE.ZS?format=json&mrnev=1&per_page=5"
  },
  "8.4": {
   "value": 15.6,
@@ -413,7 +464,8 @@
   "level": 2,
   "year": 2024,
   "src": "World Bank, The Little Data Book on Financial Inclusion 2025 (Global Findex Database 2025), Egypt, Arab Rep. country page (p. 56): Mobile money account (% age 15+) = 15.6",
-  "tier": "T1"
+  "tier": "T1",
+  "url": "https://thedocs.worldbank.org/en/doc/be6615202d1f08a25855c8ac2d615122-0050012025/related/Little-Data-Book-2025-Web.pdf"
  },
  "8.6": {
   "value": 14.4,
@@ -421,7 +473,8 @@
   "level": 2,
   "year": 2024,
   "src": "World Bank Global Findex Database 2025, Egypt: Own a mobile phone, men (con1.2) = 91.7% vs women (con1.1) = 77.3%, age 15+, 2024 — gap 14.4 percentage points (derived by subtraction of the two published series)",
-  "tier": "T1"
+  "tier": "T1",
+  "url": "https://api.worldbank.org/v2/country/EGY/indicator/con1.2?source=28&format=json"
  },
  "8.9": {
   "value": "No national share with provenance. Regional (labelled, single-source): IFPRI RCT baseline, Minya & Beni Suef - digital ag service use among surveyed smallholders far below 10%",
@@ -429,7 +482,8 @@
   "level": 1,
   "year": 2023,
   "src": "IFPRI DP 2359 / RCT baseline (CGSpace)",
-  "tier": "T2"
+  "tier": "T2",
+  "url": "https://cgspace.cgiar.org/server/api/core/bitstreams/a95d7429-19f8-4a76-8152-06c"
  },
  "8.11": {
   "value": "No quantified share published; qualitative evidence indicates local-language delivery of flagship services is effectively universal. All major identified digital-agriculture services in Egypt are delivered in Arabic: Hud",
@@ -437,7 +491,8 @@
   "level": 5,
   "year": 2025,
   "src": "UN Egypt / FAO-MALR: 'FAO & MALR invite extension agents to use El Mufeed app and disseminate among targeted groups' (official programme page; El Mufeed is Arabic-language); corroborated by IFPRI Egypt CSA policy note (Dec 2025) naming Bashaer and Nabta",
-  "tier": "T3"
+  "tier": "T3",
+  "url": "https://egypt.un.org/en/106025-fao-malr-invite-extension-agents-use-%E2%80%9Cel-mufeed%E2%80%9D-app-and-disseminate-among-targeted-groups"
  },
  "8.12": {
   "value": "Rung facts. PRESENCE: one completed, published, independent impact evaluation of a digital-agriculture intervention in Egypt — Abdelaziz, F. & Abay, K.A., 'Digital literacy training to promote diffusion of digital agricu",
@@ -445,7 +500,8 @@
   "level": 3,
   "year": 2025,
   "src": "Abdelaziz & Abay (2025/2026), IFPRI DP 2359 / Food Policy — RCT of digital literacy training for smallholder digital-tool adoption, Egypt",
-  "tier": "T2"
+  "tier": "T2",
+  "url": "https://cgspace.cgiar.org/items/18a9ca8e-af59-4f88-a5e1-4b7a2a9155cd"
  },
  "8.17": {
   "value": "DATA GAP — searched (2026-08-22, in order): web search for EMA / CCIC / DAIRS advisory-reach statistics (none published); IFPRI Egypt CSA policy note Dec 2025 (CCIC issues daily climate warnings; CCIC-EMA 'Bashaer' platform delivers tailored climate-smart recommendations to farmers — no reach figures; FAO RNE panelist states 'communication gaps mean that many smallholders never receive' warnings); targeted search for Bashaer user/reach numbers (none); ICARDA digital-ag review abstract (DAIRS 'under development', no reach); FAO/WFP Egypt climate publications (project-level reach only, no national %). No percentage of Egyptian farmers receiving actionable climate advisories exists with provenance.",
@@ -453,6 +509,7 @@
   "level": null,
   "year": 2026,
   "src": "Structured source search, 22 August 2026",
-  "tier": ""
+  "tier": "",
+  "url": ""
  }
 }

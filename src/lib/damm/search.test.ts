@@ -139,14 +139,6 @@ describe("verifyQuote — appended fabrication", () => {
   });
 });
 
-describe("excluded hosts", () => {
-  it("rejects self-published professional-network posts", async () => {
-    const { isBlockedHost } = await import("./websearch.ts");
-    assert.equal(isBlockedHost("https://www.linkedin.com/pulse/egypt-agritech"), true);
-    assert.equal(isBlockedHost("https://openknowledge.fao.org/handle/123"), false);
-  });
-});
-
 describe("jina no-results handling (LEARNINGS L11)", () => {
   it("treats HTTP 422 as an empty result, not a provider failure", async () => {
     const { jinaTreatsAsEmpty } = await import("./search.ts");

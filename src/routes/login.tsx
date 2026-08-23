@@ -4,7 +4,7 @@ import { GROK_PROVIDERS, authClient, authEnabled, signIn } from "@/lib/auth/clie
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card } from "@/components/ui/card";
-import { disclaimer } from "@/lib/damm/model";
+import { disclaimer } from "@/lib/damm-v17/model";
 
 export const Route = createFileRoute("/login")({ component: Login });
 

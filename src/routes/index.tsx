@@ -4,7 +4,6 @@ import { AppShell } from "@/components/AppShell";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import { Badge } from "@/components/ui/badge";
 import { useCurrentUserState } from "@/lib/auth/use-current-user";
 import {
   createCountry,
@@ -14,9 +13,8 @@ import {
   loadDemoPack,
   type CountrySummary,
   type Economy,
-} from "@/lib/damm/actions";
-import { formatScore } from "@/lib/damm/scoring";
-import { disclaimer } from "@/lib/damm/model";
+} from "@/lib/damm-v17/actions";
+import { model, disclaimer, pillarIds, useCaseIds } from "@/lib/damm-v17/model";
 import { useSessionRole } from "@/lib/session";
 import { Plus, Trash2 } from "lucide-react";
 
@@ -48,10 +46,13 @@ function Home() {
 function Landing() {
   return (
     <div className="max-w-3xl">
-      <p className="text-xs font-medium uppercase tracking-widest text-sage">DAMM v1.3 · independent prototype</p>
+      <p className="text-xs font-medium uppercase tracking-widest text-sage">
+        DAMM v{model.version} · independent prototype · {model.status}
+      </p>
       <h1 className="mt-2 font-display text-4xl font-semibold">Prepare a Digital Agriculture Roadmap</h1>
       <p className="mt-4 text-lg text-muted">
-        DAR Studio collects public evidence, computes the maturity diagnostic exactly as specified, and assembles a first draft. Machines compute. Humans gate.
+        DAR Studio carries the Digital Agriculture Maturity Model as its instrument: {model.indicators.length} indicators
+        across seven pillars, scored from recorded evidence. Machines derive. Humans enter evidence and gate the result.
       </p>
       <div className="mt-6 flex flex-wrap gap-3">
         <Button asChild>
@@ -63,20 +64,54 @@ function Landing() {
       </div>
       <div className="mt-10 grid gap-3 sm:grid-cols-3">
         <Card className="p-4">
-          <p className="text-xs uppercase tracking-widest text-sage">Collect</p>
-          <p className="mt-1 text-sm">World Bank series are imported. Everything else is a named gap routed to a steward.</p>
+          <p className="text-xs uppercase tracking-widest text-sage">Record</p>
+          <p className="mt-1 text-sm">
+            Every indicator gets a value, a source with its tier, and a year — or a recorded gap with the search trail.
+          </p>
         </Card>
         <Card className="p-4">
-          <p className="text-xs uppercase tracking-widest text-sage">Compute</p>
-          <p className="mt-1 text-sm">CMS, EMS and OES stay separate. A core gate at Level 1 caps the stage. Thin evidence is silent.</p>
+          <p className="text-xs uppercase tracking-widest text-sage">Derive</p>
+          <p className="mt-1 text-sm">
+            Evidence class, levels, pillar bands, prerequisites and the use-case readiness matrix are computed from what
+            was recorded, never chosen.
+          </p>
         </Card>
         <Card className="p-4">
-          <p className="text-xs uppercase tracking-widest text-sage">Assemble</p>
-          <p className="mt-1 text-sm">The DAR draft is built from engine facts. Unready chapters become gap notes, not filler.</p>
+          <p className="text-xs uppercase tracking-widest text-sage">Disclose</p>
+          <p className="mt-1 text-sm">
+            Means travel with their own denominators, withheld levels stay visible, and unratified rules say so.
+          </p>
         </Card>
       </div>
       <p className="mt-8 text-xs text-subtle">{disclaimer()}</p>
     </div>
+  );
+}
+
+function MatrixLine({ c }: { c: CountrySummary }) {
+  const a = c.assessment;
+  if (!a) return <p className="mt-2 text-sm text-muted">Not yet scored.</p>;
+  const vb = a.counts.Measured + a.counts.Documented;
+  return (
+    <>
+      <p className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-sm text-muted">
+        {pillarIds.map((p) => {
+          const d = a.pillars[p];
+          return (
+            <span key={p} className="tabular-nums" title={model.pillars[p].name}>
+              {p} {d.mean === null ? "—" : d.mean.toFixed(2)}
+              {d.weak ? ` (${d.band})` : d.mean === null ? "" : ` ${d.band}`}
+            </span>
+          );
+        })}
+      </p>
+      <p className="mt-1 text-xs text-subtle">
+        {useCaseIds.map((uc) => `${uc} ${a.matrix[uc].status}`).join(" · ")}
+      </p>
+      <p className="mt-1 text-xs text-subtle">
+        {vb}/{model.indicators.length} value-backed · {a.rated} levelled · {a.counts.Gap} gaps · {a.held} held
+      </p>
+    </>
   );
 }
 
@@ -99,14 +134,15 @@ function PortfolioInner() {
     refresh().catch(() => setRows([]));
   }, []);
 
-  async function onDemo() {
+  async function onDemo(which: "EGY" | "NGA") {
     setBusy(true);
     setError(null);
     try {
-      const res = await loadDemoPack({ data: { role, actorName } });
+      const res = await loadDemoPack({ data: { which, role, actorName } });
       if (res.ok) nav({ to: "/c/$id", params: { id: res.id } });
+      else setError(res.error);
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Could not load demonstration pack");
+      setError(e instanceof Error ? e.message : "Could not load the worked example");
     } finally {
       setBusy(false);
     }
@@ -140,13 +176,16 @@ function PortfolioInner() {
           <p className="text-xs font-medium uppercase tracking-widest text-sage">Portfolio</p>
           <h1 className="mt-1 font-display text-3xl font-semibold">Countries under preparation</h1>
           <p className="mt-2 max-w-2xl text-sm text-muted">
-            As TTL, open a country and launch the Step 1 diagnostic. The machine collects only verified public
-            series. Each row is an engagement package until government gates are recorded.
+            Open a country and record evidence against the {model.indicators.length}-indicator instrument, or load a
+            worked example — the Egypt and Nigeria assessments produced by the model's own test runs.
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
-          <Button variant="outline" onClick={onDemo} disabled={busy}>
-            Load Bhutan pack
+          <Button variant="outline" onClick={() => onDemo("EGY")} disabled={busy}>
+            Egypt worked example
+          </Button>
+          <Button variant="outline" onClick={() => onDemo("NGA")} disabled={busy}>
+            Nigeria worked example
           </Button>
           <Button onClick={() => setOpen(true)}>
             <Plus className="size-4" />
@@ -162,8 +201,8 @@ function PortfolioInner() {
           <Card>
             <h2 className="font-display text-xl">No countries yet</h2>
             <p className="mt-2 text-sm text-muted">
-              Open a country as TTL and launch the Step 1 diagnostic. Try Egypt, Arab Rep. for a live World Bank
-              collection, or load the Bhutan demonstration pack to explore a fully populated evidence set.
+              Open a country to start an evidence-first assessment, or load the Egypt or Nigeria worked example to see
+              the instrument fully populated — holds, gaps, tiers and all.
             </p>
           </Card>
         ) : (
@@ -173,20 +212,14 @@ function PortfolioInner() {
                 <div className="flex flex-wrap items-center gap-2">
                   <h2 className="font-display text-xl">{c.name}</h2>
                   <span className="font-mono text-xs text-subtle">{c.iso3}</span>
-                  <Badge>Step {c.currentStep}</Badge>
-                  {c.ingestStatus === "running" ? <Badge tone="warn">Collecting evidence</Badge> : null}
-                  {c.ingestStatus === "idle" ? <Badge tone="warn">Diagnostic not launched</Badge> : null}
+                  {c.modelVersion && <span className="text-xs text-subtle">DAMM {c.modelVersion}</span>}
                 </div>
-                <p className="mt-2 text-sm text-muted">
-                  CMS {formatScore(c.cms)} · EMS {formatScore(c.ems)} · OES {formatScore(c.oes)}
-                </p>
-                <p className="mt-1 text-xs text-subtle">
-                  {c.levelledCount} levelled · {c.namedGapCount} named gaps · {c.staleCount} stale · {c.coreUnmeasured} gates unmeasured
-                </p>
-                <p className="mt-1 text-xs text-subtle">Stage is not shown here — engagement-package rule.</p>
+                <MatrixLine c={c} />
                 <p className="mt-2 text-xs tabular-nums text-muted" title={c.createdAt}>
                   Opened {formatWhen(c.createdAt)}
-                  {c.updatedAt && !sameDisplayedTime(c.createdAt, c.updatedAt) ? ` · Last change ${formatWhen(c.updatedAt)}` : ""}
+                  {c.updatedAt && !sameDisplayedTime(c.createdAt, c.updatedAt)
+                    ? ` · Last change ${formatWhen(c.updatedAt)}`
+                    : ""}
                 </p>
               </Link>
               <Button
@@ -210,15 +243,20 @@ function PortfolioInner() {
       </div>
       {open ? <NewCountry onClose={() => setOpen(false)} onCreated={(id) => nav({ to: "/c/$id", params: { id } })} /> : null}
       {pending ? (
-        <div className="fixed inset-0 z-40 grid place-items-center bg-ink/40 p-4" role="dialog" aria-modal="true" aria-labelledby="remove-title">
+        <div
+          className="fixed inset-0 z-40 grid place-items-center bg-ink/40 p-4"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="remove-title"
+        >
           <Card className="w-full max-w-md rounded-2xl p-6">
             <h2 id="remove-title" className="font-display text-2xl">
               Remove {pending.name}?
             </h2>
             <p className="mt-1 text-sm tabular-nums text-muted">Opened {formatWhen(pending.createdAt)}</p>
             <p className="mt-2 text-sm text-muted">
-              The country leaves the portfolio. The action is written to the audit trail. You can open it again later
-              as a new engagement.
+              The country leaves the portfolio. The action is written to the audit trail. You can open it again later as
+              a new engagement.
             </p>
             <div className="mt-5 flex justify-end gap-2">
               <Button variant="ghost" type="button" onClick={() => setPending(null)} disabled={removing}>
@@ -271,7 +309,9 @@ function NewCountry({ onClose, onCreated }: { onClose: () => void; onCreated: (i
     <div className="fixed inset-0 z-40 grid place-items-center bg-ink/40 p-4" role="dialog" aria-modal="true">
       <Card className="w-full max-w-lg rounded-2xl p-6">
         <h2 className="font-display text-2xl">Open a country</h2>
-        <p className="mt-1 text-sm text-muted">Search by name. The ISO3 code is derived from the World Bank economy list — you never type a code.</p>
+        <p className="mt-1 text-sm text-muted">
+          Search by name. The ISO3 code is derived from the World Bank economy list — you never type a code.
+        </p>
         <Input className="mt-4" placeholder="Country name" value={q} onChange={(e) => setQ(e.target.value)} autoFocus />
         {error ? <p className="mt-2 text-sm text-danger">{error}</p> : null}
         <ul className="mt-3 max-h-64 overflow-auto">

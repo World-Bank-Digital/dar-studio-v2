@@ -6,7 +6,7 @@ import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { authClient } from "@/lib/auth/client";
 import { useCurrentUserState } from "@/lib/auth/use-current-user";
-import { deleteApiKey, getSettings, listProviders, saveApiKey, saveSettings, testApiKey, saveTeamKey, deleteTeamKey } from "@/lib/damm/actions";
+import { deleteApiKey, getSettings, listProviders, saveApiKey, saveSettings, testApiKey, saveTeamKey, deleteTeamKey } from "@/lib/damm-v17/actions";
 import { ACTING_ROLES, useSessionRole } from "@/lib/session";
 
 export const Route = createFileRoute("/settings")({ component: SettingsPage });

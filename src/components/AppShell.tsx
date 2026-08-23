@@ -1,9 +1,9 @@
 import { Link, useRouterState } from "@tanstack/react-router";
 import { UserButton } from "@/lib/auth/gates";
 import { useCurrentUser } from "@/lib/auth/use-current-user";
-import { disclaimer } from "@/lib/damm/model";
+import { disclaimer } from "@/lib/damm-v17/model";
 import { ACTING_ROLES, useSessionRole } from "@/lib/session";
-import { BookOpen, FolderOpen, Scale, Settings } from "lucide-react";
+import { FolderOpen, Scale, Settings } from "lucide-react";
 
 function Mark() {
   return (
@@ -35,7 +35,6 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           <nav className="ml-4 hidden items-center gap-1 sm:flex">
             <NavLink to="/" active={path === "/"} icon={<FolderOpen className="size-4" />} label="Portfolio" />
             <NavLink to="/methodology" active={path.startsWith("/methodology")} icon={<Scale className="size-4" />} label="Methodology" />
-            <NavLink to="/glossary" active={path.startsWith("/glossary")} icon={<BookOpen className="size-4" />} label="Glossary" />
             <NavLink to="/settings" active={path.startsWith("/settings")} icon={<Settings className="size-4" />} label="Settings" />
           </nav>
           <div className="ml-auto flex items-center gap-2">
@@ -54,7 +53,6 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         <nav className="flex gap-1 overflow-x-auto border-t border-border px-3 py-1 sm:hidden">
           <NavLink to="/" active={path === "/"} label="Portfolio" />
           <NavLink to="/methodology" active={path.startsWith("/methodology")} label="Method" />
-          <NavLink to="/glossary" active={path.startsWith("/glossary")} label="Glossary" />
           <NavLink to="/settings" active={path.startsWith("/settings")} label="Settings" />
         </nav>
       </header>
