@@ -103,9 +103,9 @@ export function deriveRow(def: IndicatorDef, r: EvidenceRecord): DerivedRow {
   }
   const stale = Boolean(
     r.observationYear &&
-      cls !== "Gap" &&
-      cls !== "" &&
-      r.observationYear < model.config.assessment_year - model.config.staleness_years,
+    cls !== "Gap" &&
+    cls !== "" &&
+    r.observationYear < model.config.assessment_year - model.config.staleness_years,
   );
   return { cls, level, stale };
 }

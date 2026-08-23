@@ -40,7 +40,12 @@ import {
   fingerprintSecret,
   isEncrypted,
 } from "@/lib/damm/crypto";
-import { PROVIDER_IDS, defaultModelFor, providerDef, verifyProviderKey } from "@/lib/damm/providers";
+import {
+  PROVIDER_IDS,
+  defaultModelFor,
+  providerDef,
+  verifyProviderKey,
+} from "@/lib/damm/providers";
 import { SEARCH_PROVIDER_IDS, isSearchProviderId, verifySearchKey } from "@/lib/damm/search";
 import { teamAdminEmails } from "@/lib/damm/teamkeys";
 
@@ -210,7 +215,8 @@ export const createCountry = createServerFn({ method: "POST" })
   .validator((input: { name: string; role: string; actorName: string }) => input)
   .handler(async ({ context, data }) => {
     const eco = economyByName(await fetchEconomies(), data.name);
-    if (!eco) return { ok: false as const, error: "Choose a country from the World Bank economy list." };
+    if (!eco)
+      return { ok: false as const, error: "Choose a country from the World Bank economy list." };
     const id = await insertCountry(
       context.userId,
       eco.name,
@@ -262,7 +268,14 @@ export const deleteCountry = createServerFn({ method: "POST" })
       where id = ${data.id} and user_id = ${context.userId} and deleted_at is null
       returning name`;
     if (!rows.length) return { ok: false as const, error: "Country not found" };
-    await writeAudit(context.userId, data.id, data.role, data.actorName, "delete_country", `Removed ${rows[0].name}.`);
+    await writeAudit(
+      context.userId,
+      data.id,
+      data.role,
+      data.actorName,
+      "delete_country",
+      `Removed ${rows[0].name}.`,
+    );
     return { ok: true as const };
   });
 
@@ -359,7 +372,7 @@ export const updateEvidence = createServerFn({ method: "POST" })
     const cur = curRows[0];
     if (!cur) return { ok: false as const, error: "Row not found" };
 
-    const pick = <T,>(next: T | undefined, prev: T): T => (next !== undefined ? next : prev);
+    const pick = <T>(next: T | undefined, prev: T): T => (next !== undefined ? next : prev);
     const valueRaw = pick(data.valueRaw, cur.value_raw);
     const assessorLevel = pick(data.assessorLevel, cur.assessor_level);
     const hold = pick(data.ratificationHold, cur.ratification_hold);
@@ -380,12 +393,20 @@ export const updateEvidence = createServerFn({ method: "POST" })
       where id = ${cur.id}`;
 
     const assessment = await rescore(data.countryId);
-    const derived = deriveRow(def, toRecord({ ...cur, value_raw: valueRaw, assessor_level: assessorLevel, ratification_hold: hold,
-      observation_year: pick(data.observationYear, cur.observation_year),
-      source_name: pick(data.sourceName, cur.source_name),
-      source_url: pick(data.sourceUrl, cur.source_url),
-      source_tier: pick(data.sourceTier, cur.source_tier),
-      notes: pick(data.notes, cur.notes) }));
+    const derived = deriveRow(
+      def,
+      toRecord({
+        ...cur,
+        value_raw: valueRaw,
+        assessor_level: assessorLevel,
+        ratification_hold: hold,
+        observation_year: pick(data.observationYear, cur.observation_year),
+        source_name: pick(data.sourceName, cur.source_name),
+        source_url: pick(data.sourceUrl, cur.source_url),
+        source_tier: pick(data.sourceTier, cur.source_tier),
+        notes: pick(data.notes, cur.notes),
+      }),
+    );
     await writeAudit(
       context.userId,
       data.countryId,
@@ -402,11 +423,23 @@ export const listAudit = createServerFn({ method: "GET" })
   .validator((input: { countryId: string }) => input)
   .handler(async ({ context, data }) => {
     const sql = await getSql();
-    const rows = await sql<{ at: string; role: string; actor_name: string; action: string; detail: string | null }>`
+    const rows = await sql<{
+      at: string;
+      role: string;
+      actor_name: string;
+      action: string;
+      detail: string | null;
+    }>`
       select at, role, actor_name, action, detail from audit
       where country_id = ${data.countryId} and user_id = ${context.userId}
       order by at desc limit 200`;
-    return rows.map((r) => ({ at: r.at, role: r.role, actorName: r.actor_name, action: r.action, detail: r.detail }));
+    return rows.map((r) => ({
+      at: r.at,
+      role: r.role,
+      actorName: r.actor_name,
+      action: r.action,
+      detail: r.detail,
+    }));
   });
 
 /* ---------- settings and BYOK keys (chassis, carried over) ---------- */
@@ -441,7 +474,14 @@ export const getSettings = createServerFn({ method: "GET" })
       last_test_ok: boolean | null;
     }>`select id, provider, kind, fingerprint, last4, model_name, encrypted, last_test_ok
        from api_keys where user_id = ${context.userId} order by kind, provider`;
-    const teamKeys = await sql<{ id: string; provider: string; kind: string; last4: string; model_name: string; created_at: string }>`
+    const teamKeys = await sql<{
+      id: string;
+      provider: string;
+      kind: string;
+      last4: string;
+      model_name: string;
+      created_at: string;
+    }>`
       select id, provider, kind, last4, model_name, created_at from team_keys order by kind, provider`;
     return {
       role: rows[0]?.acting_role ?? "TTL",
@@ -473,11 +513,19 @@ export const saveSettings = createServerFn({ method: "POST" })
   )
   .handler(async ({ context, data }) => {
     const sql = await getSql();
-    const existing = await sql<{ active_provider: string | null; active_search_provider: string | null }>`
+    const existing = await sql<{
+      active_provider: string | null;
+      active_search_provider: string | null;
+    }>`
       select active_provider, active_search_provider from user_settings where user_id = ${context.userId}`;
-    const provider = data.activeProvider !== undefined ? data.activeProvider : (existing[0]?.active_provider ?? null);
+    const provider =
+      data.activeProvider !== undefined
+        ? data.activeProvider
+        : (existing[0]?.active_provider ?? null);
     const search =
-      data.activeSearchProvider !== undefined ? data.activeSearchProvider : (existing[0]?.active_search_provider ?? null);
+      data.activeSearchProvider !== undefined
+        ? data.activeSearchProvider
+        : (existing[0]?.active_search_provider ?? null);
     await sql`insert into user_settings (user_id, acting_role, actor_name, active_provider, active_search_provider)
       values (${context.userId}, ${data.role}, ${data.actorName}, ${provider}, ${search})
       on conflict (user_id) do update set
@@ -492,10 +540,18 @@ export const saveSettings = createServerFn({ method: "POST" })
 export const listProviders = createServerFn({ method: "GET" }).handler(async () => {
   const models = PROVIDER_IDS.map((id) => {
     const def = providerDef(id)!;
-    return { id: def.id, label: def.label, defaultModel: def.defaultModel, consoleUrl: def.consoleUrl };
+    return {
+      id: def.id,
+      label: def.label,
+      defaultModel: def.defaultModel,
+      consoleUrl: def.consoleUrl,
+    };
   });
   const search = SEARCH_PROVIDER_IDS.map((id) => {
-    const def = { exa: { label: "Exa", console: "https://dashboard.exa.ai/api-keys" }, jina: { label: "Jina", console: "https://jina.ai/api-dashboard/" } }[id];
+    const def = {
+      exa: { label: "Exa", console: "https://dashboard.exa.ai/api-keys" },
+      jina: { label: "Jina", console: "https://jina.ai/api-dashboard/" },
+    }[id];
     return { id, label: def.label, consoleUrl: def.console };
   });
   return { models, search };
@@ -503,7 +559,10 @@ export const listProviders = createServerFn({ method: "GET" }).handler(async () 
 
 export const saveApiKey = createServerFn({ method: "POST" })
   .middleware([authMiddleware])
-  .validator((input: { provider: string; key: string; modelName?: string; kind?: "llm" | "search" }) => input)
+  .validator(
+    (input: { provider: string; key: string; modelName?: string; kind?: "llm" | "search" }) =>
+      input,
+  )
   .handler(async ({ context, data }) => {
     const key = data.key.trim();
     if (key.length < 8) return { ok: false as const, error: "Key looks too short." };
@@ -518,7 +577,8 @@ export const saveApiKey = createServerFn({ method: "POST" })
 
     const sql = await getSql();
     await sql`delete from api_keys where user_id = ${context.userId} and provider = ${data.provider} and kind = ${kind}`;
-    const modelName = kind === "search" ? "" : (data.modelName?.trim() || defaultModelFor(data.provider));
+    const modelName =
+      kind === "search" ? "" : data.modelName?.trim() || defaultModelFor(data.provider);
     const stored = encryptSecret(key);
     await sql`insert into api_keys (id, user_id, provider, kind, key_value, fingerprint, last4, model_name, encrypted)
       values (${uid()}, ${context.userId}, ${data.provider}, ${kind}, ${stored},
@@ -529,7 +589,9 @@ export const saveApiKey = createServerFn({ method: "POST" })
     // the catalogue check that catches it costs one request and belongs here.
     const warnings: string[] = [];
     if (!isEncrypted(stored)) {
-      warnings.push("Stored without encryption — set DAR_KEY_SECRET in the environment to protect keys at rest.");
+      warnings.push(
+        "Stored without encryption — set DAR_KEY_SECRET in the environment to protect keys at rest.",
+      );
     }
     let verified: boolean | null = null;
     if (kind === "llm") {
@@ -544,7 +606,10 @@ export const saveApiKey = createServerFn({ method: "POST" })
     // Storing a key is a statement of intent: if nothing is active yet, this
     // key becomes active. A stored-but-never-selected key silently disables
     // the whole model path, which is how a configured drafter ran as "none".
-    const settings = await sql<{ active_provider: string | null; active_search_provider: string | null }>`
+    const settings = await sql<{
+      active_provider: string | null;
+      active_search_provider: string | null;
+    }>`
       select active_provider, active_search_provider from user_settings where user_id = ${context.userId}`;
     const cur = settings[0];
     const activate =
@@ -582,10 +647,16 @@ export const saveApiKey = createServerFn({ method: "POST" })
  */
 export const saveTeamKey = createServerFn({ method: "POST" })
   .middleware([authMiddleware])
-  .validator((input: { provider: string; key: string; modelName?: string; kind?: "llm" | "search" }) => input)
+  .validator(
+    (input: { provider: string; key: string; modelName?: string; kind?: "llm" | "search" }) =>
+      input,
+  )
   .handler(async ({ context, data }) => {
     if (!(await isTeamAdmin(context.userId))) {
-      return { ok: false as const, error: "Team keys can only be managed by an administrator (DAR_ADMIN_EMAILS)." };
+      return {
+        ok: false as const,
+        error: "Team keys can only be managed by an administrator (DAR_ADMIN_EMAILS).",
+      };
     }
     const key = data.key.trim();
     if (key.length < 8) return { ok: false as const, error: "Key looks too short." };
@@ -597,7 +668,8 @@ export const saveTeamKey = createServerFn({ method: "POST" })
       return { ok: false as const, error: `Unknown search provider “${data.provider}”.` };
     }
     const sql = await getSql();
-    const modelName = kind === "search" ? "" : (data.modelName?.trim() || defaultModelFor(data.provider));
+    const modelName =
+      kind === "search" ? "" : data.modelName?.trim() || defaultModelFor(data.provider);
     const stored = encryptSecret(key);
     await sql`delete from team_keys where provider = ${data.provider} and kind = ${kind}`;
     await sql`insert into team_keys (id, kind, provider, key_value, fingerprint, last4, model_name, created_by)
@@ -605,7 +677,9 @@ export const saveTeamKey = createServerFn({ method: "POST" })
 
     const warnings: string[] = [];
     if (!isEncrypted(stored)) {
-      warnings.push("Stored without encryption — set DAR_KEY_SECRET in the environment to protect keys at rest.");
+      warnings.push(
+        "Stored without encryption — set DAR_KEY_SECRET in the environment to protect keys at rest.",
+      );
     }
     let verified: boolean | null = null;
     if (kind === "llm") {
@@ -614,8 +688,20 @@ export const saveTeamKey = createServerFn({ method: "POST" })
       if (!check.ok && check.error) warnings.push(check.error);
       if (check.warning) warnings.push(check.warning);
     }
-    await writeAudit(context.userId, null, "Admin", "team-keys", "team_key_saved", `${kind} key for ${data.provider} (…${key.slice(-4)}) stored for the team.`);
-    return { ok: true as const, encrypted: isEncrypted(stored), verified, warning: warnings.length ? warnings.join(" ") : undefined };
+    await writeAudit(
+      context.userId,
+      null,
+      "Admin",
+      "team-keys",
+      "team_key_saved",
+      `${kind} key for ${data.provider} (…${key.slice(-4)}) stored for the team.`,
+    );
+    return {
+      ok: true as const,
+      encrypted: isEncrypted(stored),
+      verified,
+      warning: warnings.length ? warnings.join(" ") : undefined,
+    };
   });
 
 export const deleteTeamKey = createServerFn({ method: "POST" })
@@ -623,13 +709,23 @@ export const deleteTeamKey = createServerFn({ method: "POST" })
   .validator((input: { id: string }) => input)
   .handler(async ({ context, data }) => {
     if (!(await isTeamAdmin(context.userId))) {
-      return { ok: false as const, error: "Team keys can only be managed by an administrator (DAR_ADMIN_EMAILS)." };
+      return {
+        ok: false as const,
+        error: "Team keys can only be managed by an administrator (DAR_ADMIN_EMAILS).",
+      };
     }
     const sql = await getSql();
     const rows = await sql<{ provider: string; kind: string }>`
       delete from team_keys where id = ${data.id} returning provider, kind`;
     if (rows.length) {
-      await writeAudit(context.userId, null, "Admin", "team-keys", "team_key_removed", `${rows[0].kind} key for ${rows[0].provider} removed from the team.`);
+      await writeAudit(
+        context.userId,
+        null,
+        "Admin",
+        "team-keys",
+        "team_key_removed",
+        `${rows[0].kind} key for ${rows[0].provider} removed from the team.`,
+      );
     }
     return { ok: true as const };
   });
@@ -648,7 +744,12 @@ export const testApiKey = createServerFn({ method: "POST" })
   .validator((input: { id: string }) => input)
   .handler(async ({ context, data }) => {
     const sql = await getSql();
-    const rows = await sql<{ provider: string; kind: string; key_value: string; model_name: string }>`
+    const rows = await sql<{
+      provider: string;
+      kind: string;
+      key_value: string;
+      model_name: string;
+    }>`
       select provider, kind, key_value, model_name from api_keys where id = ${data.id} and user_id = ${context.userId}`;
     const row = rows[0];
     if (!row) return { ok: false as const, error: "Key not found" };
@@ -657,7 +758,10 @@ export const testApiKey = createServerFn({ method: "POST" })
     try {
       plain = decryptSecret(row.key_value);
     } catch (err) {
-      return { ok: false as const, error: err instanceof Error ? err.message : "Stored key could not be read." };
+      return {
+        ok: false as const,
+        error: err instanceof Error ? err.message : "Stored key could not be read.",
+      };
     }
 
     const result: { ok: boolean; error?: string; warning?: string } =

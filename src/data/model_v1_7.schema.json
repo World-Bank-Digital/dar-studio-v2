@@ -4,27 +4,80 @@
   "title": "DAMM model file",
   "description": "The canonical machine-readable Digital Agriculture Maturity Model. Model only: indicator metadata and rules. Country observations, assessments and outputs are separate payloads.",
   "type": "object",
-  "required": ["model", "version", "revision", "ratified", "config", "pillars", "layers",
-               "use_cases", "evidence_classes", "source_tiers", "bands", "binding_rules",
-               "indicators", "open_decisions", "prohibitions"],
+  "required": [
+    "model",
+    "version",
+    "revision",
+    "ratified",
+    "config",
+    "pillars",
+    "layers",
+    "use_cases",
+    "evidence_classes",
+    "source_tiers",
+    "bands",
+    "binding_rules",
+    "indicators",
+    "open_decisions",
+    "prohibitions",
+    "dar_outline",
+    "foresight",
+    "candidate_indicators",
+    "derived_sources"
+  ],
   "properties": {
-    "model": { "const": "DAMM" },
-    "version": { "type": "string", "pattern": "^\\d+\\.\\d+$" },
-    "revision": { "type": "integer", "minimum": 1,
-      "description": "Bump on every change to a ratifiable value. Consumers pin on version+revision." },
-    "ratified": { "type": "boolean",
-      "description": "False while any entry in open_decisions is unresolved. A consumer must not present unratified values as settled." },
-    "generated_from": { "type": "string" },
-    "prohibitions": { "type": "array", "minItems": 4, "items": { "type": "string" } },
+    "model": {
+      "const": "DAMM"
+    },
+    "version": {
+      "type": "string",
+      "pattern": "^\\d+\\.\\d+$"
+    },
+    "revision": {
+      "type": "integer",
+      "minimum": 1,
+      "description": "Bump on every change to a ratifiable value. Consumers pin on version+revision."
+    },
+    "ratified": {
+      "type": "boolean",
+      "description": "False while any entry in open_decisions is unresolved. A consumer must not present unratified values as settled."
+    },
+    "generated_from": {
+      "type": "string"
+    },
+    "prohibitions": {
+      "type": "array",
+      "minItems": 4,
+      "items": {
+        "type": "string"
+      }
+    },
     "config": {
       "type": "object",
-      "required": ["assessment_year", "staleness_years", "readiness_threshold", "leapfrog_threshold", "rounding"],
+      "required": [
+        "assessment_year",
+        "staleness_years",
+        "readiness_threshold",
+        "leapfrog_threshold",
+        "rounding"
+      ],
       "properties": {
-        "assessment_year": { "type": "integer" },
-        "staleness_years": { "type": "integer", "minimum": 1 },
-        "readiness_threshold": { "type": "number" },
-        "leapfrog_threshold": { "type": "number" },
-        "rounding": { "const": "half-up" }
+        "assessment_year": {
+          "type": "integer"
+        },
+        "staleness_years": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "readiness_threshold": {
+          "type": "number"
+        },
+        "leapfrog_threshold": {
+          "type": "number"
+        },
+        "rounding": {
+          "const": "half-up"
+        }
       }
     },
     "pillars": {
@@ -33,36 +86,64 @@
         "type": "object",
         "required": ["name", "reading"],
         "properties": {
-          "name": { "type": "string" },
-          "reading": { "enum": ["need", "capability", "outcome"],
-            "description": "How the pillar is read. A 'need' pillar is NOT digital maturity: a low reading is a large opportunity." }
+          "name": {
+            "type": "string"
+          },
+          "reading": {
+            "enum": ["need", "capability", "outcome"],
+            "description": "How the pillar is read. A 'need' pillar is NOT digital maturity: a low reading is a large opportunity."
+          }
         }
       }
     },
-    "layers": { "type": "array", "items": { "enum": ["Foundation", "Enablers", "Transformation", "Outcomes"] } },
-    "use_cases": { "type": "object", "additionalProperties": { "type": "string" } },
+    "layers": {
+      "type": "array",
+      "items": {
+        "enum": ["Foundation", "Enablers", "Transformation", "Outcomes"]
+      }
+    },
+    "use_cases": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "string"
+      }
+    },
     "evidence_classes": {
-      "type": "array", "minItems": 4,
+      "type": "array",
+      "minItems": 4,
       "items": {
         "type": "object",
         "required": ["id", "derived_from", "levels"],
-        "properties": { "id": { "enum": ["Measured", "Documented", "Judged", "Gap"] } }
+        "properties": {
+          "id": {
+            "enum": ["Measured", "Documented", "Judged", "Gap"]
+          }
+        }
       }
     },
     "source_tiers": {
       "type": "object",
       "required": ["T1", "T2", "T3", "T4", "T5"],
-      "additionalProperties": { "type": "string" }
+      "additionalProperties": {
+        "type": "string"
+      }
     },
     "bands": {
-      "type": "array", "minItems": 1,
+      "type": "array",
+      "minItems": 1,
       "items": {
         "type": "object",
         "required": ["name", "lo", "hi"],
         "properties": {
-          "name": { "type": "string" },
-          "lo": { "type": "number" },
-          "hi": { "type": "number" }
+          "name": {
+            "type": "string"
+          },
+          "lo": {
+            "type": "number"
+          },
+          "hi": {
+            "type": "number"
+          }
         }
       },
       "description": "Half-open [lo, hi). Governed by open decision 13.1."
@@ -73,10 +154,18 @@
         "type": "object",
         "required": ["id", "rule", "ratified"],
         "properties": {
-          "id": { "type": "string" },
-          "rule": { "type": "string" },
-          "ratified": { "type": "boolean" },
-          "decision": { "type": "string" }
+          "id": {
+            "type": "string"
+          },
+          "rule": {
+            "type": "string"
+          },
+          "ratified": {
+            "type": "boolean"
+          },
+          "decision": {
+            "type": "string"
+          }
         }
       }
     },
@@ -85,36 +174,86 @@
       "minItems": 1,
       "items": {
         "type": "object",
-        "required": ["id", "name", "pillar", "layer", "use_cases", "tags", "prerequisite", "method", "direction", "thresholds"],
+        "required": [
+          "id",
+          "name",
+          "pillar",
+          "layer",
+          "use_cases",
+          "tags",
+          "prerequisite",
+          "method",
+          "direction",
+          "thresholds"
+        ],
         "properties": {
-          "id": { "type": "string", "pattern": "^\\d+\\.\\d+$" },
-          "name": { "type": "string" },
-          "pillar": { "type": "string" },
-          "layer": { "enum": ["Foundation", "Enablers", "Transformation", "Outcomes"] },
-          "use_cases": { "type": "array", "items": { "type": "string" } },
-          "tags": { "type": "array", "items": { "type": "string" } },
+          "id": {
+            "type": "string",
+            "pattern": "^\\d+\\.\\d+$"
+          },
+          "name": {
+            "type": "string"
+          },
+          "pillar": {
+            "type": "string"
+          },
+          "layer": {
+            "enum": ["Foundation", "Enablers", "Transformation", "Outcomes"]
+          },
+          "use_cases": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "tags": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
           "prerequisite": {
             "type": ["string", "null"],
             "description": "UNIVERSAL | UC:<comma-list> | DELIVERY | null"
           },
-          "method": { "enum": ["threshold", "ladder"] },
-          "direction": { "enum": ["higher-is-better", "lower-is-better", null] },
+          "method": {
+            "enum": ["threshold", "ladder"]
+          },
+          "direction": {
+            "enum": ["higher-is-better", "lower-is-better", null]
+          },
           "thresholds": {
             "type": ["array", "null"],
-            "items": { "type": "number" },
-            "minItems": 4, "maxItems": 4,
+            "items": {
+              "type": "number"
+            },
+            "minItems": 4,
+            "maxItems": 4,
             "description": "Four cut-points; level = 1 + how many are met."
           },
-          "absorbs": { "type": "array", "items": { "type": "string" } },
-          "thresholds_ratified": { "type": "boolean",
-            "description": "Present and false where the cut-points are still test values (13.6)." },
+          "absorbs": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "thresholds_ratified": {
+            "type": "boolean",
+            "description": "Present and false where the cut-points are still test values (13.6)."
+          },
           "ratification": {
             "type": "object",
             "required": ["open_question", "decision"],
             "properties": {
-              "open_question": { "type": "string" },
-              "severity": { "enum": ["asserts-falsehood", "construct-drift", "unit-ambiguity"] },
-              "decision": { "type": "string" }
+              "open_question": {
+                "type": "string"
+              },
+              "severity": {
+                "enum": ["asserts-falsehood", "construct-drift", "unit-ambiguity"]
+              },
+              "decision": {
+                "type": "string"
+              }
             },
             "description": "Present where the row carries an open definitional question (13.5)."
           }
@@ -127,9 +266,186 @@
         "type": "object",
         "required": ["id", "title", "governs"],
         "properties": {
-          "id": { "type": "string", "pattern": "^13\\.\\d+$" },
-          "title": { "type": "string" },
-          "governs": { "type": "array", "items": { "type": "string" } }
+          "id": {
+            "type": "string",
+            "pattern": "^13\\.\\d+$"
+          },
+          "title": {
+            "type": "string"
+          },
+          "governs": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      }
+    },
+    "derived_sources": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "string"
+      },
+      "description": "Closed vocabulary of derived structures a DAR chapter may cite."
+    },
+    "dar_outline": {
+      "type": "array",
+      "minItems": 1,
+      "description": "The DAR chapters, each declaring the evidence it may cite (decision E4).",
+      "items": {
+        "type": "object",
+        "required": ["n", "title", "kind", "content", "binding", "note"],
+        "properties": {
+          "n": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          },
+          "kind": {
+            "enum": ["diagnostic", "prescriptive"],
+            "description": "Prescriptive chapters render marked proposed, not evidenced."
+          },
+          "content": {
+            "type": "string"
+          },
+          "note": {
+            "type": "string"
+          },
+          "binding": {
+            "type": "object",
+            "required": ["pillars", "indicators", "use_cases", "prerequisites", "derived"],
+            "description": "A chapter may cite ONLY what this names. '*' means all.",
+            "properties": {
+              "pillars": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "indicators": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "use_cases": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "prerequisites": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "derived": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "foresight": {
+      "type": "object",
+      "required": ["method", "ratified", "steps", "milestone_binding"],
+      "description": "The strategic-foresight method, declared so it is ratifiable (decision F1).",
+      "properties": {
+        "method": {
+          "type": "string"
+        },
+        "ratified": {
+          "type": "boolean"
+        },
+        "settled_by": {
+          "type": "string"
+        },
+        "steps": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "object",
+            "required": ["id", "name", "purpose"],
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "name": {
+                "type": "string"
+              },
+              "purpose": {
+                "type": "string"
+              }
+            }
+          }
+        },
+        "milestone_binding": {
+          "type": "object",
+          "required": ["rule", "fields", "fallback"],
+          "description": "Milestones bind to the instrument (decision F3).",
+          "properties": {
+            "rule": {
+              "type": "string"
+            },
+            "fields": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "fallback": {
+              "type": "string"
+            },
+            "provisionality": {
+              "type": "string"
+            }
+          }
+        },
+        "note": {
+          "type": "string"
+        }
+      }
+    },
+    "candidate_indicators": {
+      "type": "object",
+      "required": ["purpose", "id_pattern", "required_fields", "never", "disposition"],
+      "description": "Metrics carried beside the model without entering it (decision F4).",
+      "properties": {
+        "purpose": {
+          "type": "string"
+        },
+        "id_pattern": {
+          "type": "string"
+        },
+        "required_fields": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "may_be_proposed_by": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "never": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "string"
+          },
+          "description": "Aggregates a candidate must never enter."
+        },
+        "disposition": {
+          "type": "string"
         }
       }
     }

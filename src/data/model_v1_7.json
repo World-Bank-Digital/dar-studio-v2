@@ -8,7 +8,7 @@
   "ratified": false,
   "ratification_note": "Twelve design decisions are open in specification section 13. Every value they can change is data in this file. A consumer must not present an unratified value as settled: see `open_decisions` for which fields each ruling governs.",
   "generated_from": "gauntlet/loop-1/engine_v17.py",
-  "generated_on": "2026-08-23",
+  "generated_on": "2026-08-24",
   "prohibitions": [
     "No cross-country ranking.",
     "No band used as a project development objective, disbursement-linked indicator or disbursement condition.",
@@ -54,12 +54,7 @@
       "reading": "outcome"
     }
   },
-  "layers": [
-    "Foundation",
-    "Enablers",
-    "Transformation",
-    "Outcomes"
-  ],
+  "layers": ["Foundation", "Enablers", "Transformation", "Outcomes"],
   "use_cases": {
     "ADV": "Advisory & extension",
     "SMF": "Smart farming",
@@ -196,18 +191,11 @@
       "pillar": "A1",
       "layer": "Foundation",
       "use_cases": [],
-      "tags": [
-        "NEED"
-      ],
+      "tags": ["NEED"],
       "prerequisite": null,
       "method": "threshold",
       "direction": "higher-is-better",
-      "thresholds": [
-        1000,
-        2500,
-        5000,
-        10000
-      ],
+      "thresholds": [1000, 2500, 5000, 10000],
       "absorbs": [],
       "ratification": {
         "open_question": "The name says \"Agriculture... (USD)\" but both countries record WDI NV.AGR.EMPL.KD, which covers agriculture, forestry AND fishing and is denominated in constant 2015 US$ — neither the sector scope nor the price basis is stated in the name or in the bare-USD thresholds, and neither row carries…",
@@ -222,18 +210,11 @@
       "pillar": "A1",
       "layer": "Foundation",
       "use_cases": [],
-      "tags": [
-        "NEED"
-      ],
+      "tags": ["NEED"],
       "prerequisite": null,
       "method": "threshold",
       "direction": "higher-is-better",
-      "thresholds": [
-        1500,
-        3000,
-        4500,
-        6000
-      ],
+      "thresholds": [1500, 3000, 4500, 6000],
       "absorbs": [],
       "thresholds_ratified": false
     },
@@ -243,18 +224,11 @@
       "pillar": "A1",
       "layer": "Foundation",
       "use_cases": [],
-      "tags": [
-        "NEED"
-      ],
+      "tags": ["NEED"],
       "prerequisite": null,
       "method": "threshold",
       "direction": "lower-is-better",
-      "thresholds": [
-        45,
-        30,
-        15,
-        5
-      ],
+      "thresholds": [45, 30, 15, 5],
       "absorbs": [],
       "ratification": {
         "open_question": "The name omits the denominator (% of total employment), the recorded series covers ISIC-A (agriculture, hunting, forestry and fishing) rather than agriculture alone, and both rows carry an ILO MODELLED 2025 nowcast under cls \"Measured\" — the register's highest evidence class — which the…",
@@ -269,18 +243,11 @@
       "pillar": "A1",
       "layer": "Foundation",
       "use_cases": [],
-      "tags": [
-        "NEED"
-      ],
+      "tags": ["NEED"],
       "prerequisite": null,
       "method": "threshold",
       "direction": "higher-is-better",
-      "thresholds": [
-        95,
-        105,
-        115,
-        130
-      ],
+      "thresholds": [95, 105, 115, 130],
       "absorbs": [],
       "thresholds_ratified": false
     },
@@ -290,18 +257,11 @@
       "pillar": "A1",
       "layer": "Foundation",
       "use_cases": [],
-      "tags": [
-        "NEED"
-      ],
+      "tags": ["NEED"],
       "prerequisite": null,
       "method": "threshold",
       "direction": "lower-is-better",
-      "thresholds": [
-        30,
-        20,
-        12,
-        5
-      ],
+      "thresholds": [30, 20, 12, 5],
       "absorbs": [],
       "ratification": {
         "open_question": "The name asserts an all-crop national post-harvest loss rate; both countries record cereals-only figures, and Egypt's scored figure is described by its own source as covering pre- AND post-harvest losses.",
@@ -315,21 +275,12 @@
       "name": "Smallholder access to formal markets (%)",
       "pillar": "A1",
       "layer": "Foundation",
-      "use_cases": [
-        "MKT"
-      ],
-      "tags": [
-        "NEED"
-      ],
+      "use_cases": ["MKT"],
+      "tags": ["NEED"],
       "prerequisite": null,
       "method": "threshold",
       "direction": "higher-is-better",
-      "thresholds": [
-        20,
-        40,
-        60,
-        80
-      ],
+      "thresholds": [20, 40, 60, 80],
       "absorbs": [],
       "ratification": {
         "open_question": "The name asserts national smallholder ACCESS to formal markets; Egypt records a regional contract-farming PARTICIPATION rate from seven governorates and Nigeria a 2012/13 channel-of-sale share — two different constructs, neither of which is access, and neither national in Egypt's case.",
@@ -343,21 +294,12 @@
       "name": "Agricultural credit access (% farmers)",
       "pillar": "A1",
       "layer": "Foundation",
-      "use_cases": [
-        "FIN"
-      ],
-      "tags": [
-        "NEED"
-      ],
+      "use_cases": ["FIN"],
+      "tags": ["NEED"],
       "prerequisite": null,
       "method": "threshold",
       "direction": "higher-is-better",
-      "thresholds": [
-        10,
-        25,
-        40,
-        60
-      ],
+      "thresholds": [10, 25, 40, 60],
       "absorbs": [],
       "ratification": {
         "open_question": "The name asserts a share of FARMERS with credit ACCESS; Egypt records rural adults aged 15+ (a population that includes non-farmers) and Nigeria records smallholder households, and both measure borrowing/use rather than access.",
@@ -371,21 +313,12 @@
       "name": "Farmers using climate-smart practices (%)",
       "pillar": "A1",
       "layer": "Foundation",
-      "use_cases": [
-        "ADV"
-      ],
-      "tags": [
-        "NEED"
-      ],
+      "use_cases": ["ADV"],
+      "tags": ["NEED"],
       "prerequisite": null,
       "method": "threshold",
       "direction": "higher-is-better",
-      "thresholds": [
-        20,
-        40,
-        60,
-        80
-      ],
+      "thresholds": [20, 40, 60, 80],
       "absorbs": [],
       "ratification": {
         "open_question": "The name counts FARMERS adopting climate-smart practices; Egypt records a share of WHEAT AREA under a single practice and Nigeria a share of farmers in two zones adopting at least one climate-resilient crop TRAIT — land, practice-basket and geographic scope all differ from the name.",
@@ -400,21 +333,12 @@
       "pillar": "C1",
       "layer": "Foundation",
       "use_cases": [],
-      "tags": [
-        "ALL"
-      ],
+      "tags": ["ALL"],
       "prerequisite": "UNIVERSAL",
       "method": "threshold",
       "direction": "higher-is-better",
-      "thresholds": [
-        20,
-        40,
-        60,
-        80
-      ],
-      "absorbs": [
-        "2.2"
-      ],
+      "thresholds": [20, 40, 60, 80],
+      "absorbs": ["2.2"],
       "ratification": {
         "open_question": "The name asserts RURAL coverage, but Egypt's row records the ITU national at-least-3G figure as a clean cls=\"Measured\" number that scores level 5 mechanically, while Nigeria records a rural-but-4G-only modelled estimate — so the register's only universal connectivity prerequisite carries a…",
         "severity": "asserts-falsehood",
@@ -427,21 +351,12 @@
       "pillar": "C1",
       "layer": "Foundation",
       "use_cases": [],
-      "tags": [
-        "ALL"
-      ],
+      "tags": ["ALL"],
       "prerequisite": null,
       "method": "threshold",
       "direction": "higher-is-better",
-      "thresholds": [
-        20,
-        40,
-        60,
-        80
-      ],
-      "absorbs": [
-        "2.3"
-      ]
+      "thresholds": [20, 40, 60, 80],
+      "absorbs": ["2.3"]
     },
     {
       "id": "2.5",
@@ -449,18 +364,11 @@
       "pillar": "C1",
       "layer": "Foundation",
       "use_cases": [],
-      "tags": [
-        "ALL"
-      ],
+      "tags": ["ALL"],
       "prerequisite": null,
       "method": "threshold",
       "direction": "lower-is-better",
-      "thresholds": [
-        10,
-        5,
-        2,
-        1
-      ],
+      "thresholds": [10, 5, 2, 1],
       "absorbs": [],
       "ratification": {
         "open_question": "The name fixes neither the basket allowance (2GB vs ITU's 2025 headline 5GB), nor the basket type (data-only vs voice+data), nor whether \"% GNI pc\" is monthly or annual — and Egypt's value sits on a series ITU has retired to a legacy label while Nigeria's comes from the live headline series id,…",
@@ -474,21 +382,12 @@
       "pillar": "C1",
       "layer": "Foundation",
       "use_cases": [],
-      "tags": [
-        "ALL"
-      ],
+      "tags": ["ALL"],
       "prerequisite": null,
       "method": "threshold",
       "direction": "higher-is-better",
-      "thresholds": [
-        20,
-        40,
-        60,
-        80
-      ],
-      "absorbs": [
-        "2.6"
-      ],
+      "thresholds": [20, 40, 60, 80],
+      "absorbs": ["2.6"],
       "ratification": {
         "open_question": "\"Ownership\" of a personal device implies individuals; both countries record the share of rural HOUSEHOLDS owning at least one smartphone, which reads systematically higher than the individual measure.",
         "severity": "construct-drift",
@@ -501,18 +400,11 @@
       "pillar": "C1",
       "layer": "Foundation",
       "use_cases": [],
-      "tags": [
-        "ALL"
-      ],
+      "tags": ["ALL"],
       "prerequisite": "UNIVERSAL",
       "method": "threshold",
       "direction": "higher-is-better",
-      "thresholds": [
-        20,
-        40,
-        60,
-        80
-      ],
+      "thresholds": [20, 40, 60, 80],
       "absorbs": []
     },
     {
@@ -521,9 +413,7 @@
       "pillar": "C1",
       "layer": "Foundation",
       "use_cases": [],
-      "tags": [
-        "ALL"
-      ],
+      "tags": ["ALL"],
       "prerequisite": null,
       "method": "ladder",
       "direction": null,
@@ -540,21 +430,12 @@
       "name": "UN E-Government Development Index",
       "pillar": "C2",
       "layer": "Enablers",
-      "use_cases": [
-        "AGI"
-      ],
-      "tags": [
-        "ALL"
-      ],
+      "use_cases": ["AGI"],
+      "tags": ["ALL"],
       "prerequisite": null,
       "method": "threshold",
       "direction": "higher-is-better",
-      "thresholds": [
-        0.2,
-        0.4,
-        0.6,
-        0.8
-      ],
+      "thresholds": [0.2, 0.4, 0.6, 0.8],
       "absorbs": []
     },
     {
@@ -562,11 +443,7 @@
       "name": "National farmer registry",
       "pillar": "C2",
       "layer": "Enablers",
-      "use_cases": [
-        "FIN",
-        "AGI",
-        "ADV"
-      ],
+      "use_cases": ["FIN", "AGI", "ADV"],
       "tags": [],
       "prerequisite": "UC:FIN,AGI",
       "method": "ladder",
@@ -584,10 +461,7 @@
       "name": "Digital land/plot registration",
       "pillar": "C2",
       "layer": "Enablers",
-      "use_cases": [
-        "FIN",
-        "AGI"
-      ],
+      "use_cases": ["FIN", "AGI"],
       "tags": [],
       "prerequisite": null,
       "method": "ladder",
@@ -605,20 +479,13 @@
       "name": "Open agricultural data (machine-readable, AI-ready)",
       "pillar": "C2",
       "layer": "Enablers",
-      "use_cases": [
-        "AGI",
-        "ADV",
-        "SMF"
-      ],
+      "use_cases": ["AGI", "ADV", "SMF"],
       "tags": [],
       "prerequisite": null,
       "method": "ladder",
       "direction": null,
       "thresholds": null,
-      "absorbs": [
-        "3.13",
-        "3.12"
-      ],
+      "absorbs": ["3.13", "3.12"],
       "ratification": {
         "open_question": "The name asserts three conjoined qualifiers — open, machine-readable, AI-ready — and Nigeria scores rung 4 ('Operating with quality') on a registration-gated statistical microdata catalogue that the cell's own text says is neither open nor AI-ready, while Nigeria's actual open-data portals are…",
         "severity": "asserts-falsehood",
@@ -630,11 +497,7 @@
       "name": "Weather/climate data infrastructure",
       "pillar": "C2",
       "layer": "Enablers",
-      "use_cases": [
-        "ADV",
-        "SMF",
-        "AGI"
-      ],
+      "use_cases": ["ADV", "SMF", "AGI"],
       "tags": [],
       "prerequisite": null,
       "method": "ladder",
@@ -652,10 +515,7 @@
       "name": "Satellite/EO data integration",
       "pillar": "C2",
       "layer": "Enablers",
-      "use_cases": [
-        "AGI",
-        "SMF"
-      ],
+      "use_cases": ["AGI", "SMF"],
       "tags": [],
       "prerequisite": null,
       "method": "ladder",
@@ -673,10 +533,7 @@
       "name": "National soil map/database",
       "pillar": "C2",
       "layer": "Enablers",
-      "use_cases": [
-        "ADV",
-        "SMF"
-      ],
+      "use_cases": ["ADV", "SMF"],
       "tags": [],
       "prerequisite": null,
       "method": "ladder",
@@ -694,9 +551,7 @@
       "name": "Digital advisory platforms at scale",
       "pillar": "E1",
       "layer": "Transformation",
-      "use_cases": [
-        "ADV"
-      ],
+      "use_cases": ["ADV"],
       "tags": [],
       "prerequisite": null,
       "method": "ladder",
@@ -714,9 +569,7 @@
       "name": "Agricultural e-commerce platforms",
       "pillar": "E1",
       "layer": "Transformation",
-      "use_cases": [
-        "MKT"
-      ],
+      "use_cases": ["MKT"],
       "tags": [],
       "prerequisite": null,
       "method": "ladder",
@@ -734,12 +587,8 @@
       "name": "Agricultural data interoperability standards",
       "pillar": "C2",
       "layer": "Enablers",
-      "use_cases": [
-        "AGI"
-      ],
-      "tags": [
-        "ALL"
-      ],
+      "use_cases": ["AGI"],
+      "tags": ["ALL"],
       "prerequisite": "UC:AGI",
       "method": "ladder",
       "direction": null,
@@ -757,9 +606,7 @@
       "pillar": "C3",
       "layer": "Enablers",
       "use_cases": [],
-      "tags": [
-        "ALL"
-      ],
+      "tags": ["ALL"],
       "prerequisite": "UNIVERSAL",
       "method": "ladder",
       "direction": null,
@@ -772,18 +619,11 @@
       "pillar": "C3",
       "layer": "Enablers",
       "use_cases": [],
-      "tags": [
-        "ALL"
-      ],
+      "tags": ["ALL"],
       "prerequisite": null,
       "method": "threshold",
       "direction": "higher-is-better",
-      "thresholds": [
-        0.2,
-        0.4,
-        0.6,
-        0.8
-      ],
+      "thresholds": [0.2, 0.4, 0.6, 0.8],
       "absorbs": [],
       "ratification": {
         "open_question": "Thresholds are defined on a 0–1 basis but Egypt is recorded as 100 and Nigeria as 0.824, so the same register column holds two incommensurable scales; separately, neither number is an overall score ITU actually publishes in the GCI 2024 report.",
@@ -796,21 +636,12 @@
       "name": "Government AI Readiness Index",
       "pillar": "C3",
       "layer": "Enablers",
-      "use_cases": [
-        "AGI"
-      ],
-      "tags": [
-        "ALL"
-      ],
+      "use_cases": ["AGI"],
+      "tags": ["ALL"],
       "prerequisite": null,
       "method": "threshold",
       "direction": "higher-is-better",
-      "thresholds": [
-        20,
-        40,
-        60,
-        80
-      ],
+      "thresholds": [20, 40, 60, 80],
       "absorbs": [],
       "ratification": {
         "open_question": "Now that the 2025 edition dropped the open overall score, does the cell score the stale 2024 overall score, substitute rank plus pillar scores, or gap?",
@@ -824,9 +655,7 @@
       "pillar": "C3",
       "layer": "Enablers",
       "use_cases": [],
-      "tags": [
-        "ALL"
-      ],
+      "tags": ["ALL"],
       "prerequisite": null,
       "method": "ladder",
       "direction": null,
@@ -843,37 +672,26 @@
       "name": "Agricultural data governance framework",
       "pillar": "C3",
       "layer": "Enablers",
-      "use_cases": [
-        "AGI",
-        "FIN"
-      ],
+      "use_cases": ["AGI", "FIN"],
       "tags": [],
       "prerequisite": "UC:AGI",
       "method": "ladder",
       "direction": null,
       "thresholds": null,
-      "absorbs": [
-        "4.8"
-      ]
+      "absorbs": ["4.8"]
     },
     {
       "id": "4.6",
       "name": "National AI strategy with agriculture component",
       "pillar": "C3",
       "layer": "Enablers",
-      "use_cases": [
-        "AGI"
-      ],
-      "tags": [
-        "ALL"
-      ],
+      "use_cases": ["AGI"],
+      "tags": ["ALL"],
       "prerequisite": null,
       "method": "ladder",
       "direction": null,
       "thresholds": null,
-      "absorbs": [
-        "4.13"
-      ],
+      "absorbs": ["4.13"],
       "ratification": {
         "open_question": "What evidence makes a strategy 'Adopted' — official publication, or formal executive/cabinet approval?",
         "severity": "construct-drift",
@@ -885,21 +703,12 @@
       "name": "Digital ID coverage (%)",
       "pillar": "C3",
       "layer": "Enablers",
-      "use_cases": [
-        "FIN"
-      ],
-      "tags": [
-        "ALL"
-      ],
+      "use_cases": ["FIN"],
+      "tags": ["ALL"],
       "prerequisite": "UC:FIN",
       "method": "threshold",
       "direction": "higher-is-better",
-      "thresholds": [
-        20,
-        40,
-        60,
-        80
-      ],
+      "thresholds": [20, 40, 60, 80],
       "absorbs": [],
       "ratification": {
         "open_question": "The name asserts a digital ID, but Egypt records the World Bank ID4D foundational national-ID-card ownership series while ID4D's actual digital-ID series exists and was not used — and on top of that the two countries are recorded on different denominators (Egypt % of adults 15+, Nigeria % of…",
@@ -913,9 +722,7 @@
       "pillar": "C3",
       "layer": "Enablers",
       "use_cases": [],
-      "tags": [
-        "ALL"
-      ],
+      "tags": ["ALL"],
       "prerequisite": "DELIVERY",
       "method": "ladder",
       "direction": null,
@@ -933,18 +740,11 @@
       "pillar": "C4",
       "layer": "Enablers",
       "use_cases": [],
-      "tags": [
-        "ALL"
-      ],
+      "tags": ["ALL"],
       "prerequisite": null,
       "method": "threshold",
       "direction": "higher-is-better",
-      "thresholds": [
-        50,
-        65,
-        80,
-        90
-      ],
+      "thresholds": [50, 65, 80, 90],
       "absorbs": []
     },
     {
@@ -953,18 +753,11 @@
       "pillar": "C4",
       "layer": "Enablers",
       "use_cases": [],
-      "tags": [
-        "ALL"
-      ],
+      "tags": ["ALL"],
       "prerequisite": null,
       "method": "threshold",
       "direction": "higher-is-better",
-      "thresholds": [
-        10,
-        20,
-        30,
-        40
-      ],
+      "thresholds": [10, 20, 30, 40],
       "absorbs": [],
       "ratification": {
         "open_question": "The name asserts the STEM subset of tertiary enrolment, but both countries record World Bank WDI SE.TER.ENRR, which is total tertiary gross enrolment across all fields, and the level is then scored against thresholds calibrated for a STEM share.",
@@ -978,18 +771,11 @@
       "pillar": "C4",
       "layer": "Enablers",
       "use_cases": [],
-      "tags": [
-        "ALL"
-      ],
+      "tags": ["ALL"],
       "prerequisite": null,
       "method": "threshold",
       "direction": "higher-is-better",
-      "thresholds": [
-        10,
-        25,
-        50,
-        75
-      ],
+      "thresholds": [10, 25, 50, 75],
       "absorbs": [],
       "ratification": {
         "open_question": "The name asserts a national digital-literacy rate among farmers, but Nigeria records rural-population digital skills and Egypt records a two-governorate RCT baseline whose headline figure is digital ILliteracy, the inverse of the indicator's H direction.",
@@ -1002,18 +788,13 @@
       "name": "Digital extension capability",
       "pillar": "C4",
       "layer": "Enablers",
-      "use_cases": [
-        "ADV"
-      ],
+      "use_cases": ["ADV"],
       "tags": [],
       "prerequisite": "UC:ADV",
       "method": "ladder",
       "direction": null,
       "thresholds": null,
-      "absorbs": [
-        "1.9",
-        "5.6"
-      ]
+      "absorbs": ["1.9", "5.6"]
     },
     {
       "id": "5.7",
@@ -1021,16 +802,12 @@
       "pillar": "C4",
       "layer": "Enablers",
       "use_cases": [],
-      "tags": [
-        "ALL"
-      ],
+      "tags": ["ALL"],
       "prerequisite": "DELIVERY",
       "method": "ladder",
       "direction": null,
       "thresholds": null,
-      "absorbs": [
-        "5.11"
-      ],
+      "absorbs": ["5.11"],
       "ratification": {
         "open_question": "The name asserts a standing digital/AI unit inside the ministry of agriculture, but Egypt is scored level 3 on a joint MALR-MCIT programme while the row's own note records that the named unit could not be confirmed and that the prior evidence for it was ruled inadmissible — and because this row…",
         "severity": "asserts-falsehood",
@@ -1043,16 +820,12 @@
       "pillar": "C4",
       "layer": "Enablers",
       "use_cases": [],
-      "tags": [
-        "ALL"
-      ],
+      "tags": ["ALL"],
       "prerequisite": null,
       "method": "ladder",
       "direction": null,
       "thresholds": null,
-      "absorbs": [
-        "5.9"
-      ],
+      "absorbs": ["5.9"],
       "ratification": {
         "open_question": "The name's \"agtech\" half is unevidenced in both countries — each level 3 is carried entirely by a generic national ICT/data-talent programme with the agriculture bridging explicitly absent — and the slash never says whether the two halves are conjunctive or disjunctive.",
         "severity": "construct-drift",
@@ -1064,24 +837,13 @@
       "name": "Gender balance in digital-ag workforce (%)",
       "pillar": "C4",
       "layer": "Enablers",
-      "use_cases": [
-        "ADV"
-      ],
-      "tags": [
-        "EQ"
-      ],
+      "use_cases": ["ADV"],
+      "tags": ["EQ"],
       "prerequisite": null,
       "method": "threshold",
       "direction": "higher-is-better",
-      "thresholds": [
-        20,
-        35,
-        45,
-        50
-      ],
-      "absorbs": [
-        "5.13"
-      ],
+      "thresholds": [20, 35, 45, 50],
+      "absorbs": ["5.13"],
       "ratification": {
         "open_question": "Who counts as the 'digital-ag workforce' — extension staff, agtech-company employees, or ICT-in-agriculture roles generally — given the H 20/35/45/50 thresholds presuppose a share no source publishes?",
         "severity": "construct-drift",
@@ -1094,18 +856,11 @@
       "pillar": "E1",
       "layer": "Enablers",
       "use_cases": [],
-      "tags": [
-        "ALL"
-      ],
+      "tags": ["ALL"],
       "prerequisite": null,
       "method": "threshold",
       "direction": "higher-is-better",
-      "thresholds": [
-        25,
-        35,
-        45,
-        55
-      ],
+      "thresholds": [25, 35, 45, 55],
       "absorbs": []
     },
     {
@@ -1114,18 +869,11 @@
       "pillar": "E1",
       "layer": "Enablers",
       "use_cases": [],
-      "tags": [
-        "ALL"
-      ],
+      "tags": ["ALL"],
       "prerequisite": null,
       "method": "threshold",
       "direction": "higher-is-better",
-      "thresholds": [
-        30,
-        45,
-        60,
-        75
-      ],
+      "thresholds": [30, 45, 60, 75],
       "absorbs": []
     },
     {
@@ -1134,18 +882,12 @@
       "pillar": "E1",
       "layer": "Transformation",
       "use_cases": [],
-      "tags": [
-        "ALL"
-      ],
+      "tags": ["ALL"],
       "prerequisite": null,
       "method": "ladder",
       "direction": null,
       "thresholds": null,
-      "absorbs": [
-        "6.5",
-        "6.6",
-        "6.10"
-      ],
+      "absorbs": ["6.5", "6.6", "6.10"],
       "ratification": {
         "open_question": "The scale evidence is AgFunder \"agrifoodtech\" deal flow, a category that includes downstream food-tech and non-farmer-facing ventures, standing in for an agtech venture ecosystem — a measurably broader denominator that inflates deal and funding counts.",
         "severity": "construct-drift",
@@ -1157,11 +899,7 @@
       "name": "Public-private partnerships in digital ag",
       "pillar": "E1",
       "layer": "Transformation",
-      "use_cases": [
-        "ADV",
-        "AGI",
-        "SCM"
-      ],
+      "use_cases": ["ADV", "AGI", "SCM"],
       "tags": [],
       "prerequisite": null,
       "method": "ladder",
@@ -1180,9 +918,7 @@
       "pillar": "E1",
       "layer": "Transformation",
       "use_cases": [],
-      "tags": [
-        "ALL"
-      ],
+      "tags": ["ALL"],
       "prerequisite": null,
       "method": "ladder",
       "direction": null,
@@ -1199,24 +935,13 @@
       "name": "SME/agribusiness adoption of digital tools (%)",
       "pillar": "E1",
       "layer": "Transformation",
-      "use_cases": [
-        "SMF",
-        "SCM",
-        "MKT"
-      ],
+      "use_cases": ["SMF", "SCM", "MKT"],
       "tags": [],
       "prerequisite": null,
       "method": "threshold",
       "direction": "higher-is-better",
-      "thresholds": [
-        10,
-        25,
-        50,
-        75
-      ],
-      "absorbs": [
-        "6.7"
-      ],
+      "thresholds": [10, 25, 50, 75],
+      "absorbs": ["6.7"],
       "ratification": {
         "open_question": "The name fixes neither the population (SMEs economy-wide or agribusiness firms specifically — the slash is undefined) nor what counts as a \"digital tool\", and the register itself records that the available evidence cannot be mapped onto it.",
         "severity": "unit-ambiguity",
@@ -1228,17 +953,13 @@
       "name": "Agri-fintech rails for smallholders",
       "pillar": "E1",
       "layer": "Transformation",
-      "use_cases": [
-        "FIN"
-      ],
+      "use_cases": ["FIN"],
       "tags": [],
       "prerequisite": "UC:FIN",
       "method": "ladder",
       "direction": null,
       "thresholds": null,
-      "absorbs": [
-        "6.11"
-      ],
+      "absorbs": ["6.11"],
       "ratification": {
         "open_question": "The name asserts rails serving smallholders, but the scale evidence is instruments issued and vendor-reported farmers \"reached\" rather than active use, and Egypt's Farmer Card is a state-issued instrument for registered landholders generally rather than for smallholders specifically.",
         "severity": "construct-drift",
@@ -1250,25 +971,13 @@
       "name": "AI-enabled agricultural solutions deployed",
       "pillar": "E1",
       "layer": "Transformation",
-      "use_cases": [
-        "ADV",
-        "FIN",
-        "SCM",
-        "SMF",
-        "AGI"
-      ],
+      "use_cases": ["ADV", "FIN", "SCM", "SMF", "AGI"],
       "tags": [],
       "prerequisite": null,
       "method": "ladder",
       "direction": null,
       "thresholds": null,
-      "absorbs": [
-        "7.3",
-        "7.4",
-        "7.5",
-        "7.6",
-        "7.7"
-      ],
+      "absorbs": ["7.3", "7.4", "7.5", "7.6", "7.7"],
       "ratification": {
         "open_question": "The name asserts deployment, but Egypt's level 3 rests on a solution restricted to a pilot cohort with no verified reach and Nigeria's row is anchored on a future-tense announcement of an intent to deploy.",
         "severity": "construct-drift",
@@ -1281,17 +990,12 @@
       "pillar": "E1",
       "layer": "Enablers",
       "use_cases": [],
-      "tags": [
-        "AI"
-      ],
+      "tags": ["AI"],
       "prerequisite": "UC:AI",
       "method": "ladder",
       "direction": null,
       "thresholds": null,
-      "absorbs": [
-        "7.10",
-        "7.11"
-      ],
+      "absorbs": ["7.10", "7.11"],
       "ratification": {
         "open_question": "The name does not fix whether the safeguards must be agriculture- or farmer-specific or whether a cross-sector regime suffices, and the two countries resolve it in opposite directions on the same recorded fact pattern — each row states that nothing agriculture-specific exists, yet one is scored…",
         "severity": "construct-drift",
@@ -1304,18 +1008,11 @@
       "pillar": "A1",
       "layer": "Foundation",
       "use_cases": [],
-      "tags": [
-        "NEED"
-      ],
+      "tags": ["NEED"],
       "prerequisite": null,
       "method": "threshold",
       "direction": "lower-is-better",
-      "thresholds": [
-        25,
-        15,
-        7.5,
-        2.5
-      ],
+      "thresholds": [25, 15, 7.5, 2.5],
       "absorbs": [],
       "thresholds_ratified": false
     },
@@ -1324,24 +1021,13 @@
       "name": "Account ownership, female (%)",
       "pillar": "O1",
       "layer": "Outcomes",
-      "use_cases": [
-        "FIN"
-      ],
-      "tags": [
-        "EQ"
-      ],
+      "use_cases": ["FIN"],
+      "tags": ["EQ"],
       "prerequisite": null,
       "method": "threshold",
       "direction": "higher-is-better",
-      "thresholds": [
-        20,
-        40,
-        60,
-        80
-      ],
-      "absorbs": [
-        "8.3"
-      ],
+      "thresholds": [20, 40, 60, 80],
+      "absorbs": ["8.3"],
       "ratification": {
         "open_question": "\"Account\" is not defined in the name, and the chosen WDI series counts mobile-money accounts inside the total — the same construct scored separately at 8.4 — so mobile money is effectively double-weighted in the FIN use-case column and in the O1 mean.",
         "severity": "unit-ambiguity",
@@ -1353,19 +1039,12 @@
       "name": "Mobile money account (%)",
       "pillar": "O1",
       "layer": "Outcomes",
-      "use_cases": [
-        "FIN"
-      ],
+      "use_cases": ["FIN"],
       "tags": [],
       "prerequisite": null,
       "method": "threshold",
       "direction": "higher-is-better",
-      "thresholds": [
-        10,
-        25,
-        50,
-        75
-      ],
+      "thresholds": [10, 25, 50, 75],
       "absorbs": []
     },
     {
@@ -1374,19 +1053,11 @@
       "pillar": "A1",
       "layer": "Foundation",
       "use_cases": [],
-      "tags": [
-        "NEED",
-        "EQ"
-      ],
+      "tags": ["NEED", "EQ"],
       "prerequisite": null,
       "method": "threshold",
       "direction": "higher-is-better",
-      "thresholds": [
-        10,
-        25,
-        40,
-        50
-      ],
+      "thresholds": [10, 25, 40, 50],
       "absorbs": [],
       "ratification": {
         "open_question": "The indicator name says women who OWN land while the canonical statistic counts women agricultural holders (operators), who may rent rather than own.",
@@ -1401,18 +1072,11 @@
       "pillar": "O1",
       "layer": "Outcomes",
       "use_cases": [],
-      "tags": [
-        "EQ"
-      ],
+      "tags": ["EQ"],
       "prerequisite": null,
       "method": "threshold",
       "direction": "lower-is-better",
-      "thresholds": [
-        20,
-        10,
-        5,
-        2
-      ],
+      "thresholds": [20, 10, 5, 2],
       "absorbs": [],
       "ratification": {
         "open_question": "The name fixes the unit as percentage points but not the sign convention or the basis, so a reversed gap (women ahead) scores as best-in-class under direction L, and the widely quoted GSMA figure for the same construct is a relative gap on a male-ownership base, a different number entirely.",
@@ -1426,24 +1090,12 @@
       "pillar": "O1",
       "layer": "Outcomes",
       "use_cases": [],
-      "tags": [
-        "ALL",
-        "EQ"
-      ],
+      "tags": ["ALL", "EQ"],
       "prerequisite": null,
       "method": "threshold",
       "direction": "higher-is-better",
-      "thresholds": [
-        10,
-        25,
-        50,
-        75
-      ],
-      "absorbs": [
-        "8.7",
-        "8.8",
-        "8.16"
-      ],
+      "thresholds": [10, 25, 50, 75],
+      "absorbs": ["8.7", "8.8", "8.16"],
       "ratification": {
         "open_question": "The name asserts a national share of smallholders reached, but Egypt's scored level 1 is derived from a two-governorate RCT baseline explicitly labelled as having no national provenance, and \"reached\" is nowhere defined against registered, active, or benefiting users.",
         "severity": "construct-drift",
@@ -1455,21 +1107,12 @@
       "name": "Services in local languages (%)",
       "pillar": "O1",
       "layer": "Outcomes",
-      "use_cases": [
-        "ADV"
-      ],
-      "tags": [
-        "EQ"
-      ],
+      "use_cases": ["ADV"],
+      "tags": ["EQ"],
       "prerequisite": null,
       "method": "threshold",
       "direction": "higher-is-better",
-      "thresholds": [
-        25,
-        50,
-        75,
-        90
-      ],
+      "thresholds": [25, 50, 75, 90],
       "absorbs": [],
       "ratification": {
         "open_question": "Should 8.11 remain a %-share indicator when no country publishes a denominator for local-language service delivery — and the Nigeria bundle's guidance text is contaminated with Egypt-specific content that must be removed regardless of the ruling?",
@@ -1483,16 +1126,12 @@
       "pillar": "O1",
       "layer": "Outcomes",
       "use_cases": [],
-      "tags": [
-        "ALL"
-      ],
+      "tags": ["ALL"],
       "prerequisite": null,
       "method": "ladder",
       "direction": null,
       "thresholds": null,
-      "absorbs": [
-        "8.13"
-      ],
+      "absorbs": ["8.13"],
       "ratification": {
         "open_question": "The name's parenthetical fixes the outcome as yield or income, but Egypt's level 3 rests on an evaluation whose measured outcome is diffusion and adoption of digital tools, not yield or income.",
         "severity": "construct-drift",
@@ -1504,22 +1143,13 @@
       "name": "Climate advisory reach (%)",
       "pillar": "O1",
       "layer": "Outcomes",
-      "use_cases": [
-        "ADV"
-      ],
+      "use_cases": ["ADV"],
       "tags": [],
       "prerequisite": null,
       "method": "threshold",
       "direction": "higher-is-better",
-      "thresholds": [
-        20,
-        40,
-        60,
-        80
-      ],
-      "absorbs": [
-        "8.14"
-      ],
+      "thresholds": [20, 40, 60, 80],
+      "absorbs": ["8.14"],
       "ratification": {
         "open_question": "Does the indicator measure farmer receipt of advisories, or supply-side issuance (warnings issued, platforms live), which is all either country publishes?",
         "severity": "construct-drift",
@@ -1527,78 +1157,291 @@
       }
     }
   ],
+  "derived_sources": {
+    "pillar_profile": "Per-pillar mean, band, rated/held denominators and evidence composition.",
+    "layer_profile": "Foundation / Enablers / Transformation / Outcomes means.",
+    "leapfrog": "Foundation minus Transformation, and the structural flag.",
+    "matrix": "The six use-case readiness columns with both means.",
+    "prerequisites": "Presence status of the twelve prerequisite rows.",
+    "constraints": "Lowest-level rated indicators, the binding-constraint list.",
+    "kpi_baseline": "Measured A1/O1 rows carried as baseline readings.",
+    "register": "The initiative and solutions register, tier-badged.",
+    "evidence_ledger": "Every row with class, level, source, tier, year; gaps, holds and stale readings.",
+    "foresight.scenarios": "Scenario set produced by the foresight stage.",
+    "foresight.preferred_future": "The selected preferred future.",
+    "foresight.milestones": "Backcast milestones and their indicator bindings."
+  },
+  "dar_outline": [
+    {
+      "n": "1",
+      "title": "Country and sector context",
+      "kind": "diagnostic",
+      "content": "Agricultural structure, need and climate exposure; the national digital context the roadmap has to work inside.",
+      "binding": {
+        "pillars": ["A1", "C1", "O1"],
+        "indicators": [],
+        "use_cases": [],
+        "prerequisites": [],
+        "derived": ["constraints", "register"]
+      },
+      "note": "A1 reads as NEED: a low reading is a large opportunity, never low maturity."
+    },
+    {
+      "n": "2",
+      "title": "Where the country stands",
+      "kind": "diagnostic",
+      "content": "Pillar and layer profiles with their rated denominators; the use-case readiness matrix; prerequisite status; the structural gap; what the evidence rests on.",
+      "binding": {
+        "pillars": ["A1", "C1", "C2", "C3", "C4", "E1", "O1"],
+        "indicators": [],
+        "use_cases": ["ADV", "SMF", "MKT", "SCM", "FIN", "AGI"],
+        "prerequisites": ["*"],
+        "derived": [
+          "pillar_profile",
+          "layer_profile",
+          "leapfrog",
+          "matrix",
+          "prerequisites",
+          "constraints",
+          "evidence_ledger"
+        ]
+      },
+      "note": "This chapter is the diagnostic. Every figure must reconcile with the diagnostic report generated for the same assessment."
+    },
+    {
+      "n": "3",
+      "title": "Vision, targeting and beneficiaries",
+      "kind": "prescriptive",
+      "content": "Priority value chains, regions and farmer segments; which use cases are worth pursuing first, and for whom.",
+      "binding": {
+        "pillars": ["A1", "O1"],
+        "indicators": ["5.12"],
+        "use_cases": ["ADV", "SMF", "MKT", "SCM", "FIN", "AGI"],
+        "prerequisites": [],
+        "derived": ["matrix", "foresight.preferred_future", "foresight.milestones"]
+      },
+      "note": "Targeting rests on the readiness matrix; beneficiary claims rest on A1 need and O1 equity rows. The vision itself comes from the foresight stage, not from the model."
+    },
+    {
+      "n": "4",
+      "title": "The investment program",
+      "kind": "prescriptive",
+      "content": "Sequenced candidates with dependencies and implementation owners; what has to be built before what.",
+      "binding": {
+        "pillars": ["C1", "C2", "C3", "C4", "E1"],
+        "indicators": [],
+        "use_cases": ["ADV", "SMF", "MKT", "SCM", "FIN", "AGI"],
+        "prerequisites": ["*"],
+        "derived": ["matrix", "prerequisites", "constraints", "foresight.milestones"]
+      },
+      "note": "Sequencing follows the prerequisites: a Blocked column names what must be built. A blocked use case is an argument FOR investment, never against it."
+    },
+    {
+      "n": "5",
+      "title": "Costs and financing",
+      "kind": "prescriptive",
+      "content": "Costed program under envelope scenarios; instrument routing; financing sources.",
+      "binding": {
+        "pillars": [],
+        "indicators": ["1.7", "6.14"],
+        "use_cases": ["FIN"],
+        "prerequisites": ["6.14"],
+        "derived": ["register"]
+      },
+      "note": "DAMM CARRIES NO COST, BUDGET OR FINANCING DATA OF ANY KIND. No figure in this chapter may be presented as derived from the model or the assessment. The only quantities available are scale figures as reported by initiatives in the register, which are the initiatives' own claims and are tier-badged as such."
+    },
+    {
+      "n": "6",
+      "title": "Policy and regulatory actions",
+      "kind": "prescriptive",
+      "content": "Reform actions arising from the policy and safeguards pillar; legal drafting needs.",
+      "binding": {
+        "pillars": ["C3"],
+        "indicators": [],
+        "use_cases": [],
+        "prerequisites": ["4.1", "4.5", "3.11", "7.12"],
+        "derived": ["prerequisites"]
+      },
+      "note": "An Absent prerequisite here is a named legal or regulatory instrument that does not exist; say which, and cite the row."
+    },
+    {
+      "n": "7",
+      "title": "Delivery and governance",
+      "kind": "prescriptive",
+      "content": "Mandate and ownership; steering arrangements; the institutional home and its capacity.",
+      "binding": {
+        "pillars": ["C4"],
+        "indicators": [],
+        "use_cases": [],
+        "prerequisites": ["4.9", "5.7"],
+        "derived": ["prerequisites", "register"]
+      },
+      "note": "4.9 and 5.7 are DELIVERY-risk flags: they are reported and they block nothing. Do not render them as gating anything."
+    },
+    {
+      "n": "8",
+      "title": "Climate alignment",
+      "kind": "prescriptive",
+      "content": "Climate-smart practice, advisory reach and the weather and climate data base the roadmap can build on.",
+      "binding": {
+        "pillars": [],
+        "indicators": ["1.8", "3.6", "8.17"],
+        "use_cases": ["ADV"],
+        "prerequisites": [],
+        "derived": []
+      },
+      "note": "The model holds no NDC or CCDR crosswalk and no climate-finance taxonomy. Alignment claims against those instruments are external and must be marked as such."
+    },
+    {
+      "n": "9",
+      "title": "Results and learning",
+      "kind": "prescriptive",
+      "content": "Results chains with baselines; the measurement gap register; what will be watched and how often.",
+      "binding": {
+        "pillars": ["O1"],
+        "indicators": [],
+        "use_cases": [],
+        "prerequisites": [],
+        "derived": ["kpi_baseline", "evidence_ledger", "foresight.milestones"]
+      },
+      "note": "Baselines come from Measured A1/O1 rows only. Recorded gaps, held levels and stale readings ARE the measurement gap register — carry them, do not summarise them away."
+    },
+    {
+      "n": "10",
+      "title": "Risks and safeguards",
+      "kind": "prescriptive",
+      "content": "Data rights, consent and redress; evidence-quality risk; political-economy risk and mitigations.",
+      "binding": {
+        "pillars": ["C3"],
+        "indicators": [],
+        "use_cases": [],
+        "prerequisites": ["4.1", "4.5", "7.12"],
+        "derived": ["evidence_ledger"]
+      },
+      "note": "Evidence quality is itself a risk and belongs here: how much of the assessment rests on withheld levels, recorded gaps, stale readings and unratified definitions."
+    },
+    {
+      "n": "A",
+      "title": "Annexes",
+      "kind": "diagnostic",
+      "content": "The full indicator evidence base; the source and tier record; the open-decision register; the version and configuration record.",
+      "binding": {
+        "pillars": ["A1", "C1", "C2", "C3", "C4", "E1", "O1"],
+        "indicators": ["*"],
+        "use_cases": ["ADV", "SMF", "MKT", "SCM", "FIN", "AGI"],
+        "prerequisites": ["*"],
+        "derived": [
+          "pillar_profile",
+          "layer_profile",
+          "leapfrog",
+          "matrix",
+          "prerequisites",
+          "constraints",
+          "kpi_baseline",
+          "register",
+          "evidence_ledger",
+          "foresight.scenarios",
+          "foresight.preferred_future",
+          "foresight.milestones"
+        ]
+      },
+      "note": "The annex is the audit trail. Nothing is summarised here; rows appear in full."
+    }
+  ],
+  "foresight": {
+    "method": "scenarios -> preferred future -> backcasting to milestones",
+    "ratified": false,
+    "settled_by": "design interview, 24 August 2026",
+    "steps": [
+      {
+        "id": "scenarios",
+        "name": "Scenarios",
+        "purpose": "Bound the uncertainty: plausible futures for the sector, not forecasts."
+      },
+      {
+        "id": "preferred_future",
+        "name": "Preferred future",
+        "purpose": "The normative selection — what the country would choose to bring about. A claim about values, not evidence, and marked as such."
+      },
+      {
+        "id": "backcasting",
+        "name": "Backcasting to milestones",
+        "purpose": "Work back from the preferred future to dated, measurable milestones."
+      }
+    ],
+    "milestone_binding": {
+      "rule": "Each milestone binds to one or more indicators or prerequisites with a target level and a target year, so progress is measurable against the same instrument that produced the diagnostic.",
+      "fields": ["indicator_id", "target_level", "target_year"],
+      "fallback": "Where no indicator in the model fits, the milestone proposes a CANDIDATE indicator (see candidate_indicators) and binds to that instead.",
+      "provisionality": "A target level standing on an unratified threshold inherits that provisionality and carries the marking of the open decision governing it."
+    },
+    "note": "Where a foresight document is supplied it is ingested and this exercise is skipped. A machine-run preferred future is a facilitation input, never a finding."
+  },
+  "candidate_indicators": {
+    "purpose": "Let a metric be recorded and carried without silently expanding the scored model.",
+    "id_pattern": "^(A1|C1|C2|C3|C4|E1|O1)-CAND-[A-Z0-9-]+$",
+    "required_fields": ["id", "name", "proposed_pillar", "rationale", "proposed_by"],
+    "may_be_proposed_by": ["foresight backcasting (F4)", "assessor proposal", "indicator audit"],
+    "never": [
+      "enters a pillar mean",
+      "enters a layer mean",
+      "enters a use-case mean",
+      "carries or gates a prerequisite",
+      "appears in the readiness matrix"
+    ],
+    "disposition": "Recorded, carried beside the assessment, flagged as a ratification item. Promotion to a scored indicator is a versioned model change, never automatic."
+  },
   "open_decisions": [
     {
       "id": "13.1",
       "title": "Band edges",
-      "governs": [
-        "bands"
-      ]
+      "governs": ["bands"]
     },
     {
       "id": "13.2",
       "title": "A1 additions (cereal import dependency, irrigation)",
-      "governs": [
-        "candidates"
-      ]
+      "governs": ["candidates"]
     },
     {
       "id": "13.3",
       "title": "Per-use-case prerequisite mapping",
-      "governs": [
-        "indicators[].prerequisite",
-        "binding_rules"
-      ]
+      "governs": ["indicators[].prerequisite", "binding_rules"]
     },
     {
       "id": "13.4",
       "title": "The three binding rules in force",
-      "governs": [
-        "binding_rules"
-      ]
+      "governs": ["binding_rules"]
     },
     {
       "id": "13.5",
       "title": "Indicator definitions — the largest item",
-      "governs": [
-        "indicators[].ratification"
-      ],
+      "governs": ["indicators[].ratification"],
       "scope": "44 of 57 rows"
     },
     {
       "id": "13.6",
       "title": "A1 thresholds (still test values)",
-      "governs": [
-        "indicators[].thresholds where pillar == A1"
-      ]
+      "governs": ["indicators[].thresholds where pillar == A1"]
     },
     {
       "id": "13.7",
       "title": "Sub-readings display",
-      "governs": [
-        "presentation only"
-      ]
+      "governs": ["presentation only"]
     },
     {
       "id": "13.8",
       "title": "Source-tier lookup and register field set",
-      "governs": [
-        "source_tiers"
-      ]
+      "governs": ["source_tiers"]
     },
     {
       "id": "13.9",
       "title": "QC gate scope",
-      "governs": [
-        "process, not model"
-      ]
+      "governs": ["process, not model"]
     },
     {
       "id": "13.10",
       "title": "Practice Library schema",
-      "governs": [
-        "companion schema"
-      ]
+      "governs": ["companion schema"]
     },
     {
       "id": "13.11",

@@ -2,6 +2,8 @@ import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 
 import {
+  chapterMayCite,
+  darChapter,
   model,
   indicatorById,
   indicatorsFor,
@@ -103,5 +105,92 @@ describe("model semantics the scorer depends on", () => {
 
   it("the census absorptions survived: 7.2 carries its five merged v1.5 rows", () => {
     assert.deepEqual(indicatorById("7.2")?.absorbs, ["7.3", "7.4", "7.5", "7.6", "7.7"]);
+  });
+});
+
+describe("DAR outline and its evidence bindings", () => {
+  it("carries 11 chapters: 1-10 plus the annex", () => {
+    assert.deepEqual(
+      model.dar_outline.map((c) => c.n),
+      ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "A"],
+    );
+  });
+
+  it("marks chapters 3-10 prescriptive, so they render as proposed not evidenced", () => {
+    for (const c of model.dar_outline) {
+      const expected = ["1", "2", "A"].includes(c.n) ? "diagnostic" : "prescriptive";
+      assert.equal(c.kind, expected, `chapter ${c.n}`);
+    }
+  });
+
+  it("binds every chapter to evidence the model actually declares", () => {
+    const ids = new Set(model.indicators.map((i) => i.id));
+    const derived = new Set(Object.keys(model.derived_sources));
+    for (const c of model.dar_outline) {
+      for (const p of c.binding.pillars) assert.ok(p in model.pillars, `${c.n}: ${p}`);
+      for (const u of c.binding.use_cases) assert.ok(u in model.use_cases, `${c.n}: ${u}`);
+      for (const i of c.binding.indicators) {
+        if (i !== "*") assert.ok(ids.has(i), `${c.n}: ${i}`);
+      }
+      for (const d of c.binding.derived) assert.ok(derived.has(d), `${c.n}: ${d}`);
+    }
+  });
+
+  it("keeps the costs chapter honest — the model holds no cost data", () => {
+    const costs = darChapter("5");
+    assert.ok(costs);
+    assert.deepEqual(costs.binding.pillars, [], "no pillar may be cited as a cost basis");
+    assert.match(costs.note, /NO COST, BUDGET OR FINANCING DATA/);
+  });
+
+  it("stops a chapter citing evidence outside its binding", () => {
+    // Financing may cite the agri-fintech row; it may not reach for connectivity.
+    assert.equal(chapterMayCite("5", "indicators", "6.14"), true);
+    assert.equal(chapterMayCite("5", "pillars", "C1"), false);
+    // Policy actions own C3; they do not own the outcomes pillar.
+    assert.equal(chapterMayCite("6", "pillars", "C3"), true);
+    assert.equal(chapterMayCite("6", "pillars", "O1"), false);
+    // The annex may cite everything.
+    assert.equal(chapterMayCite("A", "indicators", "2.1"), true);
+    assert.equal(chapterMayCite("A", "pillars", "E1"), true);
+  });
+
+  it("routes the delivery-risk flags to governance, where they block nothing", () => {
+    assert.deepEqual(darChapter("7")?.binding.prerequisites, ["4.9", "5.7"]);
+    assert.match(darChapter("7")!.note, /block nothing/);
+  });
+});
+
+describe("foresight and candidate indicators", () => {
+  it("declares a named, unratified method of three steps", () => {
+    assert.equal(model.foresight.ratified, false);
+    assert.deepEqual(
+      model.foresight.steps.map((s) => s.id),
+      ["scenarios", "preferred_future", "backcasting"],
+    );
+  });
+
+  it("binds milestones to the instrument with a target level and year", () => {
+    assert.deepEqual(model.foresight.milestone_binding.fields, [
+      "indicator_id",
+      "target_level",
+      "target_year",
+    ]);
+    assert.match(model.foresight.milestone_binding.fallback, /CANDIDATE/);
+  });
+
+  it("bars a candidate indicator from every aggregate", () => {
+    const never = model.candidate_indicators.never.join(" ");
+    for (const forbidden of ["pillar mean", "layer mean", "use-case mean", "readiness matrix"]) {
+      assert.match(never, new RegExp(forbidden));
+    }
+    assert.match(model.candidate_indicators.disposition, /never automatic/);
+  });
+
+  it("accepts the existing candidate ids the worked examples already carry", () => {
+    const pattern = new RegExp(model.candidate_indicators.id_pattern);
+    assert.ok(pattern.test("A1-CAND-IMP"));
+    assert.ok(pattern.test("A1-CAND-IRR"));
+    assert.ok(!pattern.test("1.1"), "a scored indicator id is not a candidate id");
   });
 });

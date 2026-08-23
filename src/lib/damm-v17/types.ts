@@ -83,6 +83,70 @@ export interface IndicatorDef {
   ratification?: RatificationQuestion;
 }
 
+/** Closed vocabulary of derived structures a DAR chapter may cite. */
+export type DerivedSourceId = string;
+
+/**
+ * What one DAR chapter is permitted to cite. A chapter may draw on ONLY what
+ * its binding names; `"*"` means all of that kind. This is what lets the
+ * fidelity check ask "did it use the *right* number", not merely "did it
+ * invent one" — a financing chapter citing connectivity indicators reads
+ * fluently and is wrong.
+ */
+export interface ChapterBinding {
+  pillars: PillarId[];
+  indicators: string[];
+  use_cases: UseCaseId[];
+  prerequisites: string[];
+  derived: DerivedSourceId[];
+}
+
+export interface DarChapter {
+  n: string;
+  title: string;
+  /** Prescriptive chapters render marked *proposed, not evidenced*. */
+  kind: "diagnostic" | "prescriptive";
+  content: string;
+  binding: ChapterBinding;
+  note: string;
+}
+
+export interface ForesightStep {
+  id: string;
+  name: string;
+  purpose: string;
+}
+
+/** The foresight method, declared in the model so it is ratifiable. */
+export interface Foresight {
+  method: string;
+  ratified: boolean;
+  settled_by?: string;
+  steps: ForesightStep[];
+  milestone_binding: {
+    rule: string;
+    fields: string[];
+    fallback: string;
+    provisionality?: string;
+  };
+  note?: string;
+}
+
+/**
+ * A metric carried beside the model without entering it. Foresight may propose
+ * one where no existing indicator fits a milestone; promotion to a scored
+ * indicator is a versioned model change, never automatic.
+ */
+export interface CandidateIndicatorRule {
+  purpose: string;
+  id_pattern: string;
+  required_fields: string[];
+  may_be_proposed_by?: string[];
+  /** Aggregates a candidate must never enter. */
+  never: string[];
+  disposition: string;
+}
+
 export interface OpenDecision {
   id: string;
   title: string;
@@ -127,6 +191,10 @@ export interface DammModelV17 {
   binding_rules: BindingRule[];
   invariants: string[];
   indicators: IndicatorDef[];
+  derived_sources: Record<DerivedSourceId, string>;
+  dar_outline: DarChapter[];
+  foresight: Foresight;
+  candidate_indicators: CandidateIndicatorRule;
   open_decisions: OpenDecision[];
 }
 
