@@ -16,6 +16,7 @@ import {
   stoppedSummary,
   type Run,
   type RunStatus,
+  basenameFor,
 } from "./runs.ts";
 
 function run(over: Partial<Run> = {}): Run {
@@ -185,5 +186,24 @@ describe("progress never fabricates what it does not know", () => {
     const p = progressOf(run({ rowsDone: 60, rowsTotal: 57, spentUsd: 400 }));
     assert.equal(p.fraction, 1);
     assert.equal(p.spentFraction, 1);
+  });
+});
+
+describe("which name a pass writes under", () => {
+  const at = new Date("2026-08-25T14:07:00Z");
+
+  it("mints a stamped name for a research pass", () => {
+    assert.equal(basenameFor("research", "egy", at, null), "EGY_202608251407");
+  });
+
+  it("makes a later pass inherit the research name rather than mint its own", () => {
+    // gate2.py takes --run and reads an existing pass's files. A G2 run under a fresh
+    // name would find nothing to review and report a clean review of it.
+    assert.equal(basenameFor("g2", "EGY", at, "EGY_202608251407"), "EGY_202608251407");
+  });
+
+  it("returns nothing when there is no research pass to inherit from", () => {
+    assert.equal(basenameFor("g2", "EGY", at, null), null);
+    assert.equal(basenameFor("generation", "EGY", at, null), null);
   });
 });

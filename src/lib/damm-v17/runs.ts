@@ -73,6 +73,35 @@ export function isTerminal(s: RunStatus): boolean {
   return TERMINAL.includes(s);
 }
 
+/** Holding a place in the queue: not finished, and not startable again. */
+export const ACTIVE: readonly RunStatus[] = ["queued", "running", "paused"];
+
+export function isActive(s: RunStatus): boolean {
+  return ACTIVE.includes(s);
+}
+
+/**
+ * The output basename a pass writes under.
+ *
+ * A research pass mints one. A second review does not: `gate2.py` takes `--run` and reads
+ * an existing pass's files, so a G2 run that minted its own name would review nothing and
+ * report a clean review of it. Every later pass inherits the research basename, which is
+ * why this returns null when there is none to inherit — the caller has to refuse rather
+ * than invent one.
+ */
+export function basenameFor(
+  pass: RunPass,
+  iso3: string,
+  at: Date,
+  researchBasename: string | null,
+): string | null {
+  if (pass === "research") {
+    const stamp = at.toISOString().slice(0, 16).replace(/[-:T]/g, "");
+    return `${iso3.toUpperCase()}_${stamp}`;
+  }
+  return researchBasename;
+}
+
 export function isResumable(s: RunStatus): boolean {
   return RESUMABLE.includes(s);
 }

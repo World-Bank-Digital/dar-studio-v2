@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 
 import {
   argsFor,
+  defaultDeps,
   drain,
   runOne,
   type RowProgress,
@@ -275,5 +276,40 @@ describe("draining the queue", () => {
     assert.equal(handled, 1);
     assert.equal(f.calls.finished[0].status, "failed");
     assert.match(f.calls.finished[0].reason, /python not found/);
+  });
+});
+
+describe("spawning the real pipeline", () => {
+  it("ends the run when the interpreter is missing, rather than holding the claim", async () => {
+    // Waiting only on 'close' would leave this run showing as running until its lease
+    // expired. The failure has to reach the record, and it has to say what went wrong.
+    const before = process.env.DAMM_PIPELINE_PYTHON;
+    process.env.DAMM_PIPELINE_PYTHON = "/nonexistent/python-that-is-not-there";
+    try {
+      const f = fakeStore();
+      const real = defaultDeps();
+      // readLedger is deliberately the real one: overriding it here once hid a broken
+      // path reference that only showed up against a live queue.
+      const status = await runOne(run(), "w1", { ...real, store: f.store, heartbeatMs: 50 });
+      assert.equal(status, "failed");
+      assert.match(f.calls.finished[0].reason, /could not be started/);
+    } finally {
+      if (before === undefined) delete process.env.DAMM_PIPELINE_PYTHON;
+      else process.env.DAMM_PIPELINE_PYTHON = before;
+    }
+  });
+
+  it("points a research pass at the configured pipeline directory", () => {
+    const before = process.env.DAMM_PIPELINE_DIR;
+    process.env.DAMM_PIPELINE_DIR = "/opt/damm";
+    try {
+      assert.equal(
+        argsFor(run()).script,
+        "/opt/damm/gauntlet/loop-1/research_pipeline/research_orchestrator.py",
+      );
+    } finally {
+      if (before === undefined) delete process.env.DAMM_PIPELINE_DIR;
+      else process.env.DAMM_PIPELINE_DIR = before;
+    }
   });
 });

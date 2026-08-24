@@ -14,6 +14,20 @@ import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 import pg from "pg";
 
+const root = join(dirname(fileURLToPath(import.meta.url)), "..");
+
+// Read .env when the variable is not already in the environment. The dev server reads it,
+// so without this the app runs against Neon locally while the migrator quietly skips —
+// and the schema the app needs is never applied to the database it is actually using.
+// Deploys pass DATABASE_URL in the environment and never reach this.
+if (!process.env.DATABASE_URL) {
+  try {
+    process.loadEnvFile(join(root, ".env"));
+  } catch {
+    // No .env is the normal case in CI and on a deploy.
+  }
+}
+
 const databaseUrl = process.env.DATABASE_URL;
 if (!databaseUrl) {
   console.log(
@@ -22,7 +36,7 @@ if (!databaseUrl) {
   process.exit(0);
 }
 
-const migrationsDir = join(dirname(fileURLToPath(import.meta.url)), "..", "migrations");
+const migrationsDir = join(root, "migrations");
 
 async function main() {
   const pool = new pg.Pool({ connectionString: databaseUrl, max: 1 });

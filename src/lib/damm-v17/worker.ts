@@ -30,12 +30,19 @@ import type { Run, RunStatus } from "./runs.ts";
  * rather than a constant — hard-coding one developer's directory is how a worker becomes
  * undeployable.
  */
-export const PIPELINE_DIR =
-  process.env.DAMM_PIPELINE_DIR ?? path.join(process.env.HOME ?? "", "DAR/Claude/DAMM");
+export function pipelineDir(): string {
+  return process.env.DAMM_PIPELINE_DIR ?? path.join(process.env.HOME ?? "", "DAR/Claude/DAMM");
+}
 
 /** The pipeline needs its own virtualenv: the vendor SDKs are not in system Python. */
-export const PIPELINE_PYTHON =
-  process.env.DAMM_PIPELINE_PYTHON ?? path.join(PIPELINE_DIR, ".venv/bin/python");
+export function pipelinePython(): string {
+  return process.env.DAMM_PIPELINE_PYTHON ?? path.join(pipelineDir(), ".venv/bin/python");
+}
+
+/** Read on each call rather than captured at import, so configuration is configuration. */
+function scriptDir(): string {
+  return path.join(pipelineDir(), "gauntlet/loop-1/research_pipeline");
+}
 
 const HEARTBEAT_MS = 30_000;
 
@@ -96,7 +103,7 @@ export interface WorkerDeps {
 }
 
 export function argsFor(run: Run): { script: string; args: string[] } {
-  const dir = path.join(PIPELINE_DIR, "gauntlet/loop-1/research_pipeline");
+  const dir = scriptDir();
   if (run.pass === "g2") {
     return {
       script: path.join(dir, "gate2.py"),
@@ -130,21 +137,41 @@ export function defaultDeps(): WorkerDeps {
     store: dbStore(),
     spawnPipeline(run) {
       const { script, args } = argsFor(run);
-      const child = spawn(PIPELINE_PYTHON, ["-u", script, ...args], {
-        cwd: path.join(PIPELINE_DIR, "gauntlet/loop-1/research_pipeline"),
+      const child = spawn(pipelinePython(), ["-u", script, ...args], {
+        cwd: scriptDir(),
         env: { ...process.env },
       });
+      let onErr: (chunk: string) => void = () => {};
       return {
-        onStdout: (cb) => child.stdout.on("data", (d) => cb(String(d))),
-        onStderr: (cb) => child.stderr.on("data", (d) => cb(String(d))),
+        onStdout: (cb) => child.stdout?.on("data", (d) => cb(String(d))),
+        onStderr: (cb) => {
+          onErr = cb;
+          child.stderr?.on("data", (d) => cb(String(d)));
+        },
         wait: () =>
-          new Promise((resolve) => child.on("close", (code) => resolve(code))),
+          new Promise((resolve) => {
+            // A process that cannot be started at all emits 'error', and 'close' is not
+            // guaranteed to follow. Waiting only on 'close' would leave the worker holding
+            // the claim until its lease expired, with the run showing as running the whole
+            // time — a missing interpreter would look like a pipeline that never answers.
+            let settled = false;
+            const settle = (code: number | null) => {
+              if (settled) return;
+              settled = true;
+              resolve(code);
+            };
+            child.on("close", settle);
+            child.on("error", (err: Error) => {
+              onErr(`OSError: the pipeline could not be started — ${err.message}\n`);
+              settle(null);
+            });
+          }),
         kill: () => child.kill("SIGTERM"),
       };
     },
     async readLedger(run) {
       // The pipeline writes its ledger beside the assessment, in gauntlet/loop-1.
-      const p = path.join(PIPELINE_DIR, "gauntlet/loop-1", `${ledgerName(run)}_spend.json`);
+      const p = path.join(pipelineDir(), "gauntlet/loop-1", `${ledgerName(run)}_spend.json`);
       try {
         const j = JSON.parse(await readFile(p, "utf8"));
         const total = j?.summary?.total;

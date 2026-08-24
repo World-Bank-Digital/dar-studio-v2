@@ -233,3 +233,27 @@ export async function listEvents(runId: string, sinceId = 0, limit = 200): Promi
     message: r.message,
   }));
 }
+
+/** The run holding a country's place for a pass, if one is queued, running or paused. */
+export async function findActiveRun(countryId: string, pass: RunPass): Promise<Run | null> {
+  const sql = await getSql();
+  const rows = await sql<RunRow>`
+    select * from runs
+    where country_id = ${countryId} and pass = ${pass}
+      and status in ('queued', 'running', 'paused')
+    order by created_at desc limit 1`;
+  return rows[0] ? toRun(rows[0]) : null;
+}
+
+/**
+ * The country's most recent research pass that produced output. Later passes read its
+ * files, so its basename is what they must be given.
+ */
+export async function latestCompletedResearch(countryId: string): Promise<Run | null> {
+  const sql = await getSql();
+  const rows = await sql<RunRow>`
+    select * from runs
+    where country_id = ${countryId} and pass = 'research' and status = 'done'
+    order by finished_at desc nulls last, created_at desc limit 1`;
+  return rows[0] ? toRun(rows[0]) : null;
+}
