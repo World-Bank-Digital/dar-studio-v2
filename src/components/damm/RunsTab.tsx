@@ -31,15 +31,17 @@ import {
   type RunPass,
   type RunStatus,
 } from "@/lib/damm-v17/runs";
+import { useSessionRole } from "@/lib/session";
 import {
   getRunDetail,
+  importPassOutput,
   listCountryRuns,
   resumeRun,
   startRun,
   stopRun,
   type RunView,
 } from "@/lib/damm-v17/run-actions";
-import { AlertTriangle, Loader2, Play, Square, Pause, RotateCw } from "lucide-react";
+import { AlertTriangle, Download, Loader2, Play, Square, Pause, RotateCw } from "lucide-react";
 
 const PASS_LABEL: Record<string, string> = {
   research: "Research — the 57-row first pass",
@@ -225,9 +227,18 @@ function Progress({ run }: { run: RunView }) {
   );
 }
 
+interface Held {
+  indicatorId: string;
+  yours: string;
+  found: string;
+  assessorName: string | null;
+}
+
 function RunCard({ run, onChange }: { run: RunView; onChange: () => void }) {
+  const { role, actorName } = useSessionRole();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [imported, setImported] = useState<{ summary: string; held: Held[] } | null>(null);
   // Defaulted to what the run's own rate says finishing needs. An operator asked to add
   // budget with no basis is guessing, and guessing low means exhausting again a few rows
   // from the end.
@@ -365,6 +376,35 @@ function RunCard({ run, onChange }: { run: RunView; onChange: () => void }) {
           </>
         )}
 
+        {(run.status === "done" || run.status === "exhausted") && (
+          <Button
+            size="sm"
+            variant={run.status === "done" ? "default" : "outline"}
+            disabled={busy}
+            onClick={async () => {
+              setBusy(true);
+              setError(null);
+              try {
+                const res = await importPassOutput({
+                  data: { runId: run.id, role, actorName },
+                });
+                if (!res.ok) setError(res.error);
+                else {
+                  setImported({ summary: res.summary, held: res.held });
+                  onChange();
+                }
+              } catch (e) {
+                setError(e instanceof Error ? e.message : "The import did not run.");
+              } finally {
+                setBusy(false);
+              }
+            }}
+          >
+            <Download className="size-3.5" />
+            {run.status === "exhausted" ? "Import what it reached" : "Import into the workspace"}
+          </Button>
+        )}
+
         <button
           onClick={() => setOpen((v) => !v)}
           className="ml-auto text-xs text-muted underline hover:text-ink"
@@ -378,6 +418,35 @@ function RunCard({ run, onChange }: { run: RunView; onChange: () => void }) {
           <AlertTriangle className="mt-0.5 size-3.5 shrink-0" />
           {error}
         </p>
+      )}
+
+      {imported && (
+        <div className="mt-3 rounded-sm border border-forest/30 bg-forest/5 p-2">
+          <p className="text-xs text-ink">{imported.summary}</p>
+          {imported.held.length > 0 && (
+            <table className="mt-2 w-full text-xs">
+              <thead>
+                <tr className="text-left text-subtle">
+                  <th className="pr-2 font-normal">Row</th>
+                  <th className="pr-2 font-normal">Yours</th>
+                  <th className="font-normal">This pass found</th>
+                </tr>
+              </thead>
+              <tbody>
+                {imported.held.map((h) => (
+                  <tr key={h.indicatorId} className="border-t border-ink/10 align-top">
+                    <td className="py-1 pr-2 font-medium">{h.indicatorId}</td>
+                    <td className="py-1 pr-2">
+                      {h.yours}
+                      {h.assessorName && <span className="text-subtle"> — {h.assessorName}</span>}
+                    </td>
+                    <td className="py-1 text-muted">{h.found}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </div>
       )}
 
       {open && <EventLog runId={run.id} live={ACTIVE.includes(run.status)} />}

@@ -85,6 +85,43 @@ try {
   const done = await page.locator("body").innerText();
   step("finished", { line: (done.match(/Finished [^.]*\./) ?? ["none"])[0] });
 
+  // --- a human edit, which an import must never overwrite ------------------------
+  await page.getByRole("button", { name: "Evidence", exact: true }).click();
+  // Anchored on the ID cell, not on the row's text: a table row's textContent runs its
+  // cells together ("1.1Agriculture value added…"), so a word-boundary match never fires
+  // and a substring match would also hit 1.10 and 11.1.
+  const rowFor = (id) =>
+    page.locator("tr").filter({ has: page.locator("td", { hasText: new RegExp(`^${id.replace(".", "\\.")}$`) }) }).first();
+  const row11 = rowFor("1.1");
+  await row11.getByRole("button", { name: /^Edit$/ }).click();
+  const valueBox = page.locator("textarea").first();
+  await valueBox.fill("77.7");
+  await page.getByRole("button", { name: /Save row/i }).click();
+  await page.waitForTimeout(1500);
+  step("edited row 1.1 by hand as TTL");
+
+  // --- importing the pass into the workspace -------------------------------------
+  await page.getByRole("button", { name: "Research", exact: true }).click();
+  await page.getByRole("button", { name: /Import into the workspace/i }).first().click();
+  await page.getByText(/Imported \d+ of the/).waitFor({ timeout: 30000 });
+  await page.screenshot({ path: `${shot}/runs-7-imported.png` });
+  const imp = await page.locator("body").innerText();
+  step("imported", { line: (imp.match(/Imported [^\n]*/) ?? ["none"])[0] });
+
+  // The claim that matters: the hand-edited row was left alone and both readings shown.
+  if (!/you had entered/.test(imp)) throw new Error("the import did not report a held row");
+  const heldRow = await page.locator("tr").filter({ hasText: /^1\.1yours|1\.1/ }).filter({ hasText: /77\.7/ }).first().innerText();
+  if (!/77\.7/.test(heldRow)) throw new Error(`the held row did not show the assessor's value: ${heldRow}`);
+  step("held the hand-edited row", { row: heldRow.replace(/\s+/g, " ").slice(0, 110) });
+
+  // And it is still 77.7 in the evidence base, not the pass's figure.
+  await page.getByRole("button", { name: "Evidence", exact: true }).click();
+  await page.waitForTimeout(1200);
+  const ev = await rowFor("1.1").innerText();
+  if (!/77\.7/.test(ev)) throw new Error(`row 1.1 was overwritten: ${ev}`);
+  step("row 1.1 survived the import", { row: ev.replace(/\s+/g, " ").slice(0, 90) });
+  await page.getByRole("button", { name: "Research", exact: true }).click();
+
   // --- the second review, and the rule that makes it a review -------------------
   await page.selectOption("select >> nth=1", "g2");
   await page.locator("input").first().fill("200");

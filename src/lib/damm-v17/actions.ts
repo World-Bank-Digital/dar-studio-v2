@@ -88,7 +88,7 @@ function toRecord(r: EvidenceDb): EvidenceRecord {
   };
 }
 
-async function writeAudit(
+export async function writeAudit(
   userId: string,
   countryId: string | null,
   role: string,
@@ -101,14 +101,14 @@ async function writeAudit(
     values (${uid()}, ${userId}, ${countryId}, ${role}, ${actorName}, ${action}, ${detail})`;
 }
 
-async function loadRecords(countryId: string): Promise<EvidenceRecord[]> {
+export async function loadRecords(countryId: string): Promise<EvidenceRecord[]> {
   const sql = await getSql();
   const rows = await sql<EvidenceDb>`select * from evidence where country_id = ${countryId}`;
   return rows.map(toRecord);
 }
 
 /** Rescore from the stored rows and persist the derived summary for list views. */
-async function rescore(countryId: string): Promise<Assessment> {
+export async function rescore(countryId: string): Promise<Assessment> {
   const rows = await loadRecords(countryId);
   const assessment = scorer.run(toObservations(rows));
   const sql = await getSql();

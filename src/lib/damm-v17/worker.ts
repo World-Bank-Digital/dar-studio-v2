@@ -190,6 +190,50 @@ export function defaultDeps(): WorkerDeps {
   };
 }
 
+/**
+ * Where a pass leaves the rows it produced, in the order they should be trusted.
+ *
+ * `_input.json` is the engine input and only exists for a pass that reached every row —
+ * the pipeline deliberately refuses to write it otherwise, because a partial input would
+ * score as though the missing rows had been looked for and not found.
+ *
+ * `_state.json` is the per-row checkpoint, written after every row. It is what a partial
+ * pass leaves behind, and reading it is how the rows an exhausted pass already paid for
+ * can be imported without inventing the ones it never reached.
+ */
+export function passFilePaths(run: Run): { input: string; state: string } {
+  const dir = path.join(pipelineDir(), "gauntlet/loop-1");
+  return {
+    input: path.join(dir, `${ledgerName(run)}_input.json`),
+    state: path.join(dir, `${ledgerName(run)}_state.json`),
+  };
+}
+
+export interface PassOutput {
+  rows: Record<string, Record<string, unknown>>;
+  /** Which file it came from — a partial pass is read from its checkpoint. */
+  from: "input" | "state";
+  complete: boolean;
+}
+
+export async function readPassRows(run: Run): Promise<PassOutput | null> {
+  const { input, state } = passFilePaths(run);
+  try {
+    return { rows: JSON.parse(await readFile(input, "utf8")), from: "input", complete: true };
+  } catch {
+    // No engine input. For a research pass the checkpoint still holds the rows it reached.
+  }
+  if (run.pass !== "research") return null;
+  try {
+    const parsed = JSON.parse(await readFile(state, "utf8"));
+    const rows = parsed?.rows;
+    if (!rows || typeof rows !== "object") return null;
+    return { rows, from: "state", complete: false };
+  } catch {
+    return null;
+  }
+}
+
 function ledgerName(run: Run): string {
   return run.pass === "g2" ? `${run.outBasename}_g2` : run.outBasename;
 }

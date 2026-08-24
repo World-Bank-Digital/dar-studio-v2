@@ -25,9 +25,14 @@ import {
   type RunPass,
   type RunStatus,
 } from "./runs.ts";
+import { loadRecords, rescore, writeAudit } from "./actions.ts";
+import { PIPELINE_ROLE, planImport, summariseImport, type PassRow } from "./import-plan.ts";
+import { readPassRows } from "./worker.ts";
+import { model } from "./model.ts";
 import {
   createRun,
   findActiveRun,
+  noteEvent,
   getRun,
   latestCompletedResearch,
   listEvents,
@@ -209,4 +214,85 @@ export const resumeRun = createServerFn({ method: "POST" })
     });
     const after = await getRun(data.runId);
     return { ok: true as const, run: after ? view(after) : null };
+  });
+
+
+/**
+ * Write a finished pass's findings into the country's evidence.
+ *
+ * Explicit, never automatic. An import replaces the evidence base, and a background
+ * worker doing that while an assessor is reading the screen would change what they are
+ * looking at with nobody's name on the decision. The operator asks for it, and the audit
+ * trail records who did.
+ *
+ * A person's entry is never overwritten — see `planImport`. Rows the pass never reached
+ * are left untouched rather than written as gaps.
+ */
+export const importPassOutput = createServerFn({ method: "POST" })
+  .middleware([authMiddleware])
+  .validator((input: { runId: string; role: string; actorName: string }) => input)
+  .handler(async ({ context, data }) => {
+    const owned = await ownedRun(data.runId, context.userId);
+    if (!owned.ok) return owned;
+    const run = owned.run;
+
+    if (!run.countryId) {
+      return { ok: false as const, error: "This run is not attached to a country." };
+    }
+    if (run.status !== "done" && run.status !== "exhausted") {
+      return {
+        ok: false as const,
+        error: `A ${run.status} run has nothing settled to import. Let it finish, or continue it.`,
+      };
+    }
+
+    const output = await readPassRows(run);
+    if (!output) {
+      return {
+        ok: false as const,
+        error:
+          run.pass === "research"
+            ? "This pass left no rows on disk. It may have stopped before its first checkpoint, or the pipeline directory is not the one it ran in."
+            : "This review stopped before it wrote its output. A partial review records findings against rows rather than rows themselves, so there is nothing to import until it finishes.",
+      };
+    }
+
+    const existing = await loadRecords(run.countryId);
+    const plan = planImport(existing, output.rows as unknown as Record<string, PassRow>, {
+      role: PIPELINE_ROLE,
+      name: `${run.outBasename}${run.vendor ? ` · ${run.vendor}` : ""}`,
+    });
+
+    const sql = await getSql();
+    const at = new Date().toISOString();
+    for (const r of plan.records) {
+      await sql`
+        update evidence set
+          value_raw = ${r.valueRaw},
+          observation_year = ${r.observationYear},
+          source_name = ${r.sourceName},
+          source_url = ${r.sourceUrl},
+          source_tier = ${r.sourceTier},
+          assessor_level = ${r.assessorLevel},
+          ratification_hold = ${r.ratificationHold},
+          assessor_role = ${r.assessorRole},
+          assessor_name = ${r.assessorName},
+          assessed_at = ${at},
+          notes = ${r.notes}
+        where country_id = ${run.countryId} and indicator_id = ${r.indicatorId}`;
+    }
+
+    await rescore(run.countryId);
+    const summary = summariseImport(plan, Object.keys(output.rows).length, model.indicators.length);
+    await writeAudit(
+      context.userId,
+      run.countryId,
+      data.role,
+      data.actorName,
+      "import_pass",
+      `${run.pass} pass ${run.outBasename}${output.complete ? "" : " (partial — read from its checkpoint)"}: ${summary}`,
+    );
+
+    await noteEvent(run.id, "note", `Imported into the workspace: ${summary}`);
+    return { ok: true as const, summary, held: plan.held, complete: output.complete };
   });
