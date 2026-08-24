@@ -208,6 +208,55 @@ export function passFilePaths(run: Run): { input: string; state: string } {
   };
 }
 
+/**
+ * What a pass leaves behind that a person would want to read.
+ *
+ * A closed list, keyed by pass. Artifacts are addressed by key and the path is built
+ * here from the run's own basename — a route that took a filename from the caller would
+ * be a path-traversal hole reading anything the worker's user can read.
+ */
+export interface Artifact {
+  key: string;
+  label: string;
+  filename: string;
+  contentType: string;
+}
+
+const ARTIFACTS: Record<RunPass, Artifact[]> = {
+  research: [
+    { key: "input", label: "Engine input", filename: "_input.json", contentType: "application/json" },
+    { key: "trail", label: "Research trail", filename: "_research.json", contentType: "application/json" },
+  ],
+  g2: [
+    { key: "input", label: "Reviewed engine input", filename: "_input.json", contentType: "application/json" },
+    { key: "findings", label: "Review findings", filename: "_findings.json", contentType: "application/json" },
+  ],
+  scans: [
+    { key: "scans", label: "Scan findings", filename: ".json", contentType: "application/json" },
+  ],
+  foresight: [
+    { key: "foresight", label: "Scenarios and milestones", filename: ".json", contentType: "application/json" },
+  ],
+  generation: [
+    { key: "dar", label: "Draft roadmap", filename: "_dar.html", contentType: "text/html; charset=utf-8" },
+    { key: "dar-json", label: "Roadmap source", filename: "_dar.json", contentType: "application/json" },
+  ],
+};
+
+export function artifactsFor(pass: RunPass): Artifact[] {
+  return ARTIFACTS[pass] ?? [];
+}
+
+/** The absolute path of one artifact, or null when the key is not one this pass has. */
+export function artifactPath(run: Run, key: string): { path: string; artifact: Artifact } | null {
+  const artifact = artifactsFor(run.pass).find((x) => x.key === key);
+  if (!artifact) return null;
+  return {
+    artifact,
+    path: path.join(pipelineDir(), "gauntlet/loop-1", `${ledgerName(run)}${artifact.filename}`),
+  };
+}
+
 export interface PassOutput {
   rows: Record<string, Record<string, unknown>>;
   /** Which file it came from — a partial pass is read from its checkpoint. */

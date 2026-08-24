@@ -1,6 +1,9 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 
+import { artifactsFor } from "./worker-artifacts.ts";
+import { artifactsFor as workerArtifacts } from "./worker.ts";
+
 import {
   CLAIM_LEASE_MS,
   DEFAULT_CEILING_USD,
@@ -312,5 +315,31 @@ describe("which passes produce evidence", () => {
       assert.ok(isRunnable(p), `${p} should be runnable`);
     }
     assert.equal(RUNNABLE_PASSES.length, 5);
+  });
+});
+
+describe("what each pass produces", () => {
+  it("offers the roadmap for a generation run", () => {
+    const keys = artifactsFor("generation").map((a) => a.key);
+    assert.ok(keys.includes("dar"));
+  });
+
+  it("names an artifact for every pass, so no run finishes with nothing to open", () => {
+    for (const p of RUNNABLE_PASSES) {
+      assert.ok(artifactsFor(p).length > 0, `${p} should produce something readable`);
+    }
+  });
+
+  it("keeps the two lists in step, so a link cannot point at a key the server refuses", () => {
+    // The labels live beside the router and the paths live in worker.ts, which reaches
+    // the filesystem. Drift between them is a link that 404s.
+    const fromWorker = workerArtifacts;
+    for (const p of RUNNABLE_PASSES) {
+      assert.deepEqual(
+        artifactsFor(p).map((a) => a.key),
+        fromWorker(p).map((a) => a.key),
+        `${p} artifact keys differ between the two lists`,
+      );
+    }
   });
 });

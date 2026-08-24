@@ -16,6 +16,7 @@ import { Route as ResetPasswordRouteImport } from './routes/reset-password'
 import { Route as SettingsRouteImport } from './routes/settings'
 import { Route as CIdRouteImport } from './routes/c.$id'
 import { Route as ApiAuthSplatRouteImport } from './routes/api/auth/$'
+import { Route as ApiRunsRunIdArtifactRouteImport } from './routes/api/runs/$runId.artifact'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
@@ -52,6 +53,11 @@ const ApiAuthSplatRoute = ApiAuthSplatRouteImport.update({
   path: '/api/auth/$',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiRunsRunIdArtifactRoute = ApiRunsRunIdArtifactRouteImport.update({
+  id: '/api/runs/$runId/artifact',
+  path: '/api/runs/$runId/artifact',
+  getParentRoute: () => rootRouteImport,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
@@ -61,6 +67,7 @@ export interface FileRoutesByFullPath {
   '/settings': typeof SettingsRoute
   '/c/$id': typeof CIdRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
+  '/api/runs/$runId/artifact': typeof ApiRunsRunIdArtifactRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -70,6 +77,7 @@ export interface FileRoutesByTo {
   '/settings': typeof SettingsRoute
   '/c/$id': typeof CIdRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
+  '/api/runs/$runId/artifact': typeof ApiRunsRunIdArtifactRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -80,6 +88,7 @@ export interface FileRoutesById {
   '/settings': typeof SettingsRoute
   '/c/$id': typeof CIdRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
+  '/api/runs/$runId/artifact': typeof ApiRunsRunIdArtifactRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -91,6 +100,7 @@ export interface FileRouteTypes {
     | '/settings'
     | '/c/$id'
     | '/api/auth/$'
+    | '/api/runs/$runId/artifact'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -100,6 +110,7 @@ export interface FileRouteTypes {
     | '/settings'
     | '/c/$id'
     | '/api/auth/$'
+    | '/api/runs/$runId/artifact'
   id:
     | '__root__'
     | '/'
@@ -109,6 +120,7 @@ export interface FileRouteTypes {
     | '/settings'
     | '/c/$id'
     | '/api/auth/$'
+    | '/api/runs/$runId/artifact'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -119,6 +131,7 @@ export interface RootRouteChildren {
   SettingsRoute: typeof SettingsRoute
   CIdRoute: typeof CIdRoute
   ApiAuthSplatRoute: typeof ApiAuthSplatRoute
+  ApiRunsRunIdArtifactRoute: typeof ApiRunsRunIdArtifactRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -172,6 +185,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiAuthSplatRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/runs/$runId/artifact': {
+      id: '/api/runs/$runId/artifact'
+      path: '/api/runs/$runId/artifact'
+      fullPath: '/api/runs/$runId/artifact'
+      preLoaderRoute: typeof ApiRunsRunIdArtifactRouteImport
+      parentRoute: typeof rootRouteImport
+    }
   }
 }
 
@@ -183,6 +203,7 @@ const rootRouteChildren: RootRouteChildren = {
   SettingsRoute: SettingsRoute,
   CIdRoute: CIdRoute,
   ApiAuthSplatRoute: ApiAuthSplatRoute,
+  ApiRunsRunIdArtifactRoute: ApiRunsRunIdArtifactRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

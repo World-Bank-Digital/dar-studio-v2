@@ -33,6 +33,7 @@ import {
   type RunStatus,
 } from "@/lib/damm-v17/runs";
 import { useSessionRole } from "@/lib/session";
+import { artifactsFor } from "@/lib/damm-v17/worker-artifacts";
 import {
   getRunDetail,
   importPassOutput,
@@ -42,7 +43,7 @@ import {
   stopRun,
   type RunView,
 } from "@/lib/damm-v17/run-actions";
-import { AlertTriangle, Download, Loader2, Play, Square, Pause, RotateCw } from "lucide-react";
+import { AlertTriangle, Download, FileText, Loader2, Play, Square, Pause, RotateCw } from "lucide-react";
 
 const PASS_LABEL: Record<string, string> = {
   research: "Research — the 57-row first pass",
@@ -405,6 +406,20 @@ function RunCard({ run, onChange }: { run: RunView; onChange: () => void }) {
             {run.status === "exhausted" ? "Import what it reached" : "Import into the workspace"}
           </Button>
         )}
+
+        {(run.status === "done" || run.status === "exhausted") &&
+          artifactsFor(run.pass).map((art) => (
+            <a
+              key={art.key}
+              href={`/api/runs/${run.id}/artifact?key=${art.key}`}
+              target="_blank"
+              rel="noreferrer"
+              className="inline-flex min-h-9 items-center gap-1.5 rounded-sm border border-border-strong bg-surface px-3 text-xs font-medium text-ink hover:bg-moss"
+            >
+              <FileText className="size-3.5" />
+              {art.label}
+            </a>
+          ))}
 
         <button
           onClick={() => setOpen((v) => !v)}
