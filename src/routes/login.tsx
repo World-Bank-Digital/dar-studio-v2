@@ -24,7 +24,8 @@ function Login() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [name, setName] = useState("");
-  const [mode, setMode] = useState<"in" | "up">("in");
+  const [mode, setMode] = useState<"in" | "up" | "forgot">("in");
+  const [sent, setSent] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
@@ -41,6 +42,22 @@ function Login() {
       window.location.href = "/";
     } catch (err) {
       setError(err instanceof Error ? err.message : "Passkey sign-in failed");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function onForgot(e: React.FormEvent) {
+    e.preventDefault();
+    setBusy(true);
+    setError(null);
+    try {
+      await authClient.requestPasswordReset({ email, redirectTo: "/reset-password" });
+      // Shown whatever the server said. A message that appeared only for addresses that
+      // exist would turn this box into a way of asking which of them do.
+      setSent(true);
+    } catch {
+      setSent(true);
     } finally {
       setBusy(false);
     }
@@ -99,6 +116,34 @@ function Login() {
           or email
           <span className="h-px flex-1 bg-border" />
         </div>
+        {mode === "forgot" ? (
+          <form onSubmit={onForgot} className="space-y-3">
+            {sent ? (
+              <p className="rounded-sm border border-border bg-moss/30 px-3 py-2 text-sm text-muted">
+                If an account uses that address, a reset link is on its way. It can be used
+                once and expires in an hour.
+              </p>
+            ) : (
+              <>
+                <p className="text-sm text-muted">
+                  Enter the address on the account and we will send a link for setting a new
+                  password.
+                </p>
+                <Input
+                  type="email"
+                  placeholder="Email"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  required
+                  autoComplete="email"
+                />
+                <Button type="submit" className="w-full" disabled={busy}>
+                  {busy ? "Working…" : "Send a reset link"}
+                </Button>
+              </>
+            )}
+          </form>
+        ) : (
         <form onSubmit={onEmail} className="space-y-3">
           {mode === "up" ? (
             <Input placeholder="Name" value={name} onChange={(e) => setName(e.target.value)} autoComplete="name" />
@@ -110,13 +155,37 @@ function Login() {
             {busy ? "Working…" : mode === "up" ? "Create account" : "Sign in with email"}
           </Button>
         </form>
-        <button
-          type="button"
-          className="mt-4 text-sm text-sage underline-offset-2 hover:underline"
-          onClick={() => setMode(mode === "up" ? "in" : "up")}
-        >
-          {mode === "up" ? "Already have an account? Sign in" : "Need an account? Create one"}
-        </button>
+        )}
+        <div className="mt-4 flex flex-wrap items-center gap-x-4 gap-y-2">
+          <button
+            type="button"
+            className="text-sm text-sage underline-offset-2 hover:underline"
+            onClick={() => {
+              setSent(false);
+              setError(null);
+              setMode(mode === "up" || mode === "forgot" ? "in" : "up");
+            }}
+          >
+            {mode === "up"
+              ? "Already have an account? Sign in"
+              : mode === "forgot"
+                ? "Back to sign in"
+                : "Need an account? Create one"}
+          </button>
+          {mode === "in" && (
+            <button
+              type="button"
+              className="text-sm text-muted underline-offset-2 hover:underline"
+              onClick={() => {
+                setSent(false);
+                setError(null);
+                setMode("forgot");
+              }}
+            >
+              Forgotten your password?
+            </button>
+          )}
+        </div>
         <p className="mt-6 text-[11px] leading-relaxed text-subtle">{disclaimer()}</p>
       </Card>
     </main>

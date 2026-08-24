@@ -12,6 +12,7 @@ import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as MethodologyRouteImport } from './routes/methodology'
+import { Route as ResetPasswordRouteImport } from './routes/reset-password'
 import { Route as SettingsRouteImport } from './routes/settings'
 import { Route as CIdRouteImport } from './routes/c.$id'
 import { Route as ApiAuthSplatRouteImport } from './routes/api/auth/$'
@@ -29,6 +30,11 @@ const LoginRoute = LoginRouteImport.update({
 const MethodologyRoute = MethodologyRouteImport.update({
   id: '/methodology',
   path: '/methodology',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ResetPasswordRoute = ResetPasswordRouteImport.update({
+  id: '/reset-password',
+  path: '/reset-password',
   getParentRoute: () => rootRouteImport,
 } as any)
 const SettingsRoute = SettingsRouteImport.update({
@@ -51,6 +57,7 @@ export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/login': typeof LoginRoute
   '/methodology': typeof MethodologyRoute
+  '/reset-password': typeof ResetPasswordRoute
   '/settings': typeof SettingsRoute
   '/c/$id': typeof CIdRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
@@ -59,6 +66,7 @@ export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/login': typeof LoginRoute
   '/methodology': typeof MethodologyRoute
+  '/reset-password': typeof ResetPasswordRoute
   '/settings': typeof SettingsRoute
   '/c/$id': typeof CIdRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
@@ -68,6 +76,7 @@ export interface FileRoutesById {
   '/': typeof IndexRoute
   '/login': typeof LoginRoute
   '/methodology': typeof MethodologyRoute
+  '/reset-password': typeof ResetPasswordRoute
   '/settings': typeof SettingsRoute
   '/c/$id': typeof CIdRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
@@ -75,14 +84,28 @@ export interface FileRoutesById {
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
-    '/' | '/login' | '/methodology' | '/settings' | '/c/$id' | '/api/auth/$'
+    | '/'
+    | '/login'
+    | '/methodology'
+    | '/reset-password'
+    | '/settings'
+    | '/c/$id'
+    | '/api/auth/$'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/login' | '/methodology' | '/settings' | '/c/$id' | '/api/auth/$'
+  to:
+    | '/'
+    | '/login'
+    | '/methodology'
+    | '/reset-password'
+    | '/settings'
+    | '/c/$id'
+    | '/api/auth/$'
   id:
     | '__root__'
     | '/'
     | '/login'
     | '/methodology'
+    | '/reset-password'
     | '/settings'
     | '/c/$id'
     | '/api/auth/$'
@@ -92,6 +115,7 @@ export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   LoginRoute: typeof LoginRoute
   MethodologyRoute: typeof MethodologyRoute
+  ResetPasswordRoute: typeof ResetPasswordRoute
   SettingsRoute: typeof SettingsRoute
   CIdRoute: typeof CIdRoute
   ApiAuthSplatRoute: typeof ApiAuthSplatRoute
@@ -118,6 +142,13 @@ declare module '@tanstack/react-router' {
       path: '/methodology'
       fullPath: '/methodology'
       preLoaderRoute: typeof MethodologyRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/reset-password': {
+      id: '/reset-password'
+      path: '/reset-password'
+      fullPath: '/reset-password'
+      preLoaderRoute: typeof ResetPasswordRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/settings': {
@@ -148,6 +179,7 @@ const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   LoginRoute: LoginRoute,
   MethodologyRoute: MethodologyRoute,
+  ResetPasswordRoute: ResetPasswordRoute,
   SettingsRoute: SettingsRoute,
   CIdRoute: CIdRoute,
   ApiAuthSplatRoute: ApiAuthSplatRoute,

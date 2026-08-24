@@ -37,7 +37,12 @@ import { randomBytes } from "node:crypto";
 import { Pool } from "pg";
 import { ensureDbReady, getPglite } from "../db";
 import { emailAndPasswordEnabled } from "./email-password";
-import { buildSignInNotification, buildVerificationMail, sendAuthMail } from "./mailer";
+import {
+  buildPasswordResetMail,
+  buildSignInNotification,
+  buildVerificationMail,
+  sendAuthMail,
+} from "./mailer";
 import { GROK_PROVIDERS } from "./providers";
 import { pgliteDialect } from "./pglite-dialect";
 import {
@@ -214,7 +219,22 @@ export const auth = betterAuth({
   session: { cookieCache: { enabled: true, maxAge: 300 } },
 
   // Local email/password — toggled only via `./email-password` (not a plugin).
-  ...(emailAndPasswordEnabled ? { emailAndPassword: { enabled: true } } : {}),
+  // Reset is part of the same toggle: an app that lets people set a password has to let
+  // them replace one they cannot produce, or the only way back into an account is for
+  // someone with database access to overwrite the credential by hand.
+  ...(emailAndPasswordEnabled
+    ? {
+        emailAndPassword: {
+          enabled: true,
+          resetPasswordTokenExpiresIn: 60 * 60,
+          async sendResetPassword({ user, url }: { user: { email: string; name?: string | null }; url: string }) {
+            await sendAuthMail(
+              buildPasswordResetMail({ email: user.email, name: user.name, url }),
+            );
+          },
+        },
+      }
+    : {}),
 
   // Verification email on sign-up. Delivery is Resend when RESEND_API_KEY is
   // set, else a visible dev-mode console log (see ./mailer). Verification is

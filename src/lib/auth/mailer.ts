@@ -92,6 +92,29 @@ export function buildVerificationMail(input: { email: string; name?: string | nu
   };
 }
 
+export function buildPasswordResetMail(input: {
+  email: string;
+  name?: string | null;
+  url: string;
+}): AuthMail {
+  const who = input.name?.trim() ? input.name.trim() : input.email;
+  return {
+    to: input.email,
+    subject: `Reset your ${APP_NAME} password`,
+    text: [
+      `Hello ${who},`,
+      "",
+      `Someone asked to reset the password for your ${APP_NAME} account. Open the link`,
+      "below to choose a new one. It can be used once, and it expires in an hour.",
+      "",
+      input.url,
+      "",
+      "If this was not you, ignore this message — nothing has changed, and your current",
+      "password still works.",
+    ].join("\n"),
+  };
+}
+
 export function buildSignInNotification(input: {
   email: string;
   name?: string | null;

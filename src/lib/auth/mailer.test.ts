@@ -1,6 +1,6 @@
 import { describe, it, before, after } from "node:test";
 import assert from "node:assert/strict";
-import { buildSignInNotification, buildVerificationMail, mailConfigured, sendAuthMail } from "./mailer.ts";
+import { buildSignInNotification, buildVerificationMail, mailConfigured, sendAuthMail, buildPasswordResetMail } from "./mailer.ts";
 
 describe("auth mail builders", () => {
   it("verification mail carries the link and the recipient", () => {
@@ -50,5 +50,24 @@ describe("dev-mode delivery (no RESEND_API_KEY)", () => {
     assert.equal(mailConfigured(), false);
     const res = await sendAuthMail({ to: "a@b.c", subject: "s", text: "t" });
     assert.deepEqual(res, { sent: false, mode: "dev" });
+  });
+});
+
+describe("password reset mail", () => {
+  it("carries the link and says the current password still works", () => {
+    // The line matters: most people who receive one of these did not ask for it, and the
+    // message has to tell them that ignoring it costs them nothing.
+    const m = buildPasswordResetMail({ email: "a@b.com", name: "Randeep", url: "https://x/reset?token=t" });
+    assert.match(m.subject, /Reset your/);
+    assert.match(m.text, /https:\/\/x\/reset\?token=t/);
+    assert.match(m.text, /Hello Randeep/);
+    assert.match(m.text, /current\npassword still works/);
+  });
+
+  it("says the link is single-use and expiring, because that is what the server enforces", () => {
+    const m = buildPasswordResetMail({ email: "a@b.com", url: "https://x/reset" });
+    assert.match(m.text, /once/);
+    assert.match(m.text, /expires in an hour/);
+    assert.match(m.text, /Hello a@b\.com/);
   });
 });
