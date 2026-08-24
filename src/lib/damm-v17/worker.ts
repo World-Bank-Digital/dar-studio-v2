@@ -291,9 +291,31 @@ function ledgerName(run: Run): string {
   return run.pass === "research" ? run.outBasename : `${run.outBasename}_${run.pass}`;
 }
 
+/** What to record about vendors that were unavailable during a run. */
+export function degradationNotes(
+  degraded: Map<string, { rows: Set<string>; example: string }>,
+  rowsTotal: number | null,
+): string[] {
+  const out: string[] = [];
+  for (const [vendor, { rows, example }] of degraded) {
+    const scope =
+      rowsTotal && rows.size >= rowsTotal
+        ? "every row"
+        : `${rows.size} row${rows.size === 1 ? "" : "s"}${rowsTotal ? ` of ${rowsTotal}` : ""}`;
+    out.push(
+      `${vendor} was unavailable for ${scope}, so those rows were researched without it: ${example}`,
+    );
+  }
+  return out;
+}
+
 /** Follow one claimed run to its end. Returns the status it settled on. */
 export async function runOne(run: Run, workerId: string, deps: WorkerDeps): Promise<string> {
   const seen = { exhausted: false, incomplete: false, finished: false, failure: null as string | null };
+  // Which vendors went missing, and on how many rows. A pass that lost its discovery peer
+  // on every row gathered its evidence on a narrower base than the method describes, and
+  // that has to reach the run record rather than living only in the pipeline's own files.
+  const degraded = new Map<string, { rows: Set<string>; example: string }>();
   const proc = deps.spawnPipeline(run);
 
   // Stdout arrives in arbitrary chunks, so a line can be split across two of them.
@@ -328,6 +350,12 @@ export async function runOne(run: Run, workerId: string, deps: WorkerDeps): Prom
           seen.finished = true;
           pending.push(deps.store.noteEvent(run.id, "note", e.message));
           break;
+        case "degraded": {
+          const entry = degraded.get(e.vendor) ?? { rows: new Set<string>(), example: e.message };
+          entry.rows.add(e.indicatorId);
+          degraded.set(e.vendor, entry);
+          break;
+        }
         case "failed":
           // Only stderr counts as a failure signal: the word "Error" can legitimately
           // appear in a search trail on stdout.
@@ -359,8 +387,14 @@ export async function runOne(run: Run, workerId: string, deps: WorkerDeps): Prom
   await Promise.allSettled(pending);
 
   const { status, reason } = statusOnExit(code, seen);
+  const notes = degradationNotes(degraded, run.rowsTotal);
+  for (const note of notes) await deps.store.noteEvent(run.id, "degraded", note);
+
   const ledger = await deps.readLedger(run);
-  await deps.store.finishRun(run.id, status, reason, ledger ?? undefined);
+  // Carried on a finished run too. "Finished 59 of 59 rows" with a vendor down for every
+  // one of them is the shape of a clean success that was not one.
+  const full = [reason, ...notes].filter(Boolean).join(" ");
+  await deps.store.finishRun(run.id, status, full, ledger ?? undefined);
   return status;
 }
 

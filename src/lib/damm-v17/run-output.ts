@@ -34,6 +34,8 @@ export type RunEvent =
   | { kind: "exhausted"; message: string }
   | { kind: "incomplete"; message: string }
   | { kind: "failed"; message: string }
+  /** A vendor was unavailable for one row. The row was researched on a narrower base. */
+  | { kind: "degraded"; vendor: string; indicatorId: string; message: string }
   | { kind: "finished"; message: string };
 
 /**
@@ -65,6 +67,18 @@ const FINISHED = /^\s*wrote\s+(\S+_input\.json.*)$/;
 /** `reviewed 38 rows · adjusted 3 · filled 4 · upheld 29` */
 const FINISHED_G2 = /^\s*(reviewed\s+\d+\s+rows.*)$/;
 
+/**
+ * `    ! 1.4: perplexity discovery unavailable — 401 ... quota ...`
+ *
+ * The pipeline records this on the row and carries on, which is right: a row that lost
+ * its discovery peer was researched on a narrower base than its neighbours, and that is a
+ * degradation rather than a failure. Parsed here so the degradation reaches the run
+ * record too — a pass where a vendor was down for every row should not read afterwards as
+ * a clean success.
+ */
+const DEGRADED =
+  /^\s*!\s*(\S+?):\s*(\S+)\s+\S+\s+unavailable\s*[—–-]\s*(.*)$/;
+
 /** An unhandled exception reaching stderr. */
 const TRACEBACK = /^\s*(Traceback \(most recent call last\):?|\w*(?:Error|Exception):.*)$/;
 
@@ -80,6 +94,9 @@ export function parseLine(line: string): RunEvent | null {
       spentUsd: Number(m[5]),
       seconds: Number(m[6]),
     };
+  }
+  if ((m = DEGRADED.exec(line))) {
+    return { kind: "degraded", indicatorId: m[1], vendor: m[2], message: m[3].trim() };
   }
   if ((m = EXHAUSTED.exec(line))) return { kind: "exhausted", message: m[1].trim() };
   if ((m = INCOMPLETE.exec(line))) return { kind: "incomplete", message: m[1].trim() };

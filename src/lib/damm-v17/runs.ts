@@ -379,7 +379,10 @@ export function stoppedSummary(run: Run): string {
     case "cancelled":
       return `Cancelled after ${got}.`;
     case "done":
-      return `Finished ${got} for $${run.spentUsd.toFixed(2)}.`;
+      // A finished run still says what it lost. A pass that completed every row with a
+      // vendor down for all of them is a clean success only on its face.
+      return `Finished ${got} for $${run.spentUsd.toFixed(2)}.`
+        + (run.stoppedReason ? ` ${run.stoppedReason}` : "");
     default:
       return `${got} so far.`;
   }

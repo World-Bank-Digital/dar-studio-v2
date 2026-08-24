@@ -143,3 +143,23 @@ describe("what a run's exit means", () => {
     assert.match(s.reason, /KeyError/);
   });
 });
+
+describe("a vendor that went missing mid-run", () => {
+  it("reads the line the pipeline records when a discovery peer is unavailable", () => {
+    // Verbatim from the Egypt run of 24 August 2026, where the Perplexity key was out of
+    // quota and every one of the 59 rows lost its discovery peer.
+    const e = parseLine(
+      "    ! 1.4: perplexity discovery unavailable — 401 https://api.perplexity.ai/chat/completions :: quota exceeded",
+    );
+    assert.equal(e?.kind, "degraded");
+    assert.equal((e as { vendor: string }).vendor, "perplexity");
+    assert.equal((e as { indicatorId: string }).indicatorId, "1.4");
+    assert.match((e as { message: string }).message, /quota exceeded/);
+  });
+
+  it("is a degradation, not a failure — the row was still researched", () => {
+    const ev = parseChunk("    ! 2.1: perplexity discovery unavailable — 500 upstream\n");
+    assert.equal(ev[0].kind, "degraded");
+    assert.notEqual(ev[0].kind, "failed");
+  });
+});

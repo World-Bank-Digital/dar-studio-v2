@@ -4,6 +4,7 @@ import assert from "node:assert/strict";
 import {
   argsFor,
   defaultDeps,
+  degradationNotes,
   passFilePaths,
   drain,
   runOne,
@@ -354,5 +355,44 @@ describe("the scans pass", () => {
     assert.match(research.state, /EGY_run1_state\.json$/);
     assert.match(g2.state, /EGY_run1_g2_state\.json$/);
     assert.notEqual(scans.state, research.state);
+  });
+});
+
+describe("recording what a run lost", () => {
+  const note = (vendor: string, rows: string[], total: number | null) =>
+    degradationNotes(
+      new Map([[vendor, { rows: new Set(rows), example: "401 quota exceeded" }]]),
+      total,
+    );
+
+  it("says plainly when a vendor was down for every row", () => {
+    // "Finished 59 of 59 rows" with the discovery peer down for all 59 is the shape of a
+    // clean success that was not one.
+    const [n] = note("perplexity", ["1.1", "1.2", "1.3"], 3);
+    assert.match(n, /perplexity was unavailable for every row/);
+    assert.match(n, /researched without it/);
+  });
+
+  it("counts the rows when only some were affected", () => {
+    assert.match(note("perplexity", ["1.1"], 59)[0], /unavailable for 1 row of 59/);
+    assert.match(note("exa", ["1.1", "1.2"], 59)[0], /unavailable for 2 rows of 59/);
+  });
+
+  it("says nothing when nothing was lost", () => {
+    assert.deepEqual(degradationNotes(new Map(), 59), []);
+  });
+
+  it("reaches the run record on a finished run, not only a failed one", async () => {
+    const f = fakeStore();
+    const p = fakeProcess([
+      "Egypt (EGY) · 2 rows · vendor anthropic/claude-opus-5\n" +
+        "    ! 1.1: perplexity discovery unavailable — 401 quota\n" +
+        "    ! 1.2: perplexity discovery unavailable — 401 quota\n" +
+        "wrote EGY_x_input.json — 2 rows\n",
+    ], 0);
+    const status = await runOne(run(), "w1", deps(f.store, p.proc));
+    assert.equal(status, "done");
+    assert.match(f.calls.finished[0].reason, /perplexity was unavailable/);
+    assert.ok(f.calls.notes.some((m) => /perplexity/.test(m)));
   });
 });
