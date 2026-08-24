@@ -104,13 +104,15 @@ export interface WorkerDeps {
 
 export function argsFor(run: Run): { script: string; args: string[] } {
   const dir = scriptDir();
-  // Exhaustive on purpose. Falling through to the research orchestrator would run a full
-  // 57-row research pass under another pass's name and bill it to that pass's allocation.
+  // Exhaustive on purpose. A pass with no entry here must not fall through to the
+  // research orchestrator: that would run a full 57-row research pass under another
+  // pass's name and bill it to that pass's allocation.
   const SCRIPTS: Partial<Record<RunPass, string>> = {
     research: "research_orchestrator.py",
     g2: "gate2.py",
     scans: "scans.py",
     foresight: "foresight.py",
+    generation: "generate_dar.py",
   };
   const script = SCRIPTS[run.pass];
   if (!script) throw new Error(`No script implements the ${run.pass} pass.`);

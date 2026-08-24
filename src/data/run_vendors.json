@@ -20,6 +20,7 @@
  "runnable_passes": [
   "foresight",
   "g2",
+  "generation",
   "research",
   "scans"
  ],
@@ -27,6 +28,7 @@
   "research": "anthropic/claude-opus-5",
   "g2": "openai/gpt-5.6-terra",
   "scans": "anthropic/claude-opus-5",
-  "foresight": "anthropic/claude-opus-5"
+  "foresight": "anthropic/claude-opus-5",
+  "generation": "anthropic/claude-opus-5"
  }
 }

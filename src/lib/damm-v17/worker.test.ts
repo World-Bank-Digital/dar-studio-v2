@@ -315,12 +315,22 @@ describe("spawning the real pipeline", () => {
   });
 });
 
-describe("a pass with no script", () => {
-  it("refuses rather than falling through to the research orchestrator", () => {
-    // generation has a share of the ceiling but no script yet. Routing it
-    // to research_orchestrator.py would run a full 57-row pass and bill it to that pass's
-    // allocation, which would read afterwards as a foresight exercise that cost $200.
-    assert.throws(() => argsFor(run({ pass: "generation" })), /No script implements/);
+describe("every pass in the allocation", () => {
+  it("has a script, and each is a different one", () => {
+    // All five are built. The check that matters now is that no two passes share a
+    // script: routing one to another's would run that pass and bill this one's share.
+    const scripts = (["research", "g2", "scans", "foresight", "generation"] as const).map(
+      (pass) => argsFor(run({ pass })).script,
+    );
+    assert.equal(new Set(scripts).size, 5);
+    assert.ok(scripts.every((s) => s.endsWith(".py")));
+  });
+
+  it("refuses a pass no script implements, rather than falling through", () => {
+    assert.throws(
+      () => argsFor(run({ pass: "nonesuch" as never })),
+      /No script implements/,
+    );
   });
 });
 

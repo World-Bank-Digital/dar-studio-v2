@@ -22,7 +22,8 @@ import {
   VENDOR_CHOICES,
   projectToFinish,
   producesEvidence,
-  isRunnable,} from "./runs.ts";
+  isRunnable,
+  RUNNABLE_PASSES,} from "./runs.ts";
 
 function run(over: Partial<Run> = {}): Run {
   return {
@@ -306,8 +307,10 @@ describe("which passes produce evidence", () => {
   });
 
   it("a pass is runnable exactly when a script implements it", () => {
-    assert.ok(isRunnable("scans"));
-    assert.ok(isRunnable("foresight"));
-    assert.equal(isRunnable("generation"), false);
+    // All five passes in the allocation now have a script.
+    for (const p of ["research", "g2", "scans", "foresight", "generation"] as const) {
+      assert.ok(isRunnable(p), `${p} should be runnable`);
+    }
+    assert.equal(RUNNABLE_PASSES.length, 5);
   });
 });
