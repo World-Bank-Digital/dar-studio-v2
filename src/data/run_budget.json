@@ -1,0 +1,12 @@
+{
+ "_source": "vendors.Ledger.ALLOCATION \u2014 exported, never restated. Regenerate with model/export_app_fixtures.py after changing it there.",
+ "default_ceiling_usd": 500.0,
+ "allocation": {
+  "research": 0.4,
+  "g2": 0.15,
+  "scans": 0.15,
+  "foresight": 0.1,
+  "generation": 0.2,
+  "audition": 1.0
+ }
+}

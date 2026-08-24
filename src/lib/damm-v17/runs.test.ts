@@ -1,0 +1,189 @@
+import { describe, it } from "node:test";
+import assert from "node:assert/strict";
+
+import {
+  CLAIM_LEASE_MS,
+  DEFAULT_CEILING_USD,
+  allocationExhaustsCeiling,
+  canResume,
+  canTransition,
+  isClaimable,
+  isResumable,
+  isTerminal,
+  passCap,
+  progressOf,
+  remaining,
+  stoppedSummary,
+  type Run,
+  type RunStatus,
+} from "./runs.ts";
+
+function run(over: Partial<Run> = {}): Run {
+  return {
+    id: "r1",
+    userId: "u1",
+    countryId: "c1",
+    countryName: "Egypt",
+    iso3: "EGY",
+    pass: "research",
+    status: "running",
+    ceilingUsd: DEFAULT_CEILING_USD,
+    spentUsd: 0,
+    rowsTotal: 57,
+    rowsDone: 0,
+    vendor: "anthropic/claude-opus-5",
+    outBasename: "EGY_run1",
+    claimedBy: "w1",
+    heartbeatAt: new Date(),
+    startedAt: new Date(),
+    finishedAt: null,
+    stoppedReason: null,
+    ...over,
+  };
+}
+
+describe("the budget, which is exported rather than restated (G3)", () => {
+  it("per-pass caps exhaust the country ceiling", () => {
+    // If they summed to less, a country could not spend its ceiling; if more, it could
+    // spend past it by running every pass to its own limit.
+    assert.ok(
+      allocationExhaustsCeiling(),
+      "the per-pass allocation must sum to the whole ceiling",
+    );
+  });
+
+  it("apportions each pass against the ceiling", () => {
+    assert.equal(passCap("research", 500), 200);
+    assert.equal(passCap("g2", 500), 75);
+    assert.equal(passCap("generation", 500), 100);
+  });
+
+  it("refuses a pass it has no allocation for, rather than assuming one", () => {
+    // Silently defaulting to the whole ceiling is how a new pass spends a country's
+    // entire budget on its first run.
+    assert.throws(
+      () => passCap("nonsense" as never, 500),
+      /no budget allocation/,
+      "an unallocated pass must fail loudly",
+    );
+  });
+
+  it("reports what is left of the pass, not of the ceiling", () => {
+    assert.equal(remaining(run({ pass: "g2", spentUsd: 6.35 })), 68.65);
+  });
+});
+
+describe("exhaustion is not failure (G2)", () => {
+  it("keeps the two states apart", () => {
+    assert.ok(isTerminal("failed"));
+    assert.ok(!isTerminal("exhausted"), "an exhausted run is unfinished, not broken");
+    assert.ok(isResumable("exhausted"));
+    assert.ok(!isResumable("failed"));
+  });
+
+  it("tells an operator what it has, and that the rest is absent rather than gaps", () => {
+    const s = stoppedSummary(run({ status: "exhausted", rowsDone: 41, spentUsd: 200 }));
+    assert.match(s, /41 of 57/);
+    assert.match(s, /absent, not recorded as gaps/);
+    assert.match(s, /Add budget/);
+  });
+
+  it("will not resume an exhausted run at a ceiling it has already spent", () => {
+    // Re-queueing at the same ceiling stops again immediately, which reads to an
+    // operator as the button not working.
+    const r = run({ status: "exhausted", pass: "research", spentUsd: 200 });
+    const same = canResume(r);
+    assert.equal(same.ok, false);
+    assert.match(same.reason, /Raise the ceiling/);
+    assert.equal(canResume(r, 1000).ok, true, "a higher ceiling gives it room");
+  });
+
+  it("resumes a paused run without asking for anything", () => {
+    assert.equal(canResume(run({ status: "paused", spentUsd: 199 })).ok, true);
+  });
+
+  it("refuses to resume a finished run", () => {
+    for (const s of ["done", "failed", "cancelled"] as RunStatus[]) {
+      const t = canResume(run({ status: s }));
+      assert.equal(t.ok, false, `${s} must not resume`);
+      assert.match(t.reason, /finished/);
+    }
+  });
+});
+
+describe("transitions are a closed set", () => {
+  it("allows the moves a run actually makes", () => {
+    assert.ok(canTransition("queued", "running").ok);
+    assert.ok(canTransition("running", "done").ok);
+    assert.ok(canTransition("running", "exhausted").ok);
+    assert.ok(canTransition("exhausted", "queued").ok, "topped up and queued again");
+    assert.ok(canTransition("running", "queued").ok, "a lost claim returns it to the queue");
+  });
+
+  it("refuses everything else, with a reason a surface can print", () => {
+    const t = canTransition("done", "running");
+    assert.equal(t.ok, false);
+    assert.match(t.reason, /finished/);
+    assert.equal(canTransition("queued", "done").ok, false, "no run finishes unstarted");
+    assert.equal(canTransition("failed", "queued").ok, false, "a failure is not retried blindly");
+    assert.equal(canTransition("running", "running").ok, false);
+  });
+});
+
+describe("a dead worker does not strand a run (G1)", () => {
+  const now = new Date("2026-08-25T12:00:00Z");
+
+  it("a queued run is free", () => {
+    assert.ok(isClaimable(run({ status: "queued", heartbeatAt: null }), now));
+  });
+
+  it("a run whose worker is alive is held", () => {
+    const beat = new Date(now.getTime() - CLAIM_LEASE_MS / 2);
+    assert.ok(!isClaimable(run({ status: "running", heartbeatAt: beat }), now));
+  });
+
+  it("a run whose worker stopped saying so is free again", () => {
+    // The pipeline checkpoints per row, so retaking this claim resumes rather than
+    // restarts: a failure at indicator 50 of 57 does not go back to zero.
+    const stale = new Date(now.getTime() - CLAIM_LEASE_MS - 1000);
+    assert.ok(isClaimable(run({ status: "running", heartbeatAt: stale }), now));
+  });
+
+  it("a slow run is not stolen mid-row", () => {
+    // A single indicator can take three minutes of retrieval. Two workers on one run
+    // would spend the same budget twice.
+    const beat = new Date(now.getTime() - 3 * 60 * 1000);
+    assert.ok(!isClaimable(run({ status: "running", heartbeatAt: beat }), now));
+  });
+
+  it("a finished or stopped run is never claimable", () => {
+    for (const s of ["done", "failed", "cancelled", "paused", "exhausted"] as RunStatus[]) {
+      assert.ok(!isClaimable(run({ status: s, heartbeatAt: null }), now), `${s}`);
+    }
+  });
+});
+
+describe("progress never fabricates what it does not know", () => {
+  it("reports no fraction until the total is known", () => {
+    const p = progressOf(run({ rowsTotal: null, rowsDone: 3 }));
+    assert.equal(p.fraction, null, "an unknown total must not render as 0% or 100%");
+    assert.equal(p.rowsDone, 3);
+  });
+
+  it("reports spend against the pass allocation, not the ceiling", () => {
+    const p = progressOf(run({ pass: "g2", spentUsd: 37.5 }));
+    assert.equal(p.capUsd, 75);
+    assert.equal(p.spentFraction, 0.5);
+    assert.equal(p.atCap, false);
+  });
+
+  it("flags the cap before the last cent", () => {
+    assert.equal(progressOf(run({ spentUsd: 199.995 })).atCap, true);
+  });
+
+  it("never runs past the end of the bar", () => {
+    const p = progressOf(run({ rowsDone: 60, rowsTotal: 57, spentUsd: 400 }));
+    assert.equal(p.fraction, 1);
+    assert.equal(p.spentFraction, 1);
+  });
+});
