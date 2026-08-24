@@ -75,8 +75,12 @@ export interface IndicatorDef {
   direction: Direction;
   /** Four cut-points; level = 1 + how many are met. Null for ladder rows. */
   thresholds: number[] | null;
-  /** v1.5 indicator ids this row absorbed in the 102→57 census. */
-  absorbs: string[];
+  /**
+   * Ruling 13.7: the v1.5 rows this indicator absorbed in the 102→57 census, nested
+   * beneath it as unscored detail. Names recovered from the v1.5 workbook. These carry
+   * no level and enter no mean.
+   */
+  absorbs: { id: string; name: string }[];
   /** Present (and false) where the cut-points are still test values (13.6). */
   thresholds_ratified?: boolean;
   /** Present where the row carries an open definitional question (13.5). */
@@ -229,6 +233,11 @@ export interface PillarScore {
   held: number;
   mean: number | null;
   band: string;
+  /**
+   * Ruling 13.1: signed distance from the level the band is named for. +0.00 means the
+   * pillar sits squarely at that level; near ±0.50 it is on the edge of the next one.
+   */
+  margin: number | null;
   /** Judged + gap + held outnumber the levelled measured/documented rows. */
   weak: boolean;
   comp: Record<EvidenceClass, number>;
@@ -238,10 +247,14 @@ export interface PillarScore {
 export interface MatrixCell {
   status: MatrixStatus;
   why: string;
-  /** Mean of every bearing indicator — includes need and outcome rows (see 13.12). */
-  mean: number | null;
-  /** The same mean on enabling indicators only (A1 and O1 excluded). */
-  mean_enabler: number | null;
+  /**
+   * Ruling 13.12: the three roles are separated and only readiness decides the column.
+   * Need measures the severity of the agricultural problem, outcome measures what has
+   * already been achieved; both are reported and neither is averaged into readiness.
+   */
+  mean_readiness: number | null;
+  mean_need: number | null;
+  mean_outcome: number | null;
   n_bearing: number;
 }
 

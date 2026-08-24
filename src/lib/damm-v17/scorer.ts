@@ -55,6 +55,15 @@ type Row = {
   layer: LayerId;
 };
 
+/** The level each band is named for (ruling 13.1). */
+const BAND_LEVEL: Record<string, number> = {
+  Nascent: 1,
+  Emerging: 2,
+  Established: 3,
+  Advanced: 4,
+  Transformative: 5,
+};
+
 export class Scorer {
   private readonly m: DammModelV17;
   private readonly ind: Map<string, IndicatorDef>;
@@ -125,12 +134,17 @@ export class Scorer {
       const held = rs.filter((v) => v.level === null && v.cls !== "Gap").length;
       const judgedRated = rs.filter((v) => v.cls === "Judged" && v.level !== null).length;
       const mean = lv.length ? r2(lv.reduce((a, b) => a + b, 0) / lv.length) : null;
+      const bandName = mean !== null ? this.band(mean) : "Not rated";
       pillars[p] = {
         n: rs.length,
         rated,
         held,
         mean,
-        band: mean !== null ? this.band(mean) : "Not rated",
+        band: bandName,
+        // Ruling 13.1: the signed distance from the level the band is named for. Measured
+        // from the level, not the interval midpoint: the end bands are half-width, so a
+        // pillar with every row at level 1 would otherwise read -0.25 instead of +0.00.
+        margin: mean !== null && bandName in BAND_LEVEL ? r2(mean - BAND_LEVEL[bandName]) : null,
         weak: judgedRated + comp.Gap + held > rated - judgedRated,
         comp,
         stale: rs.filter((v) => v.stale).length,
@@ -171,20 +185,32 @@ export class Scorer {
     const threshold = this.m.config.readiness_threshold;
     const matrix = {} as Record<UseCaseId, MatrixCell>;
     for (const uc of Object.keys(this.m.use_cases) as UseCaseId[]) {
+      // Ruling 13.4: 7.12 follows the use of personal or farm-level data, so its columns
+      // are read from the model like every other per-use-case prerequisite. The hard-coded
+      // UC:AI -> AGI special case is gone. Split on "," so UC:FIN never matches UC:FINX.
       const pres = Object.entries(prereq).filter(
-        ([, v]) =>
-          v.kind.startsWith("UC:") && (v.kind.includes(uc) || (v.kind === "UC:AI" && uc === "AGI")),
+        ([, v]) => v.kind.startsWith("UC:") && v.kind.slice(3).split(",").includes(uc),
       );
       const bearing = [...this.ind.values()].filter(
         (d) =>
           (d.use_cases.includes(uc) || d.tags.includes("ALL")) &&
           (rows.get(d.id) as Row).level !== null,
       );
-      const lv = bearing.map((d) => (rows.get(d.id) as Row).level as number);
-      const mean = lv.length ? r2(lv.reduce((a, b) => a + b, 0) / lv.length) : null;
-      const enab = bearing
-        .filter((d) => d.pillar !== "A1" && d.pillar !== "O1")
-        .map((d) => (rows.get(d.id) as Row).level as number);
+      // Ruling 13.12: the three roles are separated. A1 rows measure the severity of the
+      // problem and O1 rows measure achieved outcomes; only the enabling rows measure
+      // readiness, and only the readiness mean decides the column. Averaging all three
+      // made a country with a worse agricultural problem read as less digitally ready.
+      const roleOf = (pillar: string) =>
+        pillar === "A1" ? "need" : pillar === "O1" ? "outcome" : "enabler";
+      const roleMean = (want: string) => {
+        const v = bearing
+          .filter((d) => roleOf(d.pillar) === want)
+          .map((d) => (rows.get(d.id) as Row).level as number);
+        return v.length ? r2(v.reduce((a, b) => a + b, 0) / v.length) : null;
+      };
+      const meanReadiness = roleMean("enabler");
+      const meanNeed = roleMean("need");
+      const meanOutcome = roleMean("outcome");
 
       const withStatus = (s: PrereqStatus) =>
         pres.filter(([, v]) => v.status === s).map(([i]) => i);
@@ -202,7 +228,10 @@ export class Scorer {
       } else if (withStatus("Unverified").length) {
         status = "Unverified";
         why = withStatus("Unverified").join(", ");
-      } else if (withStatus("Present (narrow)").length || (mean !== null && mean < threshold)) {
+      } else if (
+        withStatus("Present (narrow)").length ||
+        (meanReadiness !== null && meanReadiness < threshold)
+      ) {
         status = "Partial";
         why = withStatus("Present (narrow)").join(", ") || "thin enablers";
       } else if (uniNarrow.length) {
@@ -216,8 +245,9 @@ export class Scorer {
       matrix[uc] = {
         status,
         why,
-        mean,
-        mean_enabler: enab.length ? r2(enab.reduce((a, b) => a + b, 0) / enab.length) : null,
+        mean_readiness: meanReadiness,
+        mean_need: meanNeed,
+        mean_outcome: meanOutcome,
         n_bearing: bearing.length,
       };
     }

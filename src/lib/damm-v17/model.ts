@@ -37,7 +37,7 @@ const indicatorSchema = z.object({
   method: z.enum(["threshold", "ladder"]),
   direction: z.enum(["higher-is-better", "lower-is-better"]).nullable(),
   thresholds: z.array(z.number()).length(4).nullable(),
-  absorbs: z.array(z.string()),
+  absorbs: z.array(z.object({ id: z.string(), name: z.string() })),
   thresholds_ratified: z.boolean().optional(),
   ratification: z
     .object({

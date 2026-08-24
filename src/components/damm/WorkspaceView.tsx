@@ -364,19 +364,32 @@ function ReadinessTab({ a }: { a: Assessment }) {
                 </td>
               ))}
             </tr>
+            {/*
+              Ruling 13.12: readiness is the enabling mean and is the only one that decides
+              a column. Need and outcome are shown beside it, never averaged into it.
+            */}
             <tr className="border-t border-ink/10">
-              <td className="py-2 pr-2 font-medium">Mean of bearing indicators</td>
+              <td className="py-2 pr-2 font-medium">Readiness — enabling indicators</td>
               {useCaseIds.map((uc) => (
                 <td key={uc} className="py-2 pr-2 tabular-nums">
-                  {fmt(a.matrix[uc].mean)} <span className="text-xs text-subtle">of {a.matrix[uc].n_bearing}</span>
+                  {fmt(a.matrix[uc].mean_readiness)}{" "}
+                  <span className="text-xs text-subtle">of {a.matrix[uc].n_bearing}</span>
                 </td>
               ))}
             </tr>
             <tr className="border-t border-ink/10">
-              <td className="py-2 pr-2 font-medium">Mean, enabling indicators only</td>
+              <td className="py-2 pr-2 font-medium">Need — severity of the problem</td>
               {useCaseIds.map((uc) => (
                 <td key={uc} className="py-2 pr-2 tabular-nums">
-                  {fmt(a.matrix[uc].mean_enabler)}
+                  {fmt(a.matrix[uc].mean_need)}
+                </td>
+              ))}
+            </tr>
+            <tr className="border-t border-ink/10">
+              <td className="py-2 pr-2 font-medium">Outcomes already achieved</td>
+              {useCaseIds.map((uc) => (
+                <td key={uc} className="py-2 pr-2 tabular-nums">
+                  {fmt(a.matrix[uc].mean_outcome)}
                 </td>
               ))}
             </tr>

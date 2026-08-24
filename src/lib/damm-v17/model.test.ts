@@ -88,10 +88,14 @@ describe("model semantics the scorer depends on", () => {
     assert.ok(i.ratification, "2.1 carries its definitional question on the row");
   });
 
-  it("7.12 binds through UC:AI, the loop-1 ruling awaiting 13.4", () => {
+  it("ruling 13.4: 7.12 binds by data use, not by the AGI column alone", () => {
     const i = indicatorById("7.12");
     assert.ok(i);
-    assert.equal(i.prerequisite, "UC:AI");
+    const cols = i.prerequisite!.slice(3).split(",");
+    assert.ok(cols.includes("AGI"), "agricultural intelligence still binds");
+    assert.ok(cols.length > 1, "and it is no longer AGI alone — that was the ruling");
+    assert.ok(!cols.includes("AI"), "the UC:AI special case is gone from the model");
+    // The column set itself is a 13.3 mapping question and is not ratified.
     assert.ok(model.binding_rules.some((r) => r.id === "ai-binds-agi" && !r.ratified));
   });
 
@@ -103,8 +107,17 @@ describe("model semantics the scorer depends on", () => {
     }
   });
 
-  it("the census absorptions survived: 7.2 carries its five merged v1.5 rows", () => {
-    assert.deepEqual(indicatorById("7.2")?.absorbs, ["7.3", "7.4", "7.5", "7.6", "7.7"]);
+  it("ruling 13.7: absorptions survived and now carry their names, unscored", () => {
+    const abs = indicatorById("7.2")?.absorbs ?? [];
+    assert.deepEqual(
+      abs.map((a) => a.id),
+      ["7.3", "7.4", "7.5", "7.6", "7.7"],
+    );
+    // The names were recovered from the v1.5 workbook; a bare id nests nothing.
+    assert.ok(
+      abs.every((a) => a.name.length > 5),
+      "every sub-reading carries the name it is nested under",
+    );
   });
 });
 

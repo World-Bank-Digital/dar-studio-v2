@@ -47,7 +47,7 @@ describe("evidence round trip reproduces the pipeline", () => {
       for (const [uc, e] of Object.entries(expected.matrix)) {
         const g = got.matrix[uc as UseCaseId];
         assert.equal(g.status, e.status, `${name} ${uc} status`);
-        assert.equal(g.mean, e.mean, `${name} ${uc} mean`);
+        assert.equal(g.mean_readiness, e.mean_readiness, `${name} ${uc} readiness mean`);
       }
       for (const [id, status] of Object.entries(expected.prereq)) {
         assert.equal(got.prereq[id]?.status, status, `${name} prereq ${id}`);

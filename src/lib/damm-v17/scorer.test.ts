@@ -17,7 +17,20 @@ import nigeriaExpected from "./fixtures/nigeria-expected.json" with { type: "jso
  * the pipeline disagree about the model, and the pipeline wins: fix the port.
  */
 
-type Expected = typeof egyptExpected;
+// TypeScript infers a literal type from each fixture, and the two countries differ
+// where an indicator records a number in one and a statement in the other (8.5).
+// The parity assertions below check every field explicitly, so the structural
+// shape is what matters here rather than the literal types of the values.
+type Expected = {
+  counts: Record<string, number>;
+  rated: number;
+  held: number;
+  pillars: Record<string, Record<string, unknown>>;
+  layers: Record<string, number | null>;
+  leapfrog_gap: number | null;
+  prereq: Record<string, string>;
+  matrix: Record<string, Record<string, unknown>>;
+};
 
 function assertParity(name: string, got: Assessment, want: Expected) {
   assert.deepEqual(got.counts, want.counts, `${name}: evidence-class counts`);
@@ -41,7 +54,14 @@ function assertParity(name: string, got: Assessment, want: Expected) {
 
   for (const [uc, e] of Object.entries(want.matrix)) {
     const g = got.matrix[uc as UseCaseId];
-    for (const k of ["status", "why", "mean", "mean_enabler", "n_bearing"] as const) {
+    for (const k of [
+      "status",
+      "why",
+      "mean_readiness",
+      "mean_need",
+      "mean_outcome",
+      "n_bearing",
+    ] as const) {
       assert.deepEqual(g[k], e[k], `${name}: matrix ${uc}.${k}`);
     }
   }
@@ -67,12 +87,34 @@ describe("scorer parity with the assessment pipeline", () => {
     assert.equal(c4.weak, true, "a pillar resting on a minority of its rows must flag");
   });
 
-  it("Nigeria MKT is the 13.12 case: the one mean-driven column, both means visible", () => {
+  it("ruling 13.12: need never enters the readiness figure", () => {
+    // Nigeria MKT was the case the specification argued 13.12 on: 2.58 with the need and
+    // outcome rows folded in, 2.64 without. Only the second decides the column now, and
+    // the need mean of 1.0 that used to drag it down is reported on its own.
     const mkt = scorer.run(nigeriaObs as Observations).matrix.MKT;
     assert.equal(mkt.status, "Partial");
-    assert.equal(mkt.why, "thin enablers");
-    assert.equal(mkt.mean, 2.58);
-    assert.equal(mkt.mean_enabler, 2.64, "either side of the 2.6 line — the open question");
+    assert.equal(mkt.mean_readiness, 2.64, "readiness is the enabling rows alone");
+    assert.equal(mkt.mean_need, 1, "a severe problem is reported, never averaged in");
+    assert.notEqual(mkt.mean_readiness, 2.58, "the old mixed mean must not survive");
+  });
+
+  it("ruling 13.1: a pillar squarely at its level reads a margin of zero", () => {
+    const a1 = scorer.run(egyptObs as Observations).pillars.A1;
+    assert.equal(a1.mean, 3);
+    assert.equal(a1.band, "Established");
+    assert.equal(a1.margin, 0, "every row at level 3 must read +0.00, not an edge value");
+  });
+
+  it("ruling 13.4: the consent prerequisite binds more than the AGI column", () => {
+    // Egypt records 7.12 as Absent. Under the old AGI-only binding that blocked one
+    // column; it now blocks every column drawing on personal or farm-level data.
+    const eg = scorer.run(egyptObs as Observations);
+    assert.equal(eg.prereq["7.12"].status, "Absent");
+    const blocked = Object.entries(eg.matrix)
+      .filter(([, m]) => m.status === "Blocked")
+      .map(([uc]) => uc)
+      .sort();
+    assert.deepEqual(blocked, ["ADV", "AGI", "FIN", "SMF"]);
   });
 });
 
@@ -101,7 +143,12 @@ describe("scorer semantics", () => {
     obs["4.7"].level = null;
     const got = scorer.run(obs);
     assert.equal(got.prereq["4.7"].status, "Unverified");
-    assert.notEqual(got.matrix.FIN.status, "Blocked");
+    // Egypt's FIN column is Blocked on 7.12 since ruling 13.4, so the claim to test is
+    // not the column's status but that a withheld row never becomes a blocker itself.
+    assert.ok(
+      !got.matrix.FIN.why.includes("4.7"),
+      "an unrated row asserts nothing and must never be named as a blocker",
+    );
     const c3 = got.pillars.C3;
     assert.equal(c3.rated, 7, "the withheld row leaves the mean's denominator");
     assert.equal(c3.held, 1, "…and is disclosed as held, not vanished");
