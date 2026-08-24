@@ -305,8 +305,9 @@ describe("which passes produce evidence", () => {
     }
   });
 
-  it("scans is runnable now that a script implements it", () => {
+  it("a pass is runnable exactly when a script implements it", () => {
     assert.ok(isRunnable("scans"));
-    assert.equal(isRunnable("foresight"), false);
+    assert.ok(isRunnable("foresight"));
+    assert.equal(isRunnable("generation"), false);
   });
 });

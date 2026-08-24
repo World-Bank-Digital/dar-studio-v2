@@ -317,10 +317,9 @@ describe("spawning the real pipeline", () => {
 
 describe("a pass with no script", () => {
   it("refuses rather than falling through to the research orchestrator", () => {
-    // foresight and generation have a share of the ceiling but no script yet. Routing one
+    // generation has a share of the ceiling but no script yet. Routing it
     // to research_orchestrator.py would run a full 57-row pass and bill it to that pass's
     // allocation, which would read afterwards as a foresight exercise that cost $200.
-    assert.throws(() => argsFor(run({ pass: "foresight" })), /No script implements/);
     assert.throws(() => argsFor(run({ pass: "generation" })), /No script implements/);
   });
 });

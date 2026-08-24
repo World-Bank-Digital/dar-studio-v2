@@ -110,6 +110,7 @@ export function argsFor(run: Run): { script: string; args: string[] } {
     research: "research_orchestrator.py",
     g2: "gate2.py",
     scans: "scans.py",
+    foresight: "foresight.py",
   };
   const script = SCRIPTS[run.pass];
   if (!script) throw new Error(`No script implements the ${run.pass} pass.`);
