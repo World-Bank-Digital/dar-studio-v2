@@ -14,6 +14,9 @@ import {
   DEFAULT_CEILING_USD,
   basenameFor,
   canResume,
+  canReview,
+  defaultVendorFor,
+  isRunnable,
   canTransition,
   progressOf,
   stoppedSummary,
@@ -70,6 +73,12 @@ export const startRun = createServerFn({ method: "POST" })
     if (!PASSES.includes(data.pass)) {
       return { ok: false as const, error: `Unknown pass "${data.pass}".` };
     }
+    if (!isRunnable(data.pass)) {
+      return {
+        ok: false as const,
+        error: `The ${data.pass} pass has a share of the budget but no pipeline script yet, so it cannot be run.`,
+      };
+    }
     const sql = await getSql();
     const rows = await sql<{ name: string; iso3: string }>`
       select name, iso3 from countries
@@ -97,6 +106,18 @@ export const startRun = createServerFn({ method: "POST" })
       };
     }
 
+    // The reviewer must not be the vendor that did the research. Checked here because
+    // this is where the vendor is chosen; refused before anything is queued, so the
+    // operator sees why rather than a review that upholds everything.
+    if (data.pass === "g2") {
+      const peer = canReview(prior?.vendor ?? null, data.vendor ?? null);
+      if (!peer.ok) return { ok: false as const, error: `Cannot start this review: ${peer.reason}` };
+    }
+
+    // Resolved rather than left null, so the run records the vendor it actually used and
+    // the app never displays a default the pipeline might resolve differently.
+    const vendor = data.vendor ?? defaultVendorFor(data.pass);
+
     const run = await createRun({
       userId: context.userId,
       countryId: data.countryId,
@@ -104,7 +125,7 @@ export const startRun = createServerFn({ method: "POST" })
       iso3,
       pass: data.pass,
       ceilingUsd: data.ceilingUsd ?? DEFAULT_CEILING_USD,
-      vendor: data.vendor ?? null,
+      vendor,
       outBasename,
     });
     return { ok: true as const, run: view(run) };

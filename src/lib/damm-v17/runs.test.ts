@@ -17,6 +17,9 @@ import {
   type Run,
   type RunStatus,
   basenameFor,
+  canReview,
+  defaultVendorFor,
+  VENDOR_CHOICES,
 } from "./runs.ts";
 
 function run(over: Partial<Run> = {}): Run {
@@ -205,5 +208,39 @@ describe("which name a pass writes under", () => {
   it("returns nothing when there is no research pass to inherit from", () => {
     assert.equal(basenameFor("g2", "EGY", at, null), null);
     assert.equal(basenameFor("generation", "EGY", at, null), null);
+  });
+});
+
+describe("who may review a pass", () => {
+  it("allows a reviewer from another vendor", () => {
+    assert.ok(canReview("anthropic/claude-opus-5", "openai/gpt-5.6-terra").ok);
+  });
+
+  it("refuses a vendor reviewing its own work", () => {
+    const t = canReview("anthropic/claude-opus-5", "anthropic/claude-sonnet-5");
+    assert.equal(t.ok, false);
+    assert.match(t.reason, /reviewing its own work/);
+  });
+
+  it("catches the unnamed case, where nothing on screen would say so", () => {
+    // Research on openai, reviewer left at its default — which is also openai. This is
+    // the trap the rule exists for: both fields look empty and the review is not a peer.
+    const t = canReview("openai/gpt-5.6-terra", null);
+    assert.equal(t.ok, false);
+  });
+
+  it("allows the two defaults, which is the arrangement the pipeline shipped with", () => {
+    assert.ok(canReview(null, null).ok);
+  });
+
+  it("offers only vendor/model pairs the pipeline can resolve", () => {
+    assert.ok(VENDOR_CHOICES.includes("anthropic/claude-opus-5"));
+    assert.ok(VENDOR_CHOICES.includes("gemini/gemini-3.1-pro-preview"));
+    assert.ok(VENDOR_CHOICES.every((v) => v.includes("/")));
+  });
+
+  it("reads the pass defaults from the pipeline rather than restating them", () => {
+    assert.equal(defaultVendorFor("research"), "anthropic/claude-opus-5");
+    assert.equal(defaultVendorFor("g2"), "openai/gpt-5.6-terra");
   });
 });

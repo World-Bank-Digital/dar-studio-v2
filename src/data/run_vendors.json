@@ -1,0 +1,28 @@
+{
+ "_source": "vendors._MODEL_PREFS and the --vendor defaults in research_orchestrator.py / gate2.py \u2014 exported, never restated. Regenerate with model/export_app_fixtures.py after changing either.",
+ "families": {
+  "anthropic": [
+   "claude-opus-5",
+   "claude-opus-4-8",
+   "claude-sonnet-5"
+  ],
+  "openai": [
+   "gpt-5.6-terra",
+   "gpt-5.6-luna",
+   "gpt-5.6-sol"
+  ],
+  "gemini": [
+   "gemini-3.1-pro-preview",
+   "gemini-2.5-pro",
+   "gemini-pro-latest"
+  ]
+ },
+ "runnable_passes": [
+  "g2",
+  "research"
+ ],
+ "pass_defaults": {
+  "research": "anthropic/claude-opus-5",
+  "g2": "openai/gpt-5.6-terra"
+ }
+}

@@ -104,6 +104,11 @@ export interface WorkerDeps {
 
 export function argsFor(run: Run): { script: string; args: string[] } {
   const dir = scriptDir();
+  // Exhaustive on purpose. Falling through to the research orchestrator would run a full
+  // 57-row research pass under another pass's name and bill it to that pass's allocation.
+  if (run.pass !== "research" && run.pass !== "g2") {
+    throw new Error(`No script implements the ${run.pass} pass.`);
+  }
   if (run.pass === "g2") {
     return {
       script: path.join(dir, "gate2.py"),

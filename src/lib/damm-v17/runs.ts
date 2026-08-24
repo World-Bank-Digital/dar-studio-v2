@@ -22,6 +22,7 @@
 // resolve the bundler's "@/" alias. The rest of the domain layer imports its JSON
 // the same way.
 import budget from "../../data/run_budget.json" with { type: "json" };
+import vendors from "../../data/run_vendors.json" with { type: "json" };
 
 export type RunStatus =
   | "queued"
@@ -71,6 +72,58 @@ export const RESUMABLE: readonly RunStatus[] = ["paused", "exhausted"];
 
 export function isTerminal(s: RunStatus): boolean {
   return TERMINAL.includes(s);
+}
+
+// ---------------------------------------------------------------- vendors
+
+/**
+ * The passes a script implements.
+ *
+ * The allocation names five because it reserves each one's share of the ceiling. Only
+ * these are built, and the distinction matters at the point of starting a run: a pass
+ * with no script would fall through to the research orchestrator and spend a full
+ * research budget under another pass's name.
+ */
+export const RUNNABLE_PASSES: RunPass[] = vendors.runnable_passes as RunPass[];
+
+export function isRunnable(pass: RunPass): boolean {
+  return RUNNABLE_PASSES.includes(pass);
+}
+
+/** vendor/model pairs the pipeline can resolve, in its own preference order. */
+export const VENDOR_CHOICES: string[] = Object.entries(vendors.families).flatMap(
+  ([family, models]) => (models as string[]).map((m) => `${family}/${m}`),
+);
+
+/** The vendor a pass uses when none is named. Read from the pipeline, never restated. */
+export function defaultVendorFor(pass: RunPass): string | null {
+  return (vendors.pass_defaults as Record<string, string>)[pass] ?? null;
+}
+
+export function vendorFamily(vendor: string | null): string | null {
+  if (!vendor) return null;
+  const family = vendor.split("/")[0].trim();
+  return family || null;
+}
+
+/**
+ * Whether a reviewer may review this pass.
+ *
+ * The second review exists to be a peer, and the audition showed a vendor's own siblings
+ * abstaining in the same places — so a model reviewing its own pass upholds it and the
+ * review reports a clean bill it never earned. Families are compared after defaults are
+ * resolved, because the trap is the unnamed case: research on openai and a G2 left at its
+ * default is the same family, and nothing on screen would say so.
+ */
+export function canReview(researchVendor: string | null, reviewerVendor: string | null): Transition {
+  const primary = vendorFamily(researchVendor ?? defaultVendorFor("research"));
+  const reviewer = vendorFamily(reviewerVendor ?? defaultVendorFor("g2"));
+  if (!primary || !reviewer) return OK;
+  if (primary !== reviewer) return OK;
+  return no(
+    `the research pass was run on ${primary} and a second review on ${reviewer} would be ` +
+      `that vendor reviewing its own work. Choose a reviewer from another vendor.`,
+  );
 }
 
 /** Holding a place in the queue: not finished, and not startable again. */
