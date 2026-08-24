@@ -9,6 +9,7 @@
 import { createServerFn } from "@tanstack/react-start";
 import { authMiddleware } from "@/lib/auth/middleware";
 import { getSql } from "@/lib/db";
+import { uid } from "@/lib/utils";
 
 import {
   DEFAULT_CEILING_USD,
@@ -90,15 +91,28 @@ export const startRun = createServerFn({ method: "POST" })
     // believe they had the whole allocation and between them spend twice it.
     const active = await findActiveRun(data.countryId, data.pass);
     if (active) {
+      const resumable = active.status === "paused" || active.status === "exhausted";
       return {
         ok: false as const,
-        error: `A ${data.pass} run for ${name} is already ${active.status}.`,
+        error: resumable
+          ? `A ${data.pass} run for ${name} is ${active.status}. Continue it or cancel it ` +
+            `first — starting another would research the rows it has already paid for.`
+          : `A ${data.pass} run for ${name} is already ${active.status}.`,
         runId: active.id,
       };
     }
 
     const prior = data.pass === "research" ? null : await latestCompletedResearch(data.countryId);
-    const outBasename = basenameFor(data.pass, iso3, new Date(), prior?.outBasename ?? null);
+    // The run's own id is the uniqueness token, so the checkpoint files a run writes
+    // belong to that run and to no other.
+    const id = uid();
+    const outBasename = basenameFor(
+      data.pass,
+      iso3,
+      new Date(),
+      prior?.outBasename ?? null,
+      id.slice(0, 6),
+    );
     if (!outBasename) {
       return {
         ok: false as const,
@@ -119,6 +133,7 @@ export const startRun = createServerFn({ method: "POST" })
     const vendor = data.vendor ?? defaultVendorFor(data.pass);
 
     const run = await createRun({
+      id,
       userId: context.userId,
       countryId: data.countryId,
       countryName: name,

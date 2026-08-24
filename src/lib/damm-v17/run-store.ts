@@ -8,7 +8,6 @@
  * and the loser gets no row back.
  */
 import { getSql } from "../db.ts";
-import { uid } from "../utils.ts";
 
 import { CLAIM_LEASE_MS, type Run, type RunPass, type RunStatus } from "./runs.ts";
 
@@ -59,6 +58,8 @@ function toRun(r: RunRow): Run {
 }
 
 export async function createRun(input: {
+  /** Minted by the caller so the run's basename can be derived from it. */
+  id: string;
   userId: string;
   countryId: string | null;
   countryName: string;
@@ -69,11 +70,10 @@ export async function createRun(input: {
   outBasename: string;
 }): Promise<Run> {
   const sql = await getSql();
-  const id = uid();
   const rows = await sql<RunRow>`
     insert into runs (id, user_id, country_id, country_name, iso3, pass,
                       ceiling_usd, vendor, out_basename)
-    values (${id}, ${input.userId}, ${input.countryId}, ${input.countryName},
+    values (${input.id}, ${input.userId}, ${input.countryId}, ${input.countryName},
             ${input.iso3}, ${input.pass}, ${input.ceilingUsd},
             ${input.vendor ?? null}, ${input.outBasename})
     returning *`;
@@ -234,13 +234,19 @@ export async function listEvents(runId: string, sinceId = 0, limit = 200): Promi
   }));
 }
 
-/** The run holding a country's place for a pass, if one is queued, running or paused. */
+/**
+ * The unfinished run holding a country's place for a pass.
+ *
+ * Everything that is not terminal counts, exhausted included. An exhausted run is not
+ * finished — it can be continued from where it stopped — so starting a second pass beside
+ * it would research the rows the first one already paid for.
+ */
 export async function findActiveRun(countryId: string, pass: RunPass): Promise<Run | null> {
   const sql = await getSql();
   const rows = await sql<RunRow>`
     select * from runs
     where country_id = ${countryId} and pass = ${pass}
-      and status in ('queued', 'running', 'paused')
+      and status not in ('done', 'failed', 'cancelled')
     order by created_at desc limit 1`;
   return rows[0] ? toRun(rows[0]) : null;
 }

@@ -20,6 +20,7 @@ import {
   canReview,
   defaultVendorFor,
   VENDOR_CHOICES,
+  projectToFinish,
 } from "./runs.ts";
 
 function run(over: Partial<Run> = {}): Run {
@@ -196,18 +197,28 @@ describe("which name a pass writes under", () => {
   const at = new Date("2026-08-25T14:07:00Z");
 
   it("mints a stamped name for a research pass", () => {
-    assert.equal(basenameFor("research", "egy", at, null), "EGY_202608251407");
+    assert.equal(basenameFor("research", "egy", at, null, "a1b2c3"), "EGY_202608251407_a1b2c3");
   });
 
   it("makes a later pass inherit the research name rather than mint its own", () => {
     // gate2.py takes --run and reads an existing pass's files. A G2 run under a fresh
     // name would find nothing to review and report a clean review of it.
-    assert.equal(basenameFor("g2", "EGY", at, "EGY_202608251407"), "EGY_202608251407");
+    assert.equal(basenameFor("g2", "EGY", at, "EGY_202608251407_a1b2c3", "zzz"), "EGY_202608251407_a1b2c3");
+  });
+
+  it("mints a different name for each run, even in the same minute", () => {
+    // The basename is what the pipeline checkpoints under, and every invocation passes
+    // --resume. Two runs sharing a name means the second resumes the first's completed
+    // state: it finishes at once, reports every row done, and claims a spend it never made.
+    assert.notEqual(
+      basenameFor("research", "EGY", at, null, "a1b2c3"),
+      basenameFor("research", "EGY", at, null, "d4e5f6"),
+    );
   });
 
   it("returns nothing when there is no research pass to inherit from", () => {
-    assert.equal(basenameFor("g2", "EGY", at, null), null);
-    assert.equal(basenameFor("generation", "EGY", at, null), null);
+    assert.equal(basenameFor("g2", "EGY", at, null, "a1b2c3"), null);
+    assert.equal(basenameFor("generation", "EGY", at, null, "a1b2c3"), null);
   });
 });
 
@@ -242,5 +253,38 @@ describe("who may review a pass", () => {
   it("reads the pass defaults from the pipeline rather than restating them", () => {
     assert.equal(defaultVendorFor("research"), "anthropic/claude-opus-5");
     assert.equal(defaultVendorFor("g2"), "openai/gpt-5.6-terra");
+  });
+});
+
+describe("how much budget finishing would need", () => {
+  const stopped = {
+    pass: "research" as const,
+    ceilingUsd: 20,
+    spentUsd: 8,
+    rowsDone: 20,
+    rowsTotal: 59,
+  };
+
+  it("projects from the rate the run actually ran at", () => {
+    const p = projectToFinish(stopped)!;
+    assert.equal(p.rowsRemaining, 39);
+    assert.ok(Math.abs(p.costPerRow - 0.4) < 1e-9);
+    assert.ok(Math.abs(p.projectedPassCost - 23.6) < 1e-9);
+  });
+
+  it("suggests a ceiling that gives the pass that much, with the stated allowance", () => {
+    // $23.60 projected, plus 20%, is $28.32 — which at research's 40% share needs a
+    // ceiling of $70.80, rounded up to $80.
+    assert.equal(projectToFinish(stopped)!.suggestedCeilingUsd, 80);
+  });
+
+  it("never suggests less than the ceiling already set", () => {
+    assert.equal(projectToFinish({ ...stopped, ceilingUsd: 500 })!.suggestedCeilingUsd, 500);
+  });
+
+  it("gives nothing when there is no basis, rather than a number derived from nothing", () => {
+    assert.equal(projectToFinish({ ...stopped, rowsTotal: null }), null);
+    assert.equal(projectToFinish({ ...stopped, rowsDone: 0 }), null);
+    assert.equal(projectToFinish({ ...stopped, rowsDone: 59, rowsTotal: 59 }), null);
   });
 });

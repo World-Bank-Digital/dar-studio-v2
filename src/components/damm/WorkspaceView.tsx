@@ -12,6 +12,7 @@
  */
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Badge } from "@/components/ui/badge";
+import { RunsTab } from "@/components/damm/RunsTab";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -29,12 +30,13 @@ import {
 import type { Assessment, IndicatorDef, PillarId } from "@/lib/damm-v17/types";
 import { AlertTriangle, CircleHelp, Loader2 } from "lucide-react";
 
-type Tab = "overview" | "readiness" | "evidence" | "questions" | "audit";
+type Tab = "overview" | "readiness" | "evidence" | "research" | "questions" | "audit";
 
 const TABS: Array<{ id: Tab; label: string }> = [
   { id: "overview", label: "Overview" },
   { id: "readiness", label: "Readiness" },
   { id: "evidence", label: "Evidence" },
+  { id: "research", label: "Research" },
   { id: "questions", label: "Open questions" },
   { id: "audit", label: "Audit" },
 ];
@@ -167,6 +169,7 @@ export function WorkspaceView({ id }: { id: string }) {
         {tab === "overview" && <OverviewTab a={ws.assessment} />}
         {tab === "readiness" && <ReadinessTab a={ws.assessment} />}
         {tab === "evidence" && <EvidenceTab ws={ws} onChange={refresh} />}
+        {tab === "research" && <RunsTab countryId={ws.id} />}
         {tab === "questions" && <QuestionsTab ws={ws} />}
         {tab === "audit" && <AuditTab id={ws.id} />}
       </div>

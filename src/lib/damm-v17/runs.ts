@@ -141,16 +141,24 @@ export function isActive(s: RunStatus): boolean {
  * report a clean review of it. Every later pass inherits the research basename, which is
  * why this returns null when there is none to inherit — the caller has to refuse rather
  * than invent one.
+ *
+ * `token` is what makes a minted name unique, and it is not decoration. The basename is
+ * what the pipeline checkpoints under, and it is always invoked with `--resume`. A name
+ * derived from the clock alone collides with any run started in the same minute, and the
+ * second run resumes the first one's completed state: it finishes at once, reports every
+ * row done, and claims a spend it never made. A run must never inherit another's
+ * checkpoint. Continuing a stopped run is what the same run's own basename is for.
  */
 export function basenameFor(
   pass: RunPass,
   iso3: string,
   at: Date,
   researchBasename: string | null,
+  token: string,
 ): string | null {
   if (pass === "research") {
     const stamp = at.toISOString().slice(0, 16).replace(/[-:T]/g, "");
-    return `${iso3.toUpperCase()}_${stamp}`;
+    return `${iso3.toUpperCase()}_${stamp}_${token}`;
   }
   return researchBasename;
 }
@@ -291,6 +299,52 @@ export function progressOf(run: Run): Progress {
     capUsd: cap,
     spentFraction: cap > 0 ? Math.min(1, run.spentUsd / cap) : 0,
     atCap: cap - run.spentUsd <= 0.01,
+  };
+}
+
+/**
+ * A stated allowance on top of the observed rate.
+ *
+ * The rate is computed over rows that finished, and those are systematically the cheaper
+ * ones: a row that resolves on the first retrieval costs less than one that ends as a gap
+ * after exhausting its sources. So the bare projection is a lower bound, and topping up to
+ * exactly it invites a second exhaustion a few rows from the end. The allowance is stated
+ * on screen rather than folded in silently, because it is a judgement and not a measurement.
+ */
+export const RATE_ALLOWANCE = 0.2;
+
+export interface Projection {
+  costPerRow: number;
+  rowsRemaining: number;
+  /** What the pass looks likely to cost in total, at the rate observed so far. */
+  projectedPassCost: number;
+  /** A country ceiling that would give this pass that much, with the allowance. */
+  suggestedCeilingUsd: number;
+}
+
+/**
+ * What finishing this pass looks likely to need, at the rate it has run at.
+ *
+ * Null when there is no basis — no rows done, or no row total yet. An operator with no
+ * basis should be told there is none, not shown a number derived from nothing.
+ */
+export function projectToFinish(
+  run: Pick<Run, "pass" | "ceilingUsd" | "spentUsd" | "rowsDone" | "rowsTotal">,
+): Projection | null {
+  if (!run.rowsTotal || run.rowsDone <= 0 || run.spentUsd <= 0) return null;
+  const rowsRemaining = run.rowsTotal - run.rowsDone;
+  if (rowsRemaining <= 0) return null;
+  const costPerRow = run.spentUsd / run.rowsDone;
+  const projectedPassCost = costPerRow * run.rowsTotal;
+  const share = ALLOCATION[run.pass] ?? 0;
+  const needed = share > 0 ? (projectedPassCost * (1 + RATE_ALLOWANCE)) / share : 0;
+  return {
+    costPerRow,
+    rowsRemaining,
+    projectedPassCost,
+    // Rounded up to the next $10: a ceiling is a decision an operator states, not a
+    // figure to the cent.
+    suggestedCeilingUsd: Math.max(run.ceilingUsd, Math.ceil(needed / 10) * 10),
   };
 }
 
