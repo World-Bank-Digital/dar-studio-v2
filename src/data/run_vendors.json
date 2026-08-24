@@ -19,10 +19,12 @@
  },
  "runnable_passes": [
   "g2",
-  "research"
+  "research",
+  "scans"
  ],
  "pass_defaults": {
   "research": "anthropic/claude-opus-5",
-  "g2": "openai/gpt-5.6-terra"
+  "g2": "openai/gpt-5.6-terra",
+  "scans": "anthropic/claude-opus-5"
  }
 }

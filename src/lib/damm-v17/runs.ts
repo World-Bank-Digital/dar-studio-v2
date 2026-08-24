@@ -86,6 +86,18 @@ export function isTerminal(s: RunStatus): boolean {
  */
 export const RUNNABLE_PASSES: RunPass[] = vendors.runnable_passes as RunPass[];
 
+/**
+ * Whether a pass produces rows for the evidence base.
+ *
+ * Research and the second review do. The scans gather what the instrument does not
+ * measure, foresight produces milestones, and generation produces a document — none of
+ * them score an indicator, and offering to import one into the evidence base would
+ * suggest they might.
+ */
+export function producesEvidence(pass: RunPass): boolean {
+  return pass === "research" || pass === "g2";
+}
+
 export function isRunnable(pass: RunPass): boolean {
   return RUNNABLE_PASSES.includes(pass);
 }

@@ -25,6 +25,7 @@ import {
   RUNNABLE_PASSES,
   defaultVendorFor,
   passCap,
+  producesEvidence,
   projectToFinish,
   RATE_ALLOWANCE,
   VENDOR_CHOICES,
@@ -376,7 +377,7 @@ function RunCard({ run, onChange }: { run: RunView; onChange: () => void }) {
           </>
         )}
 
-        {(run.status === "done" || run.status === "exhausted") && (
+        {producesEvidence(run.pass) && (run.status === "done" || run.status === "exhausted") && (
           <Button
             size="sm"
             variant={run.status === "done" ? "default" : "outline"}

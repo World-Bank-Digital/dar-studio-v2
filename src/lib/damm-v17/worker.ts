@@ -23,7 +23,7 @@ import { readFile } from "node:fs/promises";
 import path from "node:path";
 
 import { parseChunk, statusOnExit, type RunEvent } from "./run-output.ts";
-import type { Run, RunStatus } from "./runs.ts";
+import type { Run, RunPass, RunStatus } from "./runs.ts";
 
 /**
  * Where the pipeline lives. It is a separate repository, so the path is configuration
@@ -106,28 +106,24 @@ export function argsFor(run: Run): { script: string; args: string[] } {
   const dir = scriptDir();
   // Exhaustive on purpose. Falling through to the research orchestrator would run a full
   // 57-row research pass under another pass's name and bill it to that pass's allocation.
-  if (run.pass !== "research" && run.pass !== "g2") {
-    throw new Error(`No script implements the ${run.pass} pass.`);
-  }
-  if (run.pass === "g2") {
-    return {
-      script: path.join(dir, "gate2.py"),
-      args: [
-        "--country", run.countryName,
-        "--iso", run.iso3,
-        "--run", run.outBasename,
-        "--ceiling", String(run.ceilingUsd),
-        ...(run.vendor ? ["--vendor", run.vendor] : []),
-        "--resume",
-      ],
-    };
-  }
+  const SCRIPTS: Partial<Record<RunPass, string>> = {
+    research: "research_orchestrator.py",
+    g2: "gate2.py",
+    scans: "scans.py",
+  };
+  const script = SCRIPTS[run.pass];
+  if (!script) throw new Error(`No script implements the ${run.pass} pass.`);
+
+  // gate2.py takes --run because it reads an existing pass rather than naming a new one.
+  // Passing --out there is accepted by argparse as unknown and the review reads the
+  // wrong basename.
+  const nameFlag = run.pass === "g2" ? "--run" : "--out";
   return {
-    script: path.join(dir, "research_orchestrator.py"),
+    script: path.join(dir, script),
     args: [
       "--country", run.countryName,
       "--iso", run.iso3,
-      "--out", run.outBasename,
+      nameFlag, run.outBasename,
       "--ceiling", String(run.ceilingUsd),
       ...(run.vendor ? ["--vendor", run.vendor] : []),
       // Always resume. On a first run there is no state file and it starts from zero;
@@ -234,8 +230,13 @@ export async function readPassRows(run: Run): Promise<PassOutput | null> {
   }
 }
 
+/**
+ * The prefix a pass's own files carry. Research writes under the bare basename and every
+ * later pass suffixes it with its own name, so one assessment's files group together and
+ * no two passes can overwrite each other's ledger.
+ */
 function ledgerName(run: Run): string {
-  return run.pass === "g2" ? `${run.outBasename}_g2` : run.outBasename;
+  return run.pass === "research" ? run.outBasename : `${run.outBasename}_${run.pass}`;
 }
 
 /** Follow one claimed run to its end. Returns the status it settled on. */

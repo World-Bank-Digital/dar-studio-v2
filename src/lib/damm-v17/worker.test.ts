@@ -4,6 +4,7 @@ import assert from "node:assert/strict";
 import {
   argsFor,
   defaultDeps,
+  passFilePaths,
   drain,
   runOne,
   type RowProgress,
@@ -316,9 +317,33 @@ describe("spawning the real pipeline", () => {
 
 describe("a pass with no script", () => {
   it("refuses rather than falling through to the research orchestrator", () => {
-    // scans, foresight and generation have a share of the ceiling but no script. Routing
-    // one to research_orchestrator.py would run a full 57-row pass and bill it to that
-    // pass's allocation, which would read afterwards as a scan that cost $200.
-    assert.throws(() => argsFor(run({ pass: "scans" })), /No script implements/);
+    // foresight and generation have a share of the ceiling but no script yet. Routing one
+    // to research_orchestrator.py would run a full 57-row pass and bill it to that pass's
+    // allocation, which would read afterwards as a foresight exercise that cost $200.
+    assert.throws(() => argsFor(run({ pass: "foresight" })), /No script implements/);
+    assert.throws(() => argsFor(run({ pass: "generation" })), /No script implements/);
+  });
+});
+
+describe("the scans pass", () => {
+  it("is invoked with --out and its own basename", () => {
+    const { script, args } = argsFor(run({ pass: "scans" }));
+    assert.match(script, /scans\.py$/);
+    assert.equal(args[args.indexOf("--out") + 1], "EGY_run1");
+    assert.ok(args.includes("--resume"));
+  });
+
+  it("keeps its files under its own prefix, so no two passes share a ledger", () => {
+    // The invocations are identical by design — same basename, same flag, different
+    // script. What has to differ is where each pass's ledger and checkpoint live:
+    // research writes EGY_run1_*, scans writes EGY_run1_scans_*. Sharing one file would
+    // make each pass's recorded spend whatever the other wrote last.
+    const research = passFilePaths(run({ pass: "research" }));
+    const scans = passFilePaths(run({ pass: "scans" }));
+    const g2 = passFilePaths(run({ pass: "g2" }));
+    assert.match(scans.state, /EGY_run1_scans_state\.json$/);
+    assert.match(research.state, /EGY_run1_state\.json$/);
+    assert.match(g2.state, /EGY_run1_g2_state\.json$/);
+    assert.notEqual(scans.state, research.state);
   });
 });

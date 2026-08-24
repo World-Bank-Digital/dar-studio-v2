@@ -18,6 +18,7 @@ import {
   canReview,
   defaultVendorFor,
   isRunnable,
+  producesEvidence,
   canTransition,
   progressOf,
   stoppedSummary,
@@ -238,6 +239,12 @@ export const importPassOutput = createServerFn({ method: "POST" })
 
     if (!run.countryId) {
       return { ok: false as const, error: "This run is not attached to a country." };
+    }
+    if (!producesEvidence(run.pass)) {
+      return {
+        ok: false as const,
+        error: `The ${run.pass} pass does not produce indicator rows, so there is nothing to import into the evidence base. Its output feeds the roadmap documents.`,
+      };
     }
     if (run.status !== "done" && run.status !== "exhausted") {
       return {

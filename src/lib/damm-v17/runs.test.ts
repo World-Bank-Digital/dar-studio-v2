@@ -21,7 +21,8 @@ import {
   defaultVendorFor,
   VENDOR_CHOICES,
   projectToFinish,
-} from "./runs.ts";
+  producesEvidence,
+  isRunnable,} from "./runs.ts";
 
 function run(over: Partial<Run> = {}): Run {
   return {
@@ -286,5 +287,26 @@ describe("how much budget finishing would need", () => {
     assert.equal(projectToFinish({ ...stopped, rowsTotal: null }), null);
     assert.equal(projectToFinish({ ...stopped, rowsDone: 0 }), null);
     assert.equal(projectToFinish({ ...stopped, rowsDone: 59, rowsTotal: 59 }), null);
+  });
+});
+
+describe("which passes produce evidence", () => {
+  it("research and the second review do", () => {
+    assert.ok(producesEvidence("research"));
+    assert.ok(producesEvidence("g2"));
+  });
+
+  it("the scans, foresight and generation do not", () => {
+    // They gather what the instrument does not measure, produce milestones, and produce a
+    // document. Offering to import one into the evidence base would suggest they score
+    // something.
+    for (const p of ["scans", "foresight", "generation"] as const) {
+      assert.equal(producesEvidence(p), false, `${p} should not produce evidence`);
+    }
+  });
+
+  it("scans is runnable now that a script implements it", () => {
+    assert.ok(isRunnable("scans"));
+    assert.equal(isRunnable("foresight"), false);
   });
 });
