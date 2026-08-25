@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 
 import {
   argsFor,
+  artifactPath,
   defaultDeps,
   degradationNotes,
   passFilePaths,
@@ -394,5 +395,36 @@ describe("recording what a run lost", () => {
     assert.equal(status, "done");
     assert.match(f.calls.finished[0].reason, /perplexity was unavailable/);
     assert.ok(f.calls.notes.some((m) => /perplexity/.test(m)));
+  });
+});
+
+describe("where a pass's output lives", () => {
+  const at = (pass: Run["pass"], key: string) =>
+    artifactPath(run({ pass, outBasename: "EGY_x" }), key)!.path.split("/").pop();
+
+  it("addresses outputs off the bare basename, as the scripts write them", () => {
+    // The pass-prefixed name is right for ledgers and checkpoints and wrong for outputs:
+    // generate_dar.py writes EGY_x_dar.html, not EGY_x_generation_dar.html. Deriving one
+    // from the other produced links that pointed at nothing.
+    assert.equal(at("generation", "dar"), "EGY_x_dar.html");
+    assert.equal(at("diagnostic", "diagnostic"), "EGY_x_diagnostic.html");
+    assert.equal(at("diagnostic", "scored"), "EGY_x_v17.json");
+    assert.equal(at("research", "input"), "EGY_x_input.json");
+    assert.equal(at("g2", "input"), "EGY_x_g2_input.json");
+    assert.equal(at("scans", "scans"), "EGY_x_scans.json");
+    assert.equal(at("scans", "register"), "EGY_x_register.json");
+    assert.equal(at("foresight", "foresight"), "EGY_x_foresight.html");
+  });
+
+  it("keeps checkpoints under the pass prefix, which is a different rule", () => {
+    // Every pass writes its ledger and state under its own prefix. Both rules are real;
+    // the bug was applying one of them to the other's files.
+    assert.match(passFilePaths(run({ pass: "scans" })).state, /EGY_run1_scans_state\.json$/);
+    assert.match(passFilePaths(run({ pass: "research" })).state, /EGY_run1_state\.json$/);
+  });
+
+  it("refuses a key the pass does not have", () => {
+    assert.equal(artifactPath(run({ pass: "research" }), "dar"), null);
+    assert.equal(artifactPath(run({ pass: "generation" }), "../../etc/passwd"), null);
   });
 });

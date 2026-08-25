@@ -29,6 +29,7 @@ import {
 import { loadRecords, rescore, writeAudit } from "./actions.ts";
 import { PIPELINE_ROLE, planImport, summariseImport, type PassRow } from "./import-plan.ts";
 import { readPassRows } from "./worker.ts";
+import { DOCUMENT_SLOTS } from "./worker-artifacts.ts";
 import { model } from "./model.ts";
 import {
   createRun,
@@ -302,4 +303,65 @@ export const importPassOutput = createServerFn({ method: "POST" })
 
     await noteEvent(run.id, "note", `Imported into the workspace: ${summary}`);
     return { ok: true as const, summary, held: plan.held, complete: output.complete };
+  });
+
+
+export interface DocumentState {
+  key: string;
+  title: string;
+  what: string;
+  pass: RunPass;
+  /** The run that produced it, when one has. */
+  runId: string | null;
+  producedAt: string | null;
+  href: string | null;
+  /** Why it is not there yet, in the words the surface should use. */
+  missingBecause: string | null;
+}
+
+/**
+ * The document set for a country.
+ *
+ * Named whole, including the parts that do not exist. The alternative — listing only what
+ * has been produced — makes a set of one look complete, and the review this feeds is a
+ * review of the set.
+ */
+export const countryDocuments = createServerFn({ method: "GET" })
+  .middleware([authMiddleware])
+  .validator((input: { countryId: string }) => input)
+  .handler(async ({ context, data }) => {
+    const runs = (await listRuns(context.userId, 200)).filter(
+      (r) => r.countryId === data.countryId,
+    );
+
+    const documents: DocumentState[] = DOCUMENT_SLOTS.map((slot) => {
+      const produced = runs.find((r) => r.pass === slot.pass && r.status === "done");
+      if (produced) {
+        return {
+          ...slot,
+          runId: produced.id,
+          producedAt: (produced.finishedAt ?? produced.startedAt)?.toISOString() ?? null,
+          href: `/api/runs/${produced.id}/artifact?key=${slot.artifactKey}`,
+          missingBecause: null,
+        };
+      }
+      const attempted = runs.find((r) => r.pass === slot.pass);
+      return {
+        ...slot,
+        runId: attempted?.id ?? null,
+        producedAt: null,
+        href: null,
+        missingBecause: attempted
+          ? `The ${slot.pass} pass is ${attempted.status}.`
+          : `The ${slot.pass} pass has not been run.`,
+      };
+    });
+
+    return {
+      documents,
+      complete: documents.every((d) => d.href !== null),
+      status:
+        "Pre-review draft. Review happens once, at the end, on the completed set — not "
+        + "on one document at a time.",
+    };
   });

@@ -215,6 +215,12 @@ export function passFilePaths(run: Run): { input: string; state: string } {
  * A closed list, keyed by pass. Artifacts are addressed by key and the path is built
  * here from the run's own basename — a route that took a filename from the caller would
  * be a path-traversal hole reading anything the worker's user can read.
+ *
+ * Each filename carries its whole suffix off the BARE basename, because that is what the
+ * scripts write. The pass-prefixed name is right for ledgers and checkpoints, which every
+ * pass writes under its own prefix, and wrong for outputs, which do not follow that rule:
+ * generate_dar.py writes EGY_x_dar.html, not EGY_x_generation_dar.html. Deriving one from
+ * the other produced links that pointed at nothing, for the roadmap most of all.
  */
 export interface Artifact {
   key: string;
@@ -223,29 +229,33 @@ export interface Artifact {
   contentType: string;
 }
 
+const JSON_T = "application/json";
+const HTML_T = "text/html; charset=utf-8";
+
 const ARTIFACTS: Record<RunPass, Artifact[]> = {
   research: [
-    { key: "input", label: "Engine input", filename: "_input.json", contentType: "application/json" },
-    { key: "trail", label: "Research trail", filename: "_research.json", contentType: "application/json" },
+    { key: "input", label: "Engine input", filename: "_input.json", contentType: JSON_T },
+    { key: "trail", label: "Research trail", filename: "_research.json", contentType: JSON_T },
   ],
   g2: [
-    { key: "input", label: "Reviewed engine input", filename: "_input.json", contentType: "application/json" },
-    { key: "findings", label: "Review findings", filename: "_findings.json", contentType: "application/json" },
+    { key: "input", label: "Reviewed engine input", filename: "_g2_input.json", contentType: JSON_T },
+    { key: "findings", label: "Review findings", filename: "_g2_findings.json", contentType: JSON_T },
   ],
   scans: [
-    { key: "scans", label: "Scan findings", filename: ".json", contentType: "application/json" },
+    { key: "scans", label: "Scan findings", filename: "_scans.json", contentType: JSON_T },
+    { key: "register", label: "Initiative register", filename: "_register.json", contentType: JSON_T },
   ],
   foresight: [
-    { key: "foresight", label: "Foresight report", filename: ".html", contentType: "text/html; charset=utf-8" },
-    { key: "foresight-json", label: "Scenarios and milestones", filename: ".json", contentType: "application/json" },
+    { key: "foresight", label: "Foresight report", filename: "_foresight.html", contentType: HTML_T },
+    { key: "foresight-json", label: "Scenarios and milestones", filename: "_foresight.json", contentType: JSON_T },
   ],
   generation: [
-    { key: "dar", label: "Draft roadmap", filename: "_dar.html", contentType: "text/html; charset=utf-8" },
-    { key: "dar-json", label: "Roadmap source", filename: "_dar.json", contentType: "application/json" },
+    { key: "dar", label: "Draft roadmap", filename: "_dar.html", contentType: HTML_T },
+    { key: "dar-json", label: "Roadmap source", filename: "_dar.json", contentType: JSON_T },
   ],
   diagnostic: [
-    { key: "diagnostic", label: "Diagnostic report", filename: "_diagnostic.html", contentType: "text/html; charset=utf-8" },
-    { key: "scored", label: "Scored assessment", filename: "_v17.json", contentType: "application/json" },
+    { key: "diagnostic", label: "Diagnostic report", filename: "_diagnostic.html", contentType: HTML_T },
+    { key: "scored", label: "Scored assessment", filename: "_v17.json", contentType: JSON_T },
   ],
 };
 
@@ -259,7 +269,7 @@ export function artifactPath(run: Run, key: string): { path: string; artifact: A
   if (!artifact) return null;
   return {
     artifact,
-    path: path.join(pipelineDir(), "gauntlet/loop-1", `${ledgerName(run)}${artifact.filename}`),
+    path: path.join(pipelineDir(), "gauntlet/loop-1", `${run.outBasename}${artifact.filename}`),
   };
 }
 

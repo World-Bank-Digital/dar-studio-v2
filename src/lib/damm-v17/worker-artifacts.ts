@@ -21,7 +21,10 @@ const ARTIFACTS: Record<RunPass, ArtifactLink[]> = {
     { key: "input", label: "Reviewed engine input" },
     { key: "findings", label: "Review findings" },
   ],
-  scans: [{ key: "scans", label: "Scan findings" }],
+  scans: [
+    { key: "scans", label: "Scan findings" },
+    { key: "register", label: "Initiative register" },
+  ],
   foresight: [
     { key: "foresight", label: "Foresight report" },
     { key: "foresight-json", label: "Scenarios and milestones" },
@@ -39,3 +42,43 @@ const ARTIFACTS: Record<RunPass, ArtifactLink[]> = {
 export function artifactsFor(pass: RunPass): ArtifactLink[] {
   return ARTIFACTS[pass] ?? [];
 }
+
+
+/**
+ * The three documents the pipeline exists to produce, and which pass produces each.
+ *
+ * A1: review happens once, at the end, on the completed set — not per artifact. So the
+ * set has to be nameable even when it is incomplete, and a missing document has to say
+ * which pass would produce it rather than simply not appearing.
+ */
+export interface DocumentSlot {
+  key: string;
+  title: string;
+  what: string;
+  pass: RunPass;
+  artifactKey: string;
+}
+
+export const DOCUMENT_SLOTS: DocumentSlot[] = [
+  {
+    key: "diagnostic",
+    title: "Diagnostic report",
+    what: "Where the country stands, on the evidence recorded. Ten sections, emit-gated.",
+    pass: "diagnostic",
+    artifactKey: "diagnostic",
+  },
+  {
+    key: "foresight",
+    title: "Strategic foresight",
+    what: "Scenarios, a preferred future offered for decision, and milestones bound to the instrument.",
+    pass: "foresight",
+    artifactKey: "foresight",
+  },
+  {
+    key: "roadmap",
+    title: "Draft roadmap",
+    what: "Eleven chapters. Chapters three to ten are proposed, not evidenced.",
+    pass: "generation",
+    artifactKey: "dar",
+  },
+];
