@@ -34,7 +34,13 @@ export type RunStatus =
   | "cancelled";
 
 /** The pipeline's own budget passes. Named to match, so no translation is needed. */
-export type RunPass = "research" | "g2" | "scans" | "foresight" | "generation";
+export type RunPass =
+  | "research"
+  | "g2"
+  | "scans"
+  | "foresight"
+  | "generation"
+  | "diagnostic";
 
 export interface Run {
   id: string;
@@ -109,7 +115,18 @@ export const VENDOR_CHOICES: string[] = Object.entries(vendors.families).flatMap
 
 /** The vendor a pass uses when none is named. Read from the pipeline, never restated. */
 export function defaultVendorFor(pass: RunPass): string | null {
-  return (vendors.pass_defaults as Record<string, string>)[pass] ?? null;
+  return (vendors.pass_defaults as Record<string, string | null>)[pass] ?? null;
+}
+
+/**
+ * Whether a pass calls a vendor at all.
+ *
+ * The diagnostic renders an assessment that has already been paid for. Its allocation is
+ * zero, which a spend bar would render as "at its allocation" the moment it started —
+ * a pass that costs nothing must not look like one that has run out.
+ */
+export function callsAVendor(pass: RunPass): boolean {
+  return passCap(pass, 100) > 0;
 }
 
 export function vendorFamily(vendor: string | null): string | null {

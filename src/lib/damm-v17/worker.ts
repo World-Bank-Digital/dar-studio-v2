@@ -113,6 +113,7 @@ export function argsFor(run: Run): { script: string; args: string[] } {
     scans: "scans.py",
     foresight: "foresight.py",
     generation: "generate_dar.py",
+    diagnostic: "diagnostic.py",
   };
   const script = SCRIPTS[run.pass];
   if (!script) throw new Error(`No script implements the ${run.pass} pass.`);
@@ -235,11 +236,16 @@ const ARTIFACTS: Record<RunPass, Artifact[]> = {
     { key: "scans", label: "Scan findings", filename: ".json", contentType: "application/json" },
   ],
   foresight: [
-    { key: "foresight", label: "Scenarios and milestones", filename: ".json", contentType: "application/json" },
+    { key: "foresight", label: "Foresight report", filename: ".html", contentType: "text/html; charset=utf-8" },
+    { key: "foresight-json", label: "Scenarios and milestones", filename: ".json", contentType: "application/json" },
   ],
   generation: [
     { key: "dar", label: "Draft roadmap", filename: "_dar.html", contentType: "text/html; charset=utf-8" },
     { key: "dar-json", label: "Roadmap source", filename: "_dar.json", contentType: "application/json" },
+  ],
+  diagnostic: [
+    { key: "diagnostic", label: "Diagnostic report", filename: "_diagnostic.html", contentType: "text/html; charset=utf-8" },
+    { key: "scored", label: "Scored assessment", filename: "_v17.json", contentType: "application/json" },
   ],
 };
 

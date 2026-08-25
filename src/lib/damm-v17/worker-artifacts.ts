@@ -22,10 +22,17 @@ const ARTIFACTS: Record<RunPass, ArtifactLink[]> = {
     { key: "findings", label: "Review findings" },
   ],
   scans: [{ key: "scans", label: "Scan findings" }],
-  foresight: [{ key: "foresight", label: "Scenarios and milestones" }],
+  foresight: [
+    { key: "foresight", label: "Foresight report" },
+    { key: "foresight-json", label: "Scenarios and milestones" },
+  ],
   generation: [
     { key: "dar", label: "Draft roadmap" },
     { key: "dar-json", label: "Roadmap source" },
+  ],
+  diagnostic: [
+    { key: "diagnostic", label: "Diagnostic report" },
+    { key: "scored", label: "Scored assessment" },
   ],
 };
 

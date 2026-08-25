@@ -26,7 +26,8 @@ import {
   projectToFinish,
   producesEvidence,
   isRunnable,
-  RUNNABLE_PASSES,} from "./runs.ts";
+  RUNNABLE_PASSES,
+  callsAVendor,} from "./runs.ts";
 
 function run(over: Partial<Run> = {}): Run {
   return {
@@ -304,17 +305,17 @@ describe("which passes produce evidence", () => {
     // They gather what the instrument does not measure, produce milestones, and produce a
     // document. Offering to import one into the evidence base would suggest they score
     // something.
-    for (const p of ["scans", "foresight", "generation"] as const) {
+    for (const p of ["scans", "foresight", "generation", "diagnostic"] as const) {
       assert.equal(producesEvidence(p), false, `${p} should not produce evidence`);
     }
   });
 
   it("a pass is runnable exactly when a script implements it", () => {
-    // All five passes in the allocation now have a script.
-    for (const p of ["research", "g2", "scans", "foresight", "generation"] as const) {
+    // Every pass in the allocation now has a script.
+    for (const p of ["research", "g2", "scans", "foresight", "generation", "diagnostic"] as const) {
       assert.ok(isRunnable(p), `${p} should be runnable`);
     }
-    assert.equal(RUNNABLE_PASSES.length, 5);
+    assert.equal(RUNNABLE_PASSES.length, 6);
   });
 });
 
@@ -341,5 +342,23 @@ describe("what each pass produces", () => {
         `${p} artifact keys differ between the two lists`,
       );
     }
+  });
+});
+
+describe("a pass that costs nothing", () => {
+  it("the diagnostic calls no vendor", () => {
+    // It renders an assessment the research pass already paid for.
+    assert.equal(callsAVendor("diagnostic"), false);
+    assert.equal(passCap("diagnostic", 500), 0);
+  });
+
+  it("every other pass does", () => {
+    for (const p of ["research", "g2", "scans", "foresight", "generation"] as const) {
+      assert.ok(callsAVendor(p), `${p} should call a vendor`);
+    }
+  });
+
+  it("has no default vendor to offer, rather than an empty one", () => {
+    assert.equal(defaultVendorFor("diagnostic"), null);
   });
 });

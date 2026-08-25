@@ -320,10 +320,10 @@ describe("every pass in the allocation", () => {
   it("has a script, and each is a different one", () => {
     // All five are built. The check that matters now is that no two passes share a
     // script: routing one to another's would run that pass and bill this one's share.
-    const scripts = (["research", "g2", "scans", "foresight", "generation"] as const).map(
-      (pass) => argsFor(run({ pass })).script,
-    );
-    assert.equal(new Set(scripts).size, 5);
+    const scripts = (
+      ["research", "g2", "scans", "foresight", "generation", "diagnostic"] as const
+    ).map((pass) => argsFor(run({ pass })).script);
+    assert.equal(new Set(scripts).size, 6);
     assert.ok(scripts.every((s) => s.endsWith(".py")));
   });
 

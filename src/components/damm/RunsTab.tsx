@@ -24,6 +24,7 @@ import {
   DEFAULT_CEILING_USD,
   RUNNABLE_PASSES,
   defaultVendorFor,
+  callsAVendor,
   passCap,
   producesEvidence,
   projectToFinish,
@@ -48,6 +49,10 @@ import { AlertTriangle, Download, FileText, Loader2, Play, Square, Pause, Rotate
 const PASS_LABEL: Record<string, string> = {
   research: "Research — the 57-row first pass",
   g2: "Second review — gaps, holds and prerequisites",
+  diagnostic: "Diagnostic report — renders the assessment",
+  scans: "Scans — evidence outside the instrument, and precedent",
+  foresight: "Foresight — scenarios, a preferred future, milestones",
+  generation: "Draft roadmap — eleven chapters",
 };
 
 const STATUS_STYLE: Record<RunStatus, string> = {
@@ -132,9 +137,10 @@ function StartPass({ countryId, onStarted }: { countryId: string; onStarted: () 
           />
         </label>
 
-        <label className="text-xs text-muted">
+        <label className={cn("text-xs text-muted", !callsAVendor(pass) && "opacity-40")}>
           Vendor
           <select
+            disabled={!callsAVendor(pass)}
             value={vendor}
             onChange={(e) => setVendor(e.target.value)}
             className="mt-1 flex h-11 w-full rounded-sm border border-border bg-surface px-3 text-sm text-ink"
@@ -157,14 +163,19 @@ function StartPass({ countryId, onStarted }: { countryId: string; onStarted: () 
       </div>
 
       <p className="mt-3 text-xs text-muted">
-        {capValid ? (
+        {!capValid ? (
+          <>Enter a country ceiling above zero.</>
+        ) : !callsAVendor(pass) ? (
+          <>
+            This pass makes no vendor call. It renders an assessment the research pass has
+            already paid for, so it spends nothing.
+          </>
+        ) : (
           <>
             This pass may spend <strong>{money(passCap(pass, ceilingNum))}</strong> of the{" "}
             {money(ceilingNum)} country ceiling, on {effective}. It stops itself at that
             allocation rather than continuing.
           </>
-        ) : (
-          <>Enter a country ceiling above zero.</>
         )}
       </p>
 
@@ -211,20 +222,26 @@ function Progress({ run }: { run: RunView }) {
           </div>
         )}
       </div>
-      <div>
-        <div className="flex justify-between text-xs text-muted">
-          <span>
-            {money(p.spentUsd)} of {money(p.capUsd)} allocated
-          </span>
-          {p.atCap && <span className="text-amber-700">at its allocation</span>}
+      {/* A pass with a zero allocation would render as "at its allocation" the instant it
+          started. A pass that costs nothing must not look like one that has run out. */}
+      {callsAVendor(run.pass) ? (
+        <div>
+          <div className="flex justify-between text-xs text-muted">
+            <span>
+              {money(p.spentUsd)} of {money(p.capUsd)} allocated
+            </span>
+            {p.atCap && <span className="text-amber-700">at its allocation</span>}
+          </div>
+          <div className="mt-1 h-1.5 w-full rounded-full bg-moss">
+            <div
+              className={cn("h-1.5 rounded-full", p.atCap ? "bg-amber-500" : "bg-forest")}
+              style={{ width: `${p.spentFraction * 100}%` }}
+            />
+          </div>
         </div>
-        <div className="mt-1 h-1.5 w-full rounded-full bg-moss">
-          <div
-            className={cn("h-1.5 rounded-full", p.atCap ? "bg-amber-500" : "bg-forest")}
-            style={{ width: `${p.spentFraction * 100}%` }}
-          />
-        </div>
-      </div>
+      ) : (
+        <p className="text-xs text-muted">Makes no vendor call — the assessment is already paid for.</p>
+      )}
     </div>
   );
 }
