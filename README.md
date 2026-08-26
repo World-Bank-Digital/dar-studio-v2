@@ -1,13 +1,61 @@
 # DAR Studio
 
-An independent prototype for preparing a Digital Agriculture Roadmap. It collects
-public evidence, computes the DAMM v1.3 maturity diagnostic exactly as specified,
-and assembles a first draft.
+DAR Studio generates a comprehensive Draft Digital Agriculture Report (DAR) by
+executing the normative DAMM workflow end to end. DAMM v1.7 owns the workflow
+contract; this app consumes the exported, machine-readable copy at
+[`src/data/dar_workflow_v1.json`](src/data/dar_workflow_v1.json). Product code
+must not maintain a second stage list or insert a human gate into that contract.
 
-**Machines compute. Humans gate.** No figure enters the evidence base without a
-public source URL, and no maturity stage is claimable until a human has validated
-the readings behind it. Not an official World Bank system, not a country ranking,
-not a scoring service.
+This is an independent prototype, not an official World Bank system, a country
+ranking, a scoring service, a financing decision, or a publication authority.
+
+## Canonical workflow
+
+The only required launch input is the **country under review**. Before launch, a
+TTL may optionally upload relevant country-context, AI, international-strategy,
+strategic-foresight, and investment-appraisal material. Launch freezes every
+input, its provenance, and its SHA-256 digest into an immutable snapshot.
+
+The eight stages then run in this strict order:
+
+| # | Stage | Required product |
+| ---: | --- | --- |
+| 1 | **DAMM diagnostic** | DAMM v1.7 observations, independent automated challenge, scored assessment, and diagnostic report |
+| 2 | **Country research and source inventory** | Country-specific evidence beyond DAMM, a consolidated inventory of credible sources, and any pre-launch TTL documents with provenance |
+| 3 | **AI in digital agriculture assessment** | A separate assessment of the country's as-is AI position, peer-country experience, and a recommended national AI agenda |
+| 4 | **International strategies and lessons** | Recent, relevant country strategies and transferable lessons, with selection rationale and limitations |
+| 5 | **Strategic foresight** | Country-specific scenarios, preferred future, and backcast milestones; uploaded material is synthesized when present and autonomous research is used when absent |
+| 6 | **Investment options and cost-benefit analysis** | Prioritized options with baseline, counterfactual, cost and benefit ranges, assumptions, sensitivity, risks, distributional effects, and evidence gaps |
+| 7 | **Integrated Draft DAR** | One comprehensive Draft DAR synthesizing Stages 1–6, with claim-level provenance and explicit epistemic status |
+| 8 | **Export package** | Downloadable stage products, structured data, source inventories, manifest, and complete ZIP bundle |
+
+### Zero-human active execution
+
+After the single launch, no person is required to confirm evidence, approve a
+stage, import a result, add a document, select a provider, choose a retry,
+continue a run, or increase its budget. Missing optional material triggers
+autonomous research, not a prompt to the TTL. Transient failures receive bounded
+automatic retries and declared fallbacks. If the system still cannot produce a
+required artifact, the workflow ends in an honest terminal failure; it never
+waits for human input while appearing to be in progress.
+
+The normal active states are `queued`, `running`, and `retrying`. The terminal
+states are `complete`, `failed`, and `cancelled`; cancellation is an optional
+operator safety control, not a normal workflow step. A document added after
+launch belongs to a new workflow version and cannot mutate an active or
+completed run.
+
+Human review begins only after Stage 8 has created the Draft package. Review may
+correct evidence, validate recommendations, and create a revised Draft or Final
+version. It is required before Final/publication, not before Draft generation.
+
+### Download contract
+
+Stage 8 exports narrative products as Markdown, DOCX, PDF, and HTML, and
+meaningful structured products and source inventories as XLSX, CSV, and JSON.
+It also produces a ZIP bundle and SHA-256 manifest. When files were uploaded
+before launch, the bundle includes each frozen original file, its verified text
+extraction, and its provenance envelope.
 
 ## Running locally
 
@@ -16,138 +64,73 @@ npm install
 npm run dev
 ```
 
-The app serves on `http://localhost:8080`. With no `DATABASE_URL` it uses an
-embedded PGLite database, which is **ephemeral** — data is lost when the server
-restarts. Set `DATABASE_URL` for anything you want to keep.
+The app serves on `http://localhost:8080`. Without `DATABASE_URL`, local
+development uses an embedded, ephemeral PGLite database. A durable deployment
+and the standalone worker must share PostgreSQL through `DATABASE_URL`.
 
-Copy `.env.example` to `.env` and fill in what you need.
+Copy `.env.example` to `.env` and configure the deployment services. The
+canonical launch remains country-only: database, model, search, pipeline, and
+vendor credentials are deployment/worker administration, not TTL actions in an
+active DAR run.
+
+The canonical worker is a separate long-running process:
+
+```bash
+DATABASE_URL=... DAMM_PIPELINE_DIR=/path/to/DAMM npm run worker
+```
+
+It must use the same database as the web app and a DAMM checkout containing the
+matching workflow contract. The worker resumes from durable checkpoints and
+persists verified artifacts in the database, so completion does not depend on a
+particular worker's local filesystem.
+
+## Verification
 
 ```bash
 npm run typecheck
 npm run lint
 npm test
-npm run build      # what Vercel runs; must pass before deploying
+npm run build:dev
 ```
 
-## Bring your own key
+`npm run build` also runs database migrations and is intended for a configured
+deployment, not a read-only local verification pass.
 
-Keys are entered on the **Settings** page, stored server-side, and shown only as
-a fingerprint and last four characters.
+## Governance
 
-**Drafting models** — Anthropic (Claude), OpenAI (GPT), Google (Gemini), xAI
-(Grok), OpenRouter. The model id is editable and **Test** checks both the key and
-the model id against the provider's own catalogue, so a newly released model can
-be used the day it ships.
+The Draft bundle is not a public claim. These DAMM prohibitions remain in force:
 
-**Web search** — Exa or Jina, chosen independently of the drafting model. A
-search key is what lets the studio fetch the actual page behind a statistic.
+1. no cross-country ranking;
+2. no DAMM band as a PDO, DLI, or disbursement condition;
+3. no automatic financing decision; and
+4. no public claim before human review.
 
-### Encryption at rest
+They govern use and publication after generation; they do not insert a human
+approval step into Stages 1–8.
 
-Set `DAR_KEY_SECRET` to encrypt stored keys with AES-256-GCM:
+## Legacy and administrative surfaces
 
-```bash
-openssl rand -base64 48
-```
+Older evidence-editor, ladder, dossier, red-team, manual import, provider
+selection, and delivery-gauntlet flows remain only for maintenance, historical
+comparison, or explicitly authorized administration. They are **superseded for
+normal Draft DAR generation** by `dar-canonical-v1`. In particular:
 
-Without it the app still works but stores keys in the clear and says so plainly
-on the Settings page. Keys written before the secret was set stay readable and
-are re-encrypted the next time they are saved.
+- legacy run APIs are admin-only and must not be presented as the standard
+  launch path;
+- BYOK/provider settings are operational administration, not required launch
+  inputs and not active-run choices;
+- `qa:delivery`, old numbered ladder steps, and manual gate-clearing describe
+  the superseded pipeline and are not proof of canonical workflow conformance;
+  and
+- any legacy validation or review occurs outside the autonomous run and cannot
+  block creation of its Draft package.
 
-## Signing in
-
-Three methods, honestly scoped:
-
-- **Email/password** — works everywhere, instantly. Sign-up sends a
-  verification email (see below); verification is not required to sign in.
-- **Passkeys** — register one in **Settings → Passkeys**, then use "Sign in
-  with a passkey" on the login page. Works on `localhost` (use `localhost`,
-  not `127.0.0.1` — WebAuthn scopes keys to the exact host). A passkey
-  registered locally will not follow the app to a deployed domain.
-- **Google / X** — federate through the Grok auth broker and **cannot work on
-  localhost**: the broker's preview client only accepts `*.grok-sandbox.com`
-  callbacks and answers "Invalid redirect URI" otherwise. The login page says
-  so instead of showing dead buttons. Deployed apps receive their own broker
-  client and the buttons return.
-
-Auth emails (signup verification, sign-in notifications) deliver via Resend
-when `RESEND_API_KEY` is set in `.env`. Without it the app logs the full
-message to the server console prefixed `[mailer:dev]` — the flow is testable,
-and nothing pretends to have been sent. `npm run qa:auth` proves the passkey
-round-trip end to end with a virtual authenticator.
-
-## How evidence is collected
-
-1. **Official statistical cascade.** World Bank WDI, Data360 and OWID series are
-   fetched directly. This needs no key and covers the indicators those systems
-   publish.
-2. **Verified web search.** For the remaining quantitative gaps, the search
-   provider retrieves the page *text*, and the drafting model extracts figures
-   from that text only. Every extracted figure must quote its document, and the
-   quotation is checked against the retrieved page before the reading is stored.
-   Figures that cannot be located are dropped and logged — never downgraded.
-3. **Rubric research.** Anchored rubrics — farmer registry, data-governance
-   framework, coordination mechanism — are researched on the open web. The
-   machine proposes a provisional level argued clause-by-clause against the
-   anchor text, states why the next level up was not proposed, and cites
-   quote-verified documents. Validation confirms, corrects or rejects each
-   proposal; an assessor level always wins.
-
-Without a search key, step 1 still runs. Steps 2 and 3 need both a search key
-and an active drafting model; without them the quantitative gaps and the
-rubrics stay named, and the audit records exactly why they were skipped.
-
-## Draft-first, claims-gated
-
-The automated run goes straight to a complete DAR: evidence-health page, 17
-chapters, 11 annexes. Nothing waits on a human. What stays gated is the
-*claim*: no maturity stage is claimable until the government mandate (Step 5)
-and panel validation (Step 6) are recorded, prescriptive chapters carry an
-explicit conditional banner until the readiness gate clears, and every figure
-carries its source and credibility grade inline.
-
-## The readiness gate
-
-Thirteen core gates are the evidence-health page's headline: at least 11 of 13 populated, 60% of those graded A or
-B, no silent gaps and no weak readings. Evidence is graded on authority,
-definition fit, recency and disaggregation — and **any reading with no source URL
-is capped at 39/100**, which is grade E.
-
-The Bhutan demonstration pack ships fully cited and clears the gate, so the
-unlocked chapters can be seen without running a full country collection.
-
-## Draft fidelity
-
-The deterministic assembler writes every chapter from engine facts. When a model
-is configured it rewrites the connective prose — and that prose is then re-read
-and **rejected if it contains a figure, year or maturity-stage claim the evidence
-base does not hold**. Rejected prose is discarded, the deterministic text stands,
-and the rejection is recorded in the audit log. The guarantee is enforced in
-code, not requested in a prompt.
-
-## QA
-
-Playwright scripts under `scripts/` drive the app end to end. Screenshots go to
-`<repo>/screenshots/` (override with `SCREENSHOT_DIR`).
-
-```bash
-npx playwright install chromium     # once
-node scripts/browser-smoke.mjs http://127.0.0.1:8080/
-npm run qa:delivery                 # the delivery gauntlet
-```
-
-`qa:delivery` is the end-to-end proof that the studio *delivers*: it signs in,
-creates a country, runs the Step 1 diagnostic with the stored search and model
-keys, clears the failing core gates through the evidence editor the way a human
-assessor would, records ladder steps 2–8, and asserts that all 17 chapters and
-11 annexes assemble with the prescriptive chapters unlocked. Each run writes a
-comparable JSON report to `qa-reports/`.
+The current conformance test is simple: provide a country and any optional
+pre-launch documents, launch once, take no further action, and receive either a
+complete Draft DAR package or an honest terminal failure.
 
 ## Learning ledger
 
-Every defect found in a live run is folded back into the process as a code
-fix, a regression test that pins it, and an entry in
-[LEARNINGS.md](LEARNINGS.md) recording the root cause. A fix without a pinning
-test is not considered landed. Read the ledger before changing the retrieval,
-scoring or drafting layers — most of its entries are about silent failure
-modes that type checks cannot catch.
+Every defect found in a live run should still become a cause-level fix, a
+regression test, and an entry in [LEARNINGS.md](LEARNINGS.md). Read that ledger
+before changing retrieval, scoring, drafting, or export behavior.

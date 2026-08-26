@@ -14,6 +14,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { RunsTab } from "@/components/damm/RunsTab";
 import { DocumentsTab } from "@/components/damm/DocumentsTab";
+import { DarReviewTab } from "@/components/damm/DarReviewTab";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -37,16 +38,18 @@ type Tab =
   | "evidence"
   | "research"
   | "documents"
+  | "review"
   | "questions"
   | "audit";
 
 const TABS: Array<{ id: Tab; label: string }> = [
   { id: "overview", label: "Overview" },
   { id: "readiness", label: "Readiness" },
-  { id: "evidence", label: "Evidence" },
-  { id: "research", label: "Research" },
-  { id: "documents", label: "Documents" },
-  { id: "questions", label: "Open questions" },
+  { id: "evidence", label: "Manual evidence review" },
+  { id: "research", label: "DAR workflow" },
+  { id: "documents", label: "Draft downloads" },
+  { id: "review", label: "Draft DAR review" },
+  { id: "questions", label: "Manual open questions" },
   { id: "audit", label: "Audit" },
 ];
 
@@ -87,7 +90,10 @@ const STATUS_STYLE: Record<string, string> = {
 function StatusChip({ s }: { s: string }) {
   return (
     <span
-      className={cn("inline-block rounded-sm border px-1.5 py-0.5 text-xs font-medium", STATUS_STYLE[s] ?? "bg-moss")}
+      className={cn(
+        "inline-block rounded-sm border px-1.5 py-0.5 text-xs font-medium",
+        STATUS_STYLE[s] ?? "bg-moss",
+      )}
     >
       {s}
     </span>
@@ -108,7 +114,9 @@ function TierBadge({ tier }: { tier: string | null }) {
 
 function StaleTag() {
   return (
-    <span className="inline-block rounded-sm bg-amber-500/15 px-1 text-[10px] font-semibold text-amber-700">stale</span>
+    <span className="inline-block rounded-sm bg-amber-500/15 px-1 text-[10px] font-semibold text-amber-700">
+      stale
+    </span>
   );
 }
 
@@ -130,7 +138,7 @@ const fmt = (x: number | null | undefined) => (x === null || x === undefined ? "
 export function WorkspaceView({ id }: { id: string }) {
   const [ws, setWs] = useState<Workspace | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [tab, setTab] = useState<Tab>("overview");
+  const [tab, setTab] = useState<Tab>("research");
 
   const refresh = useCallback(async () => {
     const res = await getWorkspace({ data: { countryId: id } });
@@ -143,7 +151,9 @@ export function WorkspaceView({ id }: { id: string }) {
   }, [id]);
 
   useEffect(() => {
-    refresh().catch((e) => setError(e instanceof Error ? e.message : "Could not load the workspace"));
+    refresh().catch((e) =>
+      setError(e instanceof Error ? e.message : "Could not load the workspace"),
+    );
   }, [refresh]);
 
   if (error) return <p className="text-sm text-red-700">{error}</p>;
@@ -154,23 +164,31 @@ export function WorkspaceView({ id }: { id: string }) {
       </p>
     );
 
-  const questionCount = model.open_decisions.length + model.indicators.filter((i) => i.ratification).length;
+  const questionCount =
+    model.open_decisions.length + model.indicators.filter((i) => i.ratification).length;
 
   return (
     <div>
       <Banner ws={ws} />
-      <nav className="mt-6 flex flex-wrap gap-1 border-b border-ink/10" aria-label="Workspace sections">
+      <nav
+        className="mt-6 flex flex-wrap gap-1 border-b border-ink/10"
+        aria-label="Workspace sections"
+      >
         {TABS.map((t) => (
           <button
             key={t.id}
             onClick={() => setTab(t.id)}
             className={cn(
               "rounded-t-sm px-3 py-2 text-sm",
-              tab === t.id ? "border-b-2 border-sage font-semibold text-ink" : "text-muted hover:text-ink",
+              tab === t.id
+                ? "border-b-2 border-sage font-semibold text-ink"
+                : "text-muted hover:text-ink",
             )}
           >
             {t.label}
-            {t.id === "questions" && <span className="ml-1 text-xs text-subtle">{questionCount}</span>}
+            {t.id === "questions" && (
+              <span className="ml-1 text-xs text-subtle">{questionCount}</span>
+            )}
           </button>
         ))}
       </nav>
@@ -180,6 +198,7 @@ export function WorkspaceView({ id }: { id: string }) {
         {tab === "evidence" && <EvidenceTab ws={ws} onChange={refresh} />}
         {tab === "research" && <RunsTab countryId={ws.id} />}
         {tab === "documents" && <DocumentsTab countryId={ws.id} />}
+        {tab === "review" && <DarReviewTab countryId={ws.id} />}
         {tab === "questions" && <QuestionsTab ws={ws} />}
         {tab === "audit" && <AuditTab id={ws.id} />}
       </div>
@@ -224,9 +243,9 @@ function OverviewTab({ a }: { a: Assessment }) {
       <Card className="overflow-x-auto p-4">
         <h2 className="text-sm font-semibold">Pillar profile</h2>
         <p className="mt-1 text-xs text-muted">
-          A pillar mean averages only the rows that produced a level; Rated is that denominator, and Held counts levels
-          withheld pending ratification. A band in (parentheses) rests more on judgment, gaps and withheld levels than on
-          levelled evidence.
+          A pillar mean averages only the rows that produced a level; Rated is that denominator, and
+          Held counts levels withheld pending ratification. A band in (parentheses) rests more on
+          judgment, gaps and withheld levels than on levelled evidence.
         </p>
         <table className="mt-3 w-full min-w-[640px] text-sm">
           <thead>
@@ -248,7 +267,8 @@ function OverviewTab({ a }: { a: Assessment }) {
               return (
                 <tr key={p} className="border-t border-ink/10">
                   <td className="py-2 pr-2">
-                    <span className="font-semibold">{p}</span> <span className="text-muted">{def.name}</span>
+                    <span className="font-semibold">{p}</span>{" "}
+                    <span className="text-muted">{def.name}</span>
                     {def.reading === "need" && (
                       <span className="ml-1 text-xs text-subtle" title={def.note}>
                         (need — a low reading is a large opportunity)
@@ -256,7 +276,12 @@ function OverviewTab({ a }: { a: Assessment }) {
                     )}
                   </td>
                   <td className="py-2 pr-2 tabular-nums">{d.n}</td>
-                  <td className={cn("py-2 pr-2 tabular-nums", d.rated < d.n && "font-semibold text-amber-700")}>
+                  <td
+                    className={cn(
+                      "py-2 pr-2 tabular-nums",
+                      d.rated < d.n && "font-semibold text-amber-700",
+                    )}
+                  >
                     {d.rated}
                   </td>
                   <td className="py-2 pr-2 tabular-nums">{fmt(d.mean)}</td>
@@ -284,7 +309,8 @@ function OverviewTab({ a }: { a: Assessment }) {
           ))}
         </div>
         <p className="mt-3 text-sm text-muted">
-          Leapfrog gap (Foundation − Transformation): <b className="tabular-nums">{fmt(a.leapfrog.gap)}</b>
+          Leapfrog gap (Foundation − Transformation):{" "}
+          <b className="tabular-nums">{fmt(a.leapfrog.gap)}</b>
           {a.leapfrog.gap !== null && Math.abs(a.leapfrog.gap) > model.config.leapfrog_threshold
             ? " — structural flag raised."
             : " — within the structural threshold."}
@@ -322,7 +348,9 @@ function ReadinessTab({ a }: { a: Assessment }) {
   return (
     <div className="space-y-6">
       <Card className="p-4">
-        <h2 className="text-sm font-semibold">Prerequisites — presence only, a fact, never an opinion</h2>
+        <h2 className="text-sm font-semibold">
+          Prerequisites — presence only, a fact, never an opinion
+        </h2>
         <div className="mt-3 grid gap-4 lg:grid-cols-3">
           {groups.map((g) => (
             <div key={g.title}>
@@ -332,9 +360,12 @@ function ReadinessTab({ a }: { a: Assessment }) {
                 {g.ids.map((i) => (
                   <li key={i} className="flex items-center justify-between gap-2 text-sm">
                     <span>
-                      <span className="font-mono text-xs text-subtle">{i}</span> {indicatorById(i)?.name}
+                      <span className="font-mono text-xs text-subtle">{i}</span>{" "}
+                      {indicatorById(i)?.name}
                       {a.prereq[i].kind.startsWith("UC:") && (
-                        <span className="ml-1 text-xs text-subtle">({a.prereq[i].kind.slice(3)})</span>
+                        <span className="ml-1 text-xs text-subtle">
+                          ({a.prereq[i].kind.slice(3)})
+                        </span>
                       )}
                     </span>
                     <StatusChip s={a.prereq[i].status} />
@@ -409,13 +440,14 @@ function ReadinessTab({ a }: { a: Assessment }) {
           </tbody>
         </table>
         <p className="mt-3 text-xs text-muted">
-          The bearing set for a column includes agricultural-need and outcome indicators as well as enabling ones, so both
-          means are shown. Whether need and outcome rows belong in a readiness mean is an open design decision (13.12).
+          The bearing set for a column includes agricultural-need and outcome indicators as well as
+          enabling ones, so both means are shown. Whether need and outcome rows belong in a
+          readiness mean is an open design decision (13.12).
           {meanDriven.length > 0 && (
             <>
               {" "}
-              {meanDriven.map((uc) => model.use_cases[uc]).join(", ")} currently turns on the mean rather than on a
-              prerequisite — the case that decision will settle.
+              {meanDriven.map((uc) => model.use_cases[uc]).join(", ")} currently turns on the mean
+              rather than on a prerequisite — the case that decision will settle.
             </>
           )}
         </p>
@@ -441,9 +473,10 @@ function EvidenceTab({ ws, onChange }: { ws: Workspace; onChange: () => Promise<
   return (
     <div className="space-y-6">
       <p className="text-sm text-muted">
-        Enter what the instrument takes: a value (a number scores a threshold row; prose with a source reads Documented; a
-        search trail beginning “DATA GAP” records a gap), the source and its tier, the year, and — where the row does not
-        score itself — an assessor level. The class and level columns are derived, never chosen.
+        Enter what the instrument takes: a value (a number scores a threshold row; prose with a
+        source reads Documented; a search trail beginning “DATA GAP” records a gap), the source and
+        its tier, the year, and — where the row does not score itself — an assessor level. The class
+        and level columns are derived, never chosen.
       </p>
       {pillarIds.map((p) => (
         <Card key={p} className="overflow-x-auto p-4">
@@ -523,7 +556,8 @@ function RowAndEditor({
           )}
         </td>
         <td className="py-2 pr-2">
-          <ClsChip cls={row.cls} /> {row.stale && <StaleTag />} {row.ratificationHold && <HoldTag />}
+          <ClsChip cls={row.cls} /> {row.stale && <StaleTag />}{" "}
+          {row.ratificationHold && <HoldTag />}
         </td>
         <td className="py-2 pr-2 tabular-nums">{row.level !== null ? `L${row.level}` : "—"}</td>
         <td className="max-w-[240px] py-2 pr-2 text-xs text-muted">
@@ -533,7 +567,12 @@ function RowAndEditor({
         <td className="max-w-[200px] py-2 pr-2 text-xs text-muted">
           <span className="line-clamp-1">
             {row.sourceUrl ? (
-              <a href={row.sourceUrl} target="_blank" rel="noreferrer noopener" className="underline">
+              <a
+                href={row.sourceUrl}
+                target="_blank"
+                rel="noreferrer noopener"
+                className="underline"
+              >
                 {row.sourceName ?? row.sourceUrl}
               </a>
             ) : (
@@ -629,13 +668,25 @@ function Editor({
       )}
       <div className="grid gap-3 lg:grid-cols-2">
         <label className="block text-xs">
-          <span className="text-subtle">Value — number, citation prose, or “DATA GAP — searched …”</span>
-          <Textarea value={valueRaw} onChange={(e) => setValueRaw(e.target.value)} rows={3} className="mt-1" />
+          <span className="text-subtle">
+            Value — number, citation prose, or “DATA GAP — searched …”
+          </span>
+          <Textarea
+            value={valueRaw}
+            onChange={(e) => setValueRaw(e.target.value)}
+            rows={3}
+            className="mt-1"
+          />
         </label>
         <div className="grid grid-cols-2 gap-3">
           <label className="block text-xs">
             <span className="text-subtle">Year</span>
-            <Input value={year} onChange={(e) => setYear(e.target.value)} inputMode="numeric" className="mt-1" />
+            <Input
+              value={year}
+              onChange={(e) => setYear(e.target.value)}
+              inputMode="numeric"
+              className="mt-1"
+            />
           </label>
           <label className="block text-xs">
             <span className="text-subtle">Tier</span>
@@ -654,11 +705,19 @@ function Editor({
           </label>
           <label className="col-span-2 block text-xs">
             <span className="text-subtle">Source</span>
-            <Input value={sourceName} onChange={(e) => setSourceName(e.target.value)} className="mt-1" />
+            <Input
+              value={sourceName}
+              onChange={(e) => setSourceName(e.target.value)}
+              className="mt-1"
+            />
           </label>
           <label className="col-span-2 block text-xs">
             <span className="text-subtle">Source URL</span>
-            <Input value={sourceUrl} onChange={(e) => setSourceUrl(e.target.value)} className="mt-1" />
+            <Input
+              value={sourceUrl}
+              onChange={(e) => setSourceUrl(e.target.value)}
+              className="mt-1"
+            />
           </label>
         </div>
       </div>
@@ -684,14 +743,19 @@ function Editor({
         <label className="flex items-center gap-2 pb-2 text-xs">
           <input type="checkbox" checked={hold} onChange={(e) => setHold(e.target.checked)} />
           <span>
-            Ratification hold — withhold the level; the evidence measures a different construct from what the indicator
-            names
+            Ratification hold — withhold the level; the evidence measures a different construct from
+            what the indicator names
           </span>
         </label>
       </div>
       <label className="block text-xs">
         <span className="text-subtle">Notes</span>
-        <Textarea value={notes} onChange={(e) => setNotes(e.target.value)} rows={2} className="mt-1" />
+        <Textarea
+          value={notes}
+          onChange={(e) => setNotes(e.target.value)}
+          rows={2}
+          className="mt-1"
+        />
       </label>
       {err && <p className="text-xs text-red-700">{err}</p>}
       <div>
@@ -718,8 +782,10 @@ function QuestionsTab({ ws }: { ws: Workspace }) {
       <Card className="p-4">
         <h2 className="text-sm font-semibold">Design decisions open for ratification</h2>
         <p className="mt-1 text-xs text-muted">
-          Every value these rulings can change is data in the model file (version {ws.modelVersion}); a ruling updates
-          the model, and nothing here presents an unratified value as settled.
+          This is a manual model-governance surface outside the active DAR workflow. These
+          questions are not launch inputs and never pause Draft generation.{" "}
+          Every value these rulings can change is data in the model file (version {ws.modelVersion}
+          ); a ruling updates the model, and nothing here presents an unratified value as settled.
         </p>
         <ul className="mt-3 space-y-2">
           {model.open_decisions.map((d) => (
@@ -793,7 +859,9 @@ function AuditTab({ id }: { id: string }) {
         <tbody>
           {rows.map((r, k) => (
             <tr key={k} className="border-t border-ink/10 align-top">
-              <td className="whitespace-nowrap py-2 pr-2 text-xs text-muted">{new Date(r.at).toLocaleString()}</td>
+              <td className="whitespace-nowrap py-2 pr-2 text-xs text-muted">
+                {new Date(r.at).toLocaleString()}
+              </td>
               <td className="py-2 pr-2 text-xs">
                 {r.actorName} <span className="text-subtle">({r.role})</span>
               </td>

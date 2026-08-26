@@ -2,6 +2,7 @@ import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 
 import { parseChunk, parseLine, statusOnExit } from "./run-output.ts";
+import { DAR_WORKFLOW } from "./workflow.ts";
 
 // Verbatim lines from the Egypt and Nigeria runs of 24 and 25 August 2026. Copied rather
 // than composed: a parser tested against invented input tests the invention.
@@ -56,7 +57,9 @@ describe("reading the pipeline's progress", () => {
   });
 
   it("reads the second review's rows, which report a different outcome vocabulary", () => {
-    const e = parseLine("F [11/38] 3.7          hold         adjust    -> filled     $  2.10  147s");
+    const e = parseLine(
+      "F [11/38] 3.7          hold         adjust    -> filled     $  2.10  147s",
+    );
     assert.equal(e?.kind, "row");
     assert.equal((e as { rowsTotal: number }).rowsTotal, 38);
     assert.equal((e as { indicatorId: string }).indicatorId, "3.7");
@@ -107,6 +110,124 @@ describe("reading the pipeline's progress", () => {
     assert.equal(parseLine("Traceback (most recent call last):")?.kind, "failed");
     assert.equal(parseLine("KeyError: 'mean'")?.kind, "failed");
   });
+
+  it("keeps a coordinator preflight error as the terminal reason", () => {
+    const event = parseLine(
+      "workflow configuration error: explicit Python handler required for: export_package",
+    );
+    assert.equal(event?.kind, "failed");
+    assert.equal(event?.kind === "failed" ? event.authoritative : false, true);
+    assert.match(event?.kind === "failed" ? event.message : "", /export_package/);
+  });
+});
+
+function workflowEvent(
+  sequence: number,
+  event: string,
+  extra: Record<string, unknown> = {},
+): string {
+  return JSON.stringify({
+    schema_version: "damm.workflow-event/v1",
+    sequence,
+    event,
+    timestamp: `2026-08-26T00:00:${String(sequence).padStart(2, "0")}Z`,
+    run_id: "EGY_x",
+    workflow_id: DAR_WORKFLOW.workflow_id,
+    workflow_version: DAR_WORKFLOW.workflow_version,
+    ...extra,
+  });
+}
+
+describe("the coordinator's structured JSONL protocol", () => {
+  it("starts one eight-stage run and maps every completed stage to progress", () => {
+    const lines = [workflowEvent(1, "start")];
+    for (const stage of DAR_WORKFLOW.stages) {
+      lines.push(
+        workflowEvent(stage.ordinal + 1, "stage_complete", {
+          stage_id: stage.id,
+          stage_ordinal: stage.ordinal,
+          attempt: 1,
+          elapsed_seconds: 12.5,
+          spent_usd: 1.25,
+          cumulative_spent_usd: stage.ordinal * 1.25,
+          artifacts: [],
+        }),
+      );
+    }
+    lines.push(workflowEvent(10, "workflow_complete"));
+
+    const events = parseChunk(lines.join("\n"));
+    assert.deepEqual(events[0], { kind: "start", rowsTotal: 8, vendor: null });
+    const stages = events.filter((event) => event.kind === "row");
+    assert.equal(stages.length, 8);
+    assert.deepEqual(
+      stages.map((event) => [event.indicatorId, event.rowsDone, event.rowsTotal]),
+      DAR_WORKFLOW.stages.map((stage) => [stage.id, stage.ordinal, 8]),
+    );
+    assert.equal(events.at(-1)?.kind, "finished");
+  });
+
+  it("preserves spend when a handler cannot report a cumulative value", () => {
+    const event = parseLine(
+      workflowEvent(2, "stage_complete", {
+        stage_id: "damm_diagnostic",
+        stage_ordinal: 1,
+        attempt: 1,
+        elapsed_seconds: 2,
+        spent_usd: null,
+        cumulative_spent_usd: null,
+        artifacts: [],
+      }),
+    );
+    assert.equal(event?.kind, "row");
+    assert.equal(event?.kind === "row" ? event.spentUsd : 1, null);
+  });
+
+  it("records automatic retry and terminal failure without looking for prose on stderr", () => {
+    assert.equal(
+      parseLine(
+        workflowEvent(3, "retry", {
+          stage_id: "country_research",
+          stage_ordinal: 2,
+          attempt: 2,
+          elapsed_seconds: 3,
+        }),
+      )?.kind,
+      "note",
+    );
+    const failure = parseLine(
+      workflowEvent(4, "failure", {
+        stage_id: "country_research",
+        stage_ordinal: 2,
+        attempt: 3,
+        elapsed_seconds: 8,
+        error: { type: "RuntimeError", message: "source retrieval failed" },
+      }),
+    );
+    assert.deepEqual(failure, {
+      kind: "failed",
+      authoritative: true,
+      message: "Country research and credible-source inventory: source retrieval failed",
+    });
+  });
+
+  it("drops a stage event whose id and ordinal do not match the contract", () => {
+    assert.equal(
+      parseLine(
+        workflowEvent(2, "stage_complete", {
+          stage_id: "export_package",
+          stage_ordinal: 1,
+          cumulative_spent_usd: 1,
+        }),
+      ),
+      null,
+    );
+  });
+
+  it("does not let another run's event advance this run", () => {
+    assert.equal(parseLine(workflowEvent(1, "start"), "a-different-run"), null);
+    assert.equal(parseLine(workflowEvent(1, "start"), "EGY_x")?.kind, "start");
+  });
 });
 
 describe("what a run's exit means", () => {
@@ -125,6 +246,12 @@ describe("what a run's exit means", () => {
     assert.match(s.reason, /absent from the output, not recorded as gaps/);
   });
 
+  it("workflow exhaustion is a terminal failure, never a request for a top-up", () => {
+    const s = statusOnExit(0, { ...clean, exhausted: true }, { budgetExhaustion: "terminal" });
+    assert.equal(s.status, "failed");
+    assert.match(s.reason, /does not wait for a human budget top-up/);
+  });
+
   it("an unresearched remainder is a failure, because no input was written", () => {
     const s = statusOnExit(0, { ...clean, incomplete: true, finished: false });
     assert.equal(s.status, "failed");
@@ -141,6 +268,12 @@ describe("what a run's exit means", () => {
     const s = statusOnExit(1, { ...clean, failure: "KeyError: 'mean'" });
     assert.equal(s.status, "failed");
     assert.match(s.reason, /KeyError/);
+  });
+
+  it("an authoritative failure cannot be hidden by a later completion event", () => {
+    const result = statusOnExit(0, { ...clean, failure: "stage 8 failed" });
+    assert.equal(result.status, "failed");
+    assert.equal(result.reason, "stage 8 failed");
   });
 });
 

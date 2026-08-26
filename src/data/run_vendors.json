@@ -18,19 +18,27 @@
   ]
  },
  "runnable_passes": [
+  "ai",
+  "country_research",
   "diagnostic",
+  "export",
   "foresight",
   "g2",
   "generation",
-  "research",
-  "scans"
+  "international_lessons",
+  "investment",
+  "research"
  ],
  "pass_defaults": {
   "research": "anthropic/claude-opus-5",
   "g2": "openai/gpt-5.6-terra",
-  "scans": "anthropic/claude-opus-5",
+  "country_research": "anthropic/claude-opus-5",
+  "international_lessons": "anthropic/claude-opus-5",
+  "ai": "anthropic/claude-opus-5",
   "foresight": "anthropic/claude-opus-5",
+  "investment": "anthropic/claude-opus-5",
   "generation": "anthropic/claude-opus-5",
-  "diagnostic": null
+  "diagnostic": null,
+  "export": null
  }
 }

@@ -1,0 +1,193 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://world-bank-digital.github.io/DAMM/schemas/dar-workflow-v1.schema.json",
+  "title": "DAMM canonical DAR workflow contract",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "$schema",
+    "schema_version",
+    "workflow_id",
+    "workflow_version",
+    "status",
+    "title",
+    "required_launch_inputs",
+    "optional_launch_inputs",
+    "execution_policy",
+    "stages",
+    "export_profiles",
+    "stage_manifest_required_fields",
+    "post_completion"
+  ],
+  "properties": {
+    "$schema": { "type": "string" },
+    "schema_version": { "const": "damm.dar-workflow/v1" },
+    "workflow_id": { "const": "dar-canonical-v1" },
+    "workflow_version": { "type": "string", "pattern": "^1\\.[0-9]+\\.[0-9]+$" },
+    "status": { "const": "normative" },
+    "title": { "type": "string", "minLength": 1 },
+    "required_launch_inputs": {
+      "type": "array",
+      "const": ["country"]
+    },
+    "optional_launch_inputs": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/optionalInput" },
+      "minItems": 5,
+      "uniqueItems": true
+    },
+    "execution_policy": { "$ref": "#/$defs/executionPolicy" },
+    "stages": {
+      "type": "array",
+      "minItems": 8,
+      "maxItems": 8,
+      "items": { "$ref": "#/$defs/stage" }
+    },
+    "export_profiles": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["narrative", "structured", "package"],
+      "properties": {
+        "narrative": { "const": ["md", "docx", "pdf", "html"] },
+        "structured": { "const": ["xlsx", "csv", "json"] },
+        "package": { "const": ["zip", "json"] }
+      }
+    },
+    "stage_manifest_required_fields": {
+      "type": "array",
+      "items": { "type": "string", "minLength": 1 },
+      "minItems": 10,
+      "uniqueItems": true
+    },
+    "post_completion": { "$ref": "#/$defs/postCompletion" }
+  },
+  "$defs": {
+    "optionalInput": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "title", "accepted_extensions"],
+      "properties": {
+        "id": { "type": "string", "pattern": "^[a-z][a-z0-9_]*$" },
+        "title": { "type": "string", "minLength": 1 },
+        "accepted_extensions": {
+          "type": "array",
+          "items": { "type": "string", "pattern": "^[a-z0-9]+$" },
+          "minItems": 1,
+          "uniqueItems": true
+        }
+      }
+    },
+    "executionPolicy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "single_launch",
+        "immutable_input_snapshot",
+        "required_human_actions_during_run",
+        "late_input_policy",
+        "missing_optional_input_policy",
+        "budget_policy",
+        "fixed_stage_budget_allocations",
+        "budget_exhaustion_policy",
+        "transient_failure_policy",
+        "allowed_active_states",
+        "terminal_states",
+        "post_completion_review_only",
+        "output_lifecycle_state"
+      ],
+      "properties": {
+        "single_launch": { "const": true },
+        "immutable_input_snapshot": { "const": true },
+        "required_human_actions_during_run": { "type": "array", "maxItems": 0 },
+        "late_input_policy": { "const": "new_workflow_version" },
+        "missing_optional_input_policy": { "const": "autonomous_research_fallback" },
+        "budget_policy": { "const": "preauthorized_ceiling_with_fixed_protected_allocations" },
+        "fixed_stage_budget_allocations": {
+          "const": {
+            "damm_diagnostic": 0.45,
+            "country_research": 0.075,
+            "ai_digital_agriculture": 0.10,
+            "international_lessons": 0.075,
+            "strategic_foresight": 0.10,
+            "investment_options": 0.05,
+            "draft_dar": 0.15,
+            "export_package": 0.00
+          }
+        },
+        "budget_exhaustion_policy": { "const": "bounded_retry_then_terminal_failure" },
+        "transient_failure_policy": { "const": "bounded_automatic_retry" },
+        "allowed_active_states": { "const": ["queued", "running", "retrying"] },
+        "terminal_states": { "const": ["complete", "failed", "cancelled"] },
+        "post_completion_review_only": { "const": true },
+        "output_lifecycle_state": { "const": "draft" }
+      }
+    },
+    "stage": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "ordinal",
+        "id",
+        "title",
+        "depends_on",
+        "human_input_required",
+        "objective",
+        "optional_inputs",
+        "fallback_when_optional_inputs_absent",
+        "required_artifacts"
+      ],
+      "properties": {
+        "ordinal": { "type": "integer", "minimum": 1, "maximum": 8 },
+        "id": { "type": "string", "pattern": "^[a-z][a-z0-9_]*$" },
+        "title": { "type": "string", "minLength": 1 },
+        "depends_on": {
+          "type": "array",
+          "items": { "type": "string", "pattern": "^[a-z][a-z0-9_]*$" },
+          "uniqueItems": true
+        },
+        "human_input_required": { "const": false },
+        "objective": { "type": "string", "minLength": 1 },
+        "optional_inputs": {
+          "type": "array",
+          "items": { "type": "string", "pattern": "^[a-z][a-z0-9_]*$" },
+          "uniqueItems": true
+        },
+        "fallback_when_optional_inputs_absent": { "type": "string", "minLength": 1 },
+        "required_sections": {
+          "type": "array",
+          "items": { "type": "string", "pattern": "^[a-z][a-z0-9_]*$" },
+          "uniqueItems": true
+        },
+        "required_artifacts": {
+          "type": "array",
+          "items": { "type": "string", "pattern": "^[a-z][a-z0-9_]*$" },
+          "minItems": 1,
+          "uniqueItems": true
+        }
+      }
+    },
+    "postCompletion": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "review_available_after_stage",
+        "review_required_to_generate_draft",
+        "review_required_for_final_or_publication",
+        "allowed_promotions",
+        "prohibitions"
+      ],
+      "properties": {
+        "review_available_after_stage": { "const": "export_package" },
+        "review_required_to_generate_draft": { "const": false },
+        "review_required_for_final_or_publication": { "const": true },
+        "allowed_promotions": { "const": ["draft", "final"] },
+        "prohibitions": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 },
+          "minItems": 4,
+          "uniqueItems": true
+        }
+      }
+    }
+  }
+}

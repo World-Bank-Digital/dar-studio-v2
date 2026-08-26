@@ -1,0 +1,9 @@
+{
+  "schema_version": "damm.workflow-export/v1",
+  "workflow_id": "dar-canonical-v1",
+  "workflow_version": "1.0.0",
+  "sha256": {
+    "dar_workflow_v1.json": "5ed40dece48f24e60cbca00bcf1a9c75616ca03e7bcc5ee502dcc5b5ed1d82ba",
+    "dar_workflow_v1.schema.json": "cbdbf12b76a9741ecf1aeebce6575bf7be90c8f5aa8f2d5d555dd623393a5d5f"
+  }
+}

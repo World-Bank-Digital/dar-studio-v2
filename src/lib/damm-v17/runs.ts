@@ -7,10 +7,9 @@
  *
  * Three properties this file exists to guarantee:
  *
- *  - **Exhaustion is not failure.** A run that hits its budget stops, keeps what it has,
- *    and waits for a person to add more. A budget-induced gap that reads like a real one
- *    is how Nigeria's 21 phantom gaps happened, so the two states are kept apart all the
- *    way to the surface.
+ *  - **Legacy-pass exhaustion is not failure.** A legacy pass that hits its allocation
+ *    keeps what it has instead of inventing gaps. The canonical workflow instead performs
+ *    bounded retries and settles terminally, so it never waits for a human top-up.
  *  - **A dead worker does not strand a run.** The claim is a lease with a heartbeat. A
  *    worker that dies leaves a stale claim, and the run becomes claimable again. The
  *    pipeline checkpoints per row, so retaking a claim resumes rather than restarts.
@@ -25,22 +24,11 @@ import budget from "../../data/run_budget.json" with { type: "json" };
 import vendors from "../../data/run_vendors.json" with { type: "json" };
 
 export type RunStatus =
-  | "queued"
-  | "running"
-  | "paused"
-  | "exhausted"
-  | "failed"
-  | "done"
-  | "cancelled";
+  "queued" | "running" | "paused" | "exhausted" | "failed" | "done" | "cancelled";
 
 /** The pipeline's own budget passes. Named to match, so no translation is needed. */
 export type RunPass =
-  | "research"
-  | "g2"
-  | "scans"
-  | "foresight"
-  | "generation"
-  | "diagnostic";
+  "workflow" | "research" | "g2" | "scans" | "foresight" | "generation" | "diagnostic";
 
 export interface Run {
   id: string;
@@ -61,6 +49,11 @@ export interface Run {
   startedAt: Date | null;
   finishedAt: Date | null;
   stoppedReason: string | null;
+}
+
+/** Internal lease capability. Never serialize this token to a product surface. */
+export interface ClaimedRun extends Run {
+  claimToken: string;
 }
 
 /**
@@ -90,7 +83,30 @@ export function isTerminal(s: RunStatus): boolean {
  * with no script would fall through to the research orchestrator and spend a full
  * research budget under another pass's name.
  */
-export const RUNNABLE_PASSES: RunPass[] = vendors.runnable_passes as RunPass[];
+const LEDGER_PASS_BY_RUN_PASS: Record<Exclude<RunPass, "workflow">, string> = {
+  research: "research",
+  g2: "g2",
+  // The retained admin `scans.py` surface is the international-lessons stage in the
+  // canonical DAMM ledger. Keep the DB/API alias while charging the exported key.
+  scans: "international_lessons",
+  foresight: "foresight",
+  generation: "generation",
+  diagnostic: "diagnostic",
+};
+const LEGACY_RUNNABLE_PASSES = (
+  Object.keys(LEDGER_PASS_BY_RUN_PASS) as Array<Exclude<RunPass, "workflow">>
+).filter((pass) => vendors.runnable_passes.includes(LEDGER_PASS_BY_RUN_PASS[pass]));
+
+/**
+ * The public product launches the coordinator. The legacy passes remain runnable for
+ * recovery and administration, but they are implementation details of one DAR run.
+ */
+export const PUBLIC_RUN_PASSES = ["workflow"] as const satisfies readonly RunPass[];
+export const RUNNABLE_PASSES: RunPass[] = ["workflow", ...LEGACY_RUNNABLE_PASSES];
+
+export function isPublicRunPass(pass: RunPass): pass is (typeof PUBLIC_RUN_PASSES)[number] {
+  return PUBLIC_RUN_PASSES.includes(pass as (typeof PUBLIC_RUN_PASSES)[number]);
+}
 
 /**
  * Whether a pass produces rows for the evidence base.
@@ -115,7 +131,18 @@ export const VENDOR_CHOICES: string[] = Object.entries(vendors.families).flatMap
 
 /** The vendor a pass uses when none is named. Read from the pipeline, never restated. */
 export function defaultVendorFor(pass: RunPass): string | null {
-  return (vendors.pass_defaults as Record<string, string | null>)[pass] ?? null;
+  if (pass === "workflow") {
+    // run_workflow.py uses the country-research default when --vendor is absent. Resolve
+    // it here and pass it explicitly so the DB row and immutable input snapshot agree.
+    return (
+      (vendors.pass_defaults as Record<string, string | null>).country_research ??
+      (vendors.pass_defaults as Record<string, string | null>).research ??
+      null
+    );
+  }
+  return (
+    (vendors.pass_defaults as Record<string, string | null>)[LEDGER_PASS_BY_RUN_PASS[pass]] ?? null
+  );
 }
 
 /**
@@ -144,7 +171,10 @@ export function vendorFamily(vendor: string | null): string | null {
  * resolved, because the trap is the unnamed case: research on openai and a G2 left at its
  * default is the same family, and nothing on screen would say so.
  */
-export function canReview(researchVendor: string | null, reviewerVendor: string | null): Transition {
+export function canReview(
+  researchVendor: string | null,
+  reviewerVendor: string | null,
+): Transition {
   const primary = vendorFamily(researchVendor ?? defaultVendorFor("research"));
   const reviewer = vendorFamily(reviewerVendor ?? defaultVendorFor("g2"));
   if (!primary || !reviewer) return OK;
@@ -185,7 +215,7 @@ export function basenameFor(
   researchBasename: string | null,
   token: string,
 ): string | null {
-  if (pass === "research") {
+  if (pass === "research" || pass === "workflow") {
     const stamp = at.toISOString().slice(0, 16).replace(/[-:T]/g, "");
     return `${iso3.toUpperCase()}_${stamp}_${token}`;
   }
@@ -203,7 +233,11 @@ const ALLOCATION = budget.allocation as Record<string, number>;
 
 /** What this pass may spend of the country ceiling (decision G3). */
 export function passCap(pass: RunPass, ceilingUsd: number): number {
-  const share = ALLOCATION[pass];
+  // The coordinator owns the whole preauthorized ceiling and enforces the contract's
+  // protected stage allocations within it. Applying one legacy pass share to the outer
+  // workflow would recreate the human top-up gates the canonical workflow removes.
+  if (pass === "workflow") return round2(ceilingUsd);
+  const share = ALLOCATION[LEDGER_PASS_BY_RUN_PASS[pass]];
   if (share === undefined) throw new Error(`no budget allocation for pass "${pass}"`);
   return round2(ceilingUsd * share);
 }
@@ -264,6 +298,11 @@ export function canResume(
   run: Pick<Run, "status" | "pass" | "ceilingUsd" | "spentUsd">,
   newCeilingUsd?: number,
 ): Transition {
+  if (run.pass === "workflow") {
+    return no(
+      "a canonical workflow retries within its preauthorized ceiling and settles as complete or failed; it never waits for an operator to resume or top it up",
+    );
+  }
   if (!isResumable(run.status)) {
     return no(
       isTerminal(run.status)
@@ -320,10 +359,7 @@ export function progressOf(run: Run): Progress {
   return {
     rowsDone: run.rowsDone,
     rowsTotal: run.rowsTotal,
-    fraction:
-      run.rowsTotal && run.rowsTotal > 0
-        ? Math.min(1, run.rowsDone / run.rowsTotal)
-        : null,
+    fraction: run.rowsTotal && run.rowsTotal > 0 ? Math.min(1, run.rowsDone / run.rowsTotal) : null,
     spentUsd: run.spentUsd,
     capUsd: cap,
     spentFraction: cap > 0 ? Math.min(1, run.spentUsd / cap) : 0,
@@ -365,7 +401,7 @@ export function projectToFinish(
   if (rowsRemaining <= 0) return null;
   const costPerRow = run.spentUsd / run.rowsDone;
   const projectedPassCost = costPerRow * run.rowsTotal;
-  const share = ALLOCATION[run.pass] ?? 0;
+  const share = run.pass === "workflow" ? 1 : (ALLOCATION[run.pass] ?? 0);
   const needed = share > 0 ? (projectedPassCost * (1 + RATE_ALLOWANCE)) / share : 0;
   return {
     costPerRow,
@@ -386,6 +422,9 @@ export function stoppedSummary(run: Run): string {
     run.rowsTotal != null ? `${run.rowsDone} of ${run.rowsTotal} rows` : `${run.rowsDone} rows`;
   switch (run.status) {
     case "exhausted":
+      if (run.pass === "workflow") {
+        return `The workflow stopped after ${got}. Its bounded automatic retries could not finish within the preauthorized ceiling. Start a new workflow version after correcting the failure; no active run waits for a budget top-up.`;
+      }
       return `Stopped on budget after ${got}, having spent $${run.spentUsd.toFixed(
         2,
       )} of $${passCap(run.pass, run.ceilingUsd).toFixed(2)}. The rows it did not reach are absent, not recorded as gaps. Add budget to continue.`;
@@ -398,8 +437,10 @@ export function stoppedSummary(run: Run): string {
     case "done":
       // A finished run still says what it lost. A pass that completed every row with a
       // vendor down for all of them is a clean success only on its face.
-      return `Finished ${got} for $${run.spentUsd.toFixed(2)}.`
-        + (run.stoppedReason ? ` ${run.stoppedReason}` : "");
+      return (
+        `Finished ${got} for $${run.spentUsd.toFixed(2)}.` +
+        (run.stoppedReason ? ` ${run.stoppedReason}` : "")
+      );
     default:
       return `${got} so far.`;
   }

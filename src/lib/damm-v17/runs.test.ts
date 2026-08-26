@@ -1,7 +1,7 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 
-import { artifactsFor } from "./worker-artifacts.ts";
+import { artifactsFor, DOCUMENT_SLOTS } from "./worker-artifacts.ts";
 import { artifactsFor as workerArtifacts } from "./worker.ts";
 
 import {
@@ -26,8 +26,11 @@ import {
   projectToFinish,
   producesEvidence,
   isRunnable,
+  isPublicRunPass,
+  PUBLIC_RUN_PASSES,
   RUNNABLE_PASSES,
-  callsAVendor,} from "./runs.ts";
+  callsAVendor,
+} from "./runs.ts";
 
 function run(over: Partial<Run> = {}): Run {
   return {
@@ -57,16 +60,14 @@ describe("the budget, which is exported rather than restated (G3)", () => {
   it("per-pass caps exhaust the country ceiling", () => {
     // If they summed to less, a country could not spend its ceiling; if more, it could
     // spend past it by running every pass to its own limit.
-    assert.ok(
-      allocationExhaustsCeiling(),
-      "the per-pass allocation must sum to the whole ceiling",
-    );
+    assert.ok(allocationExhaustsCeiling(), "the per-pass allocation must sum to the whole ceiling");
   });
 
   it("apportions each pass against the ceiling", () => {
-    assert.equal(passCap("research", 500), 200);
-    assert.equal(passCap("g2", 500), 75);
-    assert.equal(passCap("generation", 500), 100);
+    assert.equal(passCap("research", 500), 175);
+    assert.equal(passCap("g2", 500), 50);
+    assert.equal(passCap("generation", 500), 75);
+    assert.equal(passCap("workflow", 500), 500, "the coordinator owns the full ceiling");
   });
 
   it("refuses a pass it has no allocation for, rather than assuming one", () => {
@@ -80,7 +81,7 @@ describe("the budget, which is exported rather than restated (G3)", () => {
   });
 
   it("reports what is left of the pass, not of the ceiling", () => {
-    assert.equal(remaining(run({ pass: "g2", spentUsd: 6.35 })), 68.65);
+    assert.equal(remaining(run({ pass: "g2", spentUsd: 6.35 })), 43.65);
   });
 });
 
@@ -111,6 +112,14 @@ describe("exhaustion is not failure (G2)", () => {
 
   it("resumes a paused run without asking for anything", () => {
     assert.equal(canResume(run({ status: "paused", spentUsd: 199 })).ok, true);
+  });
+
+  it("never asks a canonical workflow for a resume or budget top-up", () => {
+    const exhausted = run({ pass: "workflow", status: "exhausted", spentUsd: 500 });
+    const decision = canResume(exhausted, 1_000);
+    assert.equal(decision.ok, false);
+    assert.match(decision.reason, /never waits for an operator/);
+    assert.doesNotMatch(stoppedSummary(exhausted), /Add budget/);
   });
 
   it("refuses to resume a finished run", () => {
@@ -182,8 +191,8 @@ describe("progress never fabricates what it does not know", () => {
   });
 
   it("reports spend against the pass allocation, not the ceiling", () => {
-    const p = progressOf(run({ pass: "g2", spentUsd: 37.5 }));
-    assert.equal(p.capUsd, 75);
+    const p = progressOf(run({ pass: "g2", spentUsd: 25 }));
+    assert.equal(p.capUsd, 50);
     assert.equal(p.spentFraction, 0.5);
     assert.equal(p.atCap, false);
   });
@@ -206,10 +215,17 @@ describe("which name a pass writes under", () => {
     assert.equal(basenameFor("research", "egy", at, null, "a1b2c3"), "EGY_202608251407_a1b2c3");
   });
 
+  it("mints an isolated stamped name for the whole workflow", () => {
+    assert.equal(basenameFor("workflow", "egy", at, null, "f1e2d3"), "EGY_202608251407_f1e2d3");
+  });
+
   it("makes a later pass inherit the research name rather than mint its own", () => {
     // gate2.py takes --run and reads an existing pass's files. A G2 run under a fresh
     // name would find nothing to review and report a clean review of it.
-    assert.equal(basenameFor("g2", "EGY", at, "EGY_202608251407_a1b2c3", "zzz"), "EGY_202608251407_a1b2c3");
+    assert.equal(
+      basenameFor("g2", "EGY", at, "EGY_202608251407_a1b2c3", "zzz"),
+      "EGY_202608251407_a1b2c3",
+    );
   });
 
   it("mints a different name for each run, even in the same minute", () => {
@@ -279,9 +295,9 @@ describe("how much budget finishing would need", () => {
   });
 
   it("suggests a ceiling that gives the pass that much, with the stated allowance", () => {
-    // $23.60 projected, plus 20%, is $28.32 — which at research's 40% share needs a
-    // ceiling of $70.80, rounded up to $80.
-    assert.equal(projectToFinish(stopped)!.suggestedCeilingUsd, 80);
+    // $23.60 projected, plus 20%, is $28.32 — which at research's 35% share needs a
+    // ceiling just over $80.91, rounded up to $90.
+    assert.equal(projectToFinish(stopped)!.suggestedCeilingUsd, 90);
   });
 
   it("never suggests less than the ceiling already set", () => {
@@ -305,17 +321,31 @@ describe("which passes produce evidence", () => {
     // They gather what the instrument does not measure, produce milestones, and produce a
     // document. Offering to import one into the evidence base would suggest they score
     // something.
-    for (const p of ["scans", "foresight", "generation", "diagnostic"] as const) {
+    for (const p of ["workflow", "scans", "foresight", "generation", "diagnostic"] as const) {
       assert.equal(producesEvidence(p), false, `${p} should not produce evidence`);
     }
   });
 
   it("a pass is runnable exactly when a script implements it", () => {
     // Every pass in the allocation now has a script.
-    for (const p of ["research", "g2", "scans", "foresight", "generation", "diagnostic"] as const) {
+    for (const p of [
+      "workflow",
+      "research",
+      "g2",
+      "scans",
+      "foresight",
+      "generation",
+      "diagnostic",
+    ] as const) {
       assert.ok(isRunnable(p), `${p} should be runnable`);
     }
-    assert.equal(RUNNABLE_PASSES.length, 6);
+    assert.equal(RUNNABLE_PASSES.length, 7);
+  });
+
+  it("exposes only the canonical workflow as a normal product launch", () => {
+    assert.deepEqual(PUBLIC_RUN_PASSES, ["workflow"]);
+    assert.ok(isPublicRunPass("workflow"));
+    assert.equal(isPublicRunPass("research"), false);
   });
 });
 
@@ -323,6 +353,13 @@ describe("what each pass produces", () => {
   it("offers the roadmap for a generation run", () => {
     const keys = artifactsFor("generation").map((a) => a.key);
     assert.ok(keys.includes("dar"));
+  });
+
+  it("offers a manifest, complete bundle, and all Draft DAR narrative formats", () => {
+    const keys = artifactsFor("workflow").map((artifact) => artifact.key);
+    for (const key of ["manifest", "bundle", "draft-md", "draft-docx", "draft-pdf", "draft-html"]) {
+      assert.ok(keys.includes(key), key);
+    }
   });
 
   it("names an artifact for every pass, so no run finishes with nothing to open", () => {
@@ -343,6 +380,13 @@ describe("what each pass produces", () => {
       );
     }
   });
+
+  it("makes the completed document set come from one canonical run", () => {
+    assert.ok(DOCUMENT_SLOTS.length > 0);
+    assert.ok(DOCUMENT_SLOTS.every((slot) => slot.pass === "workflow"));
+    const keys = new Set(artifactsFor("workflow").map((artifact) => artifact.key));
+    assert.ok(DOCUMENT_SLOTS.every((slot) => keys.has(slot.artifactKey)));
+  });
 });
 
 describe("a pass that costs nothing", () => {
@@ -353,12 +397,13 @@ describe("a pass that costs nothing", () => {
   });
 
   it("every other pass does", () => {
-    for (const p of ["research", "g2", "scans", "foresight", "generation"] as const) {
+    for (const p of ["workflow", "research", "g2", "scans", "foresight", "generation"] as const) {
       assert.ok(callsAVendor(p), `${p} should call a vendor`);
     }
   });
 
-  it("has no default vendor to offer, rather than an empty one", () => {
+  it("binds the canonical run to the coordinator's primary default vendor", () => {
     assert.equal(defaultVendorFor("diagnostic"), null);
+    assert.equal(defaultVendorFor("workflow"), "anthropic/claude-opus-5");
   });
 });

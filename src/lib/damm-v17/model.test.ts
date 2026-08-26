@@ -153,7 +153,9 @@ describe("DAR outline and its evidence bindings", () => {
     const costs = darChapter("5");
     assert.ok(costs);
     assert.deepEqual(costs.binding.pillars, [], "no pillar may be cited as a cost basis");
-    assert.match(costs.note, /NO COST, BUDGET OR FINANCING DATA/);
+    assert.match(costs.note, /carries no cost, budget or financing data/i);
+    assert.match(costs.note, /canonical Stage 6/);
+    assert.match(costs.note, /never constitute an automatic financing decision/);
   });
 
   it("stops a chapter citing evidence outside its binding", () => {

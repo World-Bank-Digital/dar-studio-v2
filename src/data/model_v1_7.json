@@ -8,7 +8,7 @@
   "ratified": false,
   "ratification_note": "Twelve design decisions are open in specification section 13. Every value they can change is data in this file. A consumer must not present an unratified value as settled: see `open_decisions` for which fields each ruling governs.",
   "generated_from": "gauntlet/loop-1/engine_v17.py",
-  "generated_on": "2026-08-25",
+  "generated_on": "2026-08-27",
   "prohibitions": [
     "No cross-country ranking.",
     "No band used as a project development objective, disbursement-linked indicator or disbursement condition.",
@@ -1629,7 +1629,12 @@
     "evidence_ledger": "Every row with class, level, source, tier, year; gaps, holds and stale readings.",
     "foresight.scenarios": "Scenario set produced by the foresight stage.",
     "foresight.preferred_future": "The selected preferred future.",
-    "foresight.milestones": "Backcast milestones and their indicator bindings."
+    "foresight.milestones": "Backcast milestones and their indicator bindings.",
+    "ai.as_is": "Country as-is AI-in-agriculture evidence from canonical Stage 3.",
+    "ai.peer_experience": "Relevant peer-country AI experience and transfer limitations.",
+    "ai.recommended_agenda": "Proposed, sequenced AI agenda for post-completion validation.",
+    "investment.options": "Preliminary investment options with explicit appraisal assumptions.",
+    "investment.portfolio_sequencing": "Cross-option sequencing and dependency analysis."
   },
   "dar_outline": [
     {
@@ -1648,7 +1653,8 @@
         "prerequisites": [],
         "derived": [
           "constraints",
-          "register"
+          "register",
+          "ai.as_is"
         ]
       },
       "note": "A1 reads as NEED: a low reading is a large opportunity, never low maturity."
@@ -1687,7 +1693,9 @@
           "matrix",
           "prerequisites",
           "constraints",
-          "evidence_ledger"
+          "evidence_ledger",
+          "ai.as_is",
+          "ai.peer_experience"
         ]
       },
       "note": "This chapter is the diagnostic. Every figure must reconcile with the diagnostic report generated for the same assessment."
@@ -1717,7 +1725,8 @@
         "derived": [
           "matrix",
           "foresight.preferred_future",
-          "foresight.milestones"
+          "foresight.milestones",
+          "ai.recommended_agenda"
         ]
       },
       "note": "Targeting rests on the readiness matrix; beneficiary claims rest on A1 need and O1 equity rows. The vision itself comes from the foresight stage, not from the model."
@@ -1751,7 +1760,10 @@
           "matrix",
           "prerequisites",
           "constraints",
-          "foresight.milestones"
+          "foresight.milestones",
+          "ai.recommended_agenda",
+          "investment.options",
+          "investment.portfolio_sequencing"
         ]
       },
       "note": "Sequencing follows the prerequisites: a Blocked column names what must be built. A blocked use case is an argument FOR investment, never against it."
@@ -1774,10 +1786,12 @@
           "6.14"
         ],
         "derived": [
-          "register"
+          "register",
+          "investment.options",
+          "investment.portfolio_sequencing"
         ]
       },
-      "note": "DAMM CARRIES NO COST, BUDGET OR FINANCING DATA OF ANY KIND. No figure in this chapter may be presented as derived from the model or the assessment. The only quantities available are scale figures as reported by initiatives in the register, which are the initiatives' own claims and are tier-badged as such."
+      "note": "The scored DAMM instrument carries no cost, budget or financing data. Preliminary ranges may come only from canonical Stage 6, with their source or planning-assumption basis, currency, base year, sensitivity and data gaps visible. They remain proposed decision support and never constitute an automatic financing decision."
     },
     {
       "n": "6",
@@ -1797,7 +1811,8 @@
           "7.12"
         ],
         "derived": [
-          "prerequisites"
+          "prerequisites",
+          "ai.recommended_agenda"
         ]
       },
       "note": "An Absent prerequisite here is a named legal or regulatory instrument that does not exist; say which, and cite the row."
@@ -1819,7 +1834,8 @@
         ],
         "derived": [
           "prerequisites",
-          "register"
+          "register",
+          "ai.recommended_agenda"
         ]
       },
       "note": "4.9 and 5.7 are DELIVERY-risk flags: they are reported and they block nothing. Do not render them as gating anything."
@@ -1840,7 +1856,9 @@
           "ADV"
         ],
         "prerequisites": [],
-        "derived": []
+        "derived": [
+          "ai.recommended_agenda"
+        ]
       },
       "note": "The model holds no NDC or CCDR crosswalk and no climate-finance taxonomy. Alignment claims against those instruments are external and must be marked as such."
     },
@@ -1859,7 +1877,8 @@
         "derived": [
           "kpi_baseline",
           "evidence_ledger",
-          "foresight.milestones"
+          "foresight.milestones",
+          "investment.options"
         ]
       },
       "note": "Baselines come from Measured A1/O1 rows only. Recorded gaps, held levels and stale readings ARE the measurement gap register — carry them, do not summarise them away."
@@ -1881,7 +1900,11 @@
           "7.12"
         ],
         "derived": [
-          "evidence_ledger"
+          "evidence_ledger",
+          "ai.as_is",
+          "ai.peer_experience",
+          "ai.recommended_agenda",
+          "investment.options"
         ]
       },
       "note": "Evidence quality is itself a risk and belongs here: how much of the assessment rests on withheld levels, recorded gaps, stale readings and unratified definitions."
@@ -1927,7 +1950,12 @@
           "evidence_ledger",
           "foresight.scenarios",
           "foresight.preferred_future",
-          "foresight.milestones"
+          "foresight.milestones",
+          "ai.as_is",
+          "ai.peer_experience",
+          "ai.recommended_agenda",
+          "investment.options",
+          "investment.portfolio_sequencing"
         ]
       },
       "note": "The annex is the audit trail. Nothing is summarised here; rows appear in full."
@@ -1964,7 +1992,7 @@
       "fallback": "Where no indicator in the model fits, the milestone proposes a CANDIDATE indicator (see candidate_indicators) and binds to that instead.",
       "provisionality": "A target level standing on an unratified threshold inherits that provisionality and carries the marking of the open decision governing it."
     },
-    "note": "Where a foresight document is supplied it is ingested and this exercise is skipped. A machine-run preferred future is a facilitation input, never a finding."
+    "note": "Where foresight documents are supplied before launch they are synthesized and supplemented where necessary; where none are supplied, autonomous research provides the inputs. The declared exercise always produces the canonical Stage 5 product. A machine-run preferred future is a facilitation input, never a finding."
   },
   "candidate_indicators": {
     "purpose": "Let a metric be recorded and carried without silently expanding the scored model.",

@@ -16,6 +16,13 @@
  * goes quiet — it does not produce a wrong spend figure, because it is not where the
  * spend figure comes from.
  */
+import {
+  CANONICAL_STAGE_IDS,
+  DAR_WORKFLOW,
+  WORKFLOW_EVENT_SCHEMA_VERSION,
+  WORKFLOW_STAGE_COUNT,
+  type DarWorkflowStageId,
+} from "./workflow.ts";
 
 /** A line the worker should act on. Anything unrecognised is deliberately dropped. */
 export type RunEvent =
@@ -26,14 +33,15 @@ export type RunEvent =
       rowsDone: number;
       rowsTotal: number;
       /** Cumulative pass spend as the pipeline reported it on this line. */
-      spentUsd: number;
+      spentUsd: number | null;
       seconds: number;
       /** pass | hold | reject | gap for research; upheld | filled | withdrawn … for G2. */
       outcome: string;
     }
   | { kind: "exhausted"; message: string }
   | { kind: "incomplete"; message: string }
-  | { kind: "failed"; message: string }
+  | { kind: "failed"; message: string; authoritative?: boolean }
+  | { kind: "note"; message: string }
   /** A vendor was unavailable for one row. The row was researched on a narrower base. */
   | { kind: "degraded"; vendor: string; indicatorId: string; message: string }
   | { kind: "finished"; message: string };
@@ -52,8 +60,7 @@ const START = /^\s*\S.*·\s*(\d+)\s+rows\s*·\s*vendor\s+(\S+)/;
  *     H [ 6/59] 1.5          hold   Documented LNone No national …   $  1.72   92s
  *     F [11/38] 3.7          hold         adjust    -> filled        $  2.10  147s
  */
-const ROW =
-  /^\s*[A-Z]?\s*\[\s*(\d+)\s*\/\s*(\d+)\]\s+(\S+)\s+(\S+).*?\$\s*([\d.]+)\s+(\d+)s\s*$/;
+const ROW = /^\s*[A-Z]?\s*\[\s*(\d+)\s*\/\s*(\d+)\]\s+(\S+)\s+(\S+).*?\$\s*([\d.]+)\s+(\d+)s\s*$/;
 
 /** `!! budget exhausted in pass 'research': $200.00 of $200.00` */
 const EXHAUSTED = /^\s*!!\s*(budget exhausted.*)$/i;
@@ -76,13 +83,114 @@ const FINISHED_G2 = /^\s*(reviewed\s+\d+\s+rows.*)$/;
  * record too — a pass where a vendor was down for every row should not read afterwards as
  * a clean success.
  */
-const DEGRADED =
-  /^\s*!\s*(\S+?):\s*(\S+)\s+\S+\s+unavailable\s*[—–-]\s*(.*)$/;
+const DEGRADED = /^\s*!\s*(\S+?):\s*(\S+)\s+\S+\s+unavailable\s*[—–-]\s*(.*)$/;
 
 /** An unhandled exception reaching stderr. */
 const TRACEBACK = /^\s*(Traceback \(most recent call last\):?|\w*(?:Error|Exception):.*)$/;
+const WORKFLOW_CONFIGURATION_ERROR = /^\s*(workflow configuration error:.*)$/i;
 
-export function parseLine(line: string): RunEvent | null {
+function workflowStage(
+  id: unknown,
+  ordinal: unknown,
+): { id: DarWorkflowStageId; ordinal: number; title: string } | null {
+  if (typeof id !== "string" || !Number.isInteger(ordinal)) return null;
+  const index = Number(ordinal) - 1;
+  if (index < 0 || CANONICAL_STAGE_IDS[index] !== id) return null;
+  const stage = DAR_WORKFLOW.stages[index];
+  return { id: stage.id, ordinal: stage.ordinal, title: stage.title };
+}
+
+function finiteOrNull(value: unknown): number | null {
+  return typeof value === "number" && Number.isFinite(value) ? value : null;
+}
+
+/**
+ * The coordinator emits JSONL so stage progress is a versioned protocol rather than a
+ * regex over prose. A malformed or foreign JSON object is ignored: it must never move a
+ * run merely because it happens to contain a field named `event`.
+ */
+function parseWorkflowLine(line: string, expectedRunId?: string): RunEvent | null {
+  if (!line.trimStart().startsWith("{")) return null;
+  let value: unknown;
+  try {
+    value = JSON.parse(line);
+  } catch {
+    return null;
+  }
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  const event = value as Record<string, unknown>;
+  if (
+    event.schema_version !== WORKFLOW_EVENT_SCHEMA_VERSION ||
+    event.workflow_id !== DAR_WORKFLOW.workflow_id ||
+    event.workflow_version !== DAR_WORKFLOW.workflow_version ||
+    typeof event.run_id !== "string" ||
+    event.run_id.length === 0 ||
+    (expectedRunId !== undefined && event.run_id !== expectedRunId) ||
+    !Number.isInteger(event.sequence) ||
+    typeof event.timestamp !== "string"
+  ) {
+    return null;
+  }
+
+  switch (event.event) {
+    case "start":
+      return { kind: "start", rowsTotal: WORKFLOW_STAGE_COUNT, vendor: null };
+    case "stage_start": {
+      const stage = workflowStage(event.stage_id, event.stage_ordinal);
+      if (!stage) return null;
+      return {
+        kind: "note",
+        message: `Stage ${stage.ordinal} of ${WORKFLOW_STAGE_COUNT} started: ${stage.title}.`,
+      };
+    }
+    case "stage_complete": {
+      const stage = workflowStage(event.stage_id, event.stage_ordinal);
+      if (!stage) return null;
+      return {
+        kind: "row",
+        indicatorId: stage.id,
+        rowsDone: stage.ordinal,
+        rowsTotal: WORKFLOW_STAGE_COUNT,
+        spentUsd: finiteOrNull(event.cumulative_spent_usd),
+        seconds: finiteOrNull(event.elapsed_seconds) ?? 0,
+        outcome: "complete",
+      };
+    }
+    case "retry": {
+      const stage = workflowStage(event.stage_id, event.stage_ordinal);
+      if (!stage) return null;
+      const attempt = Number.isInteger(event.attempt) ? ` (attempt ${String(event.attempt)})` : "";
+      return {
+        kind: "note",
+        message: `Stage ${stage.ordinal} of ${WORKFLOW_STAGE_COUNT} is retrying automatically${attempt}: ${stage.title}.`,
+      };
+    }
+    case "failure": {
+      const error =
+        event.error && typeof event.error === "object" && !Array.isArray(event.error)
+          ? (event.error as Record<string, unknown>)
+          : null;
+      const message =
+        typeof error?.message === "string"
+          ? error.message
+          : "The workflow reported a terminal failure.";
+      const stage = workflowStage(event.stage_id, event.stage_ordinal);
+      return {
+        kind: "failed",
+        authoritative: true,
+        message: stage ? `${stage.title}: ${message}` : message,
+      };
+    }
+    case "workflow_complete":
+      return { kind: "finished", message: "Canonical DAR workflow complete." };
+    default:
+      return null;
+  }
+}
+
+export function parseLine(line: string, expectedWorkflowRunId?: string): RunEvent | null {
+  const workflow = parseWorkflowLine(line, expectedWorkflowRunId);
+  if (workflow) return workflow;
   let m = ROW.exec(line);
   if (m) {
     return {
@@ -102,6 +210,9 @@ export function parseLine(line: string): RunEvent | null {
   if ((m = INCOMPLETE.exec(line))) return { kind: "incomplete", message: m[1].trim() };
   if ((m = FINISHED.exec(line))) return { kind: "finished", message: m[1].trim() };
   if ((m = FINISHED_G2.exec(line))) return { kind: "finished", message: m[1].trim() };
+  if ((m = WORKFLOW_CONFIGURATION_ERROR.exec(line))) {
+    return { kind: "failed", authoritative: true, message: m[1].trim() };
+  }
   if ((m = TRACEBACK.exec(line))) return { kind: "failed", message: m[1].trim() };
   // The start line is checked last: it is the loosest pattern and would otherwise
   // swallow anything containing a middle dot and the word "rows".
@@ -112,10 +223,10 @@ export function parseLine(line: string): RunEvent | null {
 }
 
 /** Split a stdout chunk into lines and keep whatever the events say. */
-export function parseChunk(chunk: string): RunEvent[] {
+export function parseChunk(chunk: string, expectedWorkflowRunId?: string): RunEvent[] {
   const out: RunEvent[] = [];
   for (const line of chunk.split("\n")) {
-    const e = parseLine(line);
+    const e = parseLine(line, expectedWorkflowRunId);
     if (e) out.push(e);
   }
   return out;
@@ -132,8 +243,16 @@ export function parseChunk(chunk: string): RunEvent[] {
 export function statusOnExit(
   exitCode: number | null,
   seen: { exhausted: boolean; incomplete: boolean; finished: boolean; failure: string | null },
+  options: { budgetExhaustion?: "resumable" | "terminal" } = {},
 ): { status: "done" | "exhausted" | "failed"; reason: string } {
   if (seen.exhausted) {
+    if (options.budgetExhaustion === "terminal") {
+      return {
+        status: "failed",
+        reason:
+          "The workflow could not complete within its preauthorized ceiling after bounded automatic retries. It ended as a terminal failure and does not wait for a human budget top-up.",
+      };
+    }
     return {
       status: "exhausted",
       reason:
@@ -146,6 +265,9 @@ export function statusOnExit(
       reason:
         "The run ended with rows unresearched, so no engine input was written. A partial input would score as though the missing rows had been looked for and not found.",
     };
+  }
+  if (seen.failure) {
+    return { status: "failed", reason: seen.failure };
   }
   if (exitCode !== 0) {
     return {
