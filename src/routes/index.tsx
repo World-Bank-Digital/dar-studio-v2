@@ -261,12 +261,12 @@ function PortfolioInner() {
       ) : null}
       {pending ? (
         <div
-          className="fixed inset-0 z-40 grid place-items-center bg-ink/40 p-4"
+          className="fixed inset-0 z-40 grid place-items-center bg-white/90 p-4 backdrop-blur-sm"
           role="dialog"
           aria-modal="true"
           aria-labelledby="remove-title"
         >
-          <Card className="w-full max-w-md rounded-2xl p-6">
+          <Card className="w-full max-w-md rounded-2xl border border-subtle p-6">
             <h2 id="remove-title" className="font-display text-2xl">
               Remove {pending.name}?
             </h2>
@@ -341,11 +341,11 @@ function NewCountry({
 
   return (
     <div
-      className="fixed inset-0 z-40 grid place-items-center bg-ink/40 p-4"
+      className="fixed inset-0 z-40 grid place-items-center bg-white/90 p-4 backdrop-blur-sm"
       role="dialog"
       aria-modal="true"
     >
-      <Card className="w-full max-w-lg rounded-2xl p-6">
+      <Card className="w-full max-w-lg rounded-2xl border border-subtle p-6">
         <h2 className="font-display text-2xl">Open a country</h2>
         <p className="mt-1 text-sm text-muted">
           Search by name. The ISO3 code is derived from the World Bank economy list — you never type

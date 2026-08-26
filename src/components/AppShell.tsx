@@ -21,7 +21,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
   return (
     <div className="min-h-dvh bg-bg text-ink">
-      <div className="border-b border-border bg-forest text-forest-fg">
+      <div className="border-b border-border bg-white text-forest">
         <p className="mx-auto max-w-6xl px-4 py-1.5 text-center text-[11px] leading-snug sm:text-xs">
           {disclaimer()}
         </p>

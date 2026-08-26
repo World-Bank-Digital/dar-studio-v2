@@ -18,7 +18,7 @@ export const Route = createRootRoute({
       { title: APP_NAME },
       { name: "description", content: "Digital Agriculture Roadmap studio — DAMM v1.3 diagnostic and draft assembly." },
       { name: "apple-mobile-web-app-title", content: APP_NAME },
-      { name: "theme-color", content: "#1f4d3a" },
+      { name: "theme-color", content: "#ffffff" },
       { name: "twitter:card", content: "summary_large_image" },
       { property: "og:type", content: "website" },
       ...(ogImage
@@ -41,11 +41,11 @@ export const Route = createRootRoute({
     ],
   }),
   component: () => (
-    <html lang="en" className="antialiased" suppressHydrationWarning>
+    <html lang="en" className="bg-white antialiased" suppressHydrationWarning>
       <head>
         <HeadContent />
       </head>
-      <body>
+      <body className="min-h-dvh bg-white text-ink">
         <PreviewHostBridge />
         <AuthProvider>
           <SessionProvider>

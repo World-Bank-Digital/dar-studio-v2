@@ -6,9 +6,10 @@
   --font-sans: "Source Sans 3", "Source Sans", "Segoe UI", system-ui, sans-serif;
   --font-mono: "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
 
-  --color-bg: #f3efe6;
-  --color-bg-elevated: #faf7f0;
-  --color-surface: #fffcf6;
+  --color-bg: #ffffff;
+  --color-bg-elevated: #ffffff;
+  --color-surface: #ffffff;
+  --color-paper: #ffffff;
   --color-ink: #1c1f1a;
   --color-muted: #5c6358;
   --color-subtle: #7a8176;
@@ -37,11 +38,14 @@
 
 @layer base {
   html {
+    background: #ffffff;
+    color-scheme: light;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
   }
   body {
-    background: var(--color-bg);
+    min-height: 100dvh;
+    background: #ffffff;
     color: var(--color-ink);
     font-family: var(--font-sans);
     line-height: 1.5;
