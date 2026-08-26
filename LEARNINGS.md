@@ -685,3 +685,21 @@ in two minutes.**
 trail, foreign-doc exclusion from the prompt, open-web scope for rubrics);
 `websearch.test.ts` (foreign-government host patterns, intergovernmental
 hosts untouched, unknown-country no-op).
+
+### L26 — One version label concealed several different methodologies
+**Incident:** the final-DAR review found DAMM v1.7 documents carrying different
+band edges, readiness rules, prerequisite mappings, and indicator metadata from
+the executable model while every surface still used the same version label.
+**Root cause:** model JSON, census, captions, UI counts, and runtime files could
+be copied or restated independently; workflow completion authenticated the
+eight-stage contract but not the methodology revision that gave Stage 1 its
+meaning.
+**Fix:** DAR Studio now pins the model/schema/source commit/engine/renderer by
+digest, generates its indicator census and scorer/UI metadata from the model,
+fails app builds on model-derived drift, freezes methodology identity at launch,
+verifies the exact clean pipeline commit plus explicit meaning-bearing bytes
+before execution and publication, binds every artifact set to the model plus
+assessment-input hash, and publishes a per-run methodology manifest. The model
+stays explicitly draft and unratified.
+**Pinned by:** `model.test.ts`, `scorer.test.ts`, `run-store.test.ts`, and
+`worker.test.ts` methodology-provenance regressions.

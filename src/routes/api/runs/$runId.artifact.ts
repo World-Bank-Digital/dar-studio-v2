@@ -37,7 +37,7 @@ export const Route = createFileRoute("/api/runs/$runId/artifact")({
             : null;
           if (!stored) {
             return new Response(
-              `The completed workflow has no verified artifact called "${key}".`,
+              `The completed workflow has no published artifact called "${key}".`,
               {
                 status: 404,
               },
@@ -49,7 +49,9 @@ export const Route = createFileRoute("/api/runs/$runId/artifact")({
               status: 409,
             });
           }
-          const filename = stored.filename.replace(/[^A-Za-z0-9._-]/g, "_");
+          const safeFilename = stored.filename.replace(/[^A-Za-z0-9._-]/g, "_");
+          const legacy = stored.methodologyStatus === "legacy_unverified";
+          const filename = legacy ? `LEGACY-UNVERIFIED_${safeFilename}` : safeFilename;
           const body = new ArrayBuffer(stored.content.byteLength);
           new Uint8Array(body).set(stored.content);
           return new Response(body, {
@@ -58,6 +60,13 @@ export const Route = createFileRoute("/api/runs/$runId/artifact")({
               "content-disposition": `attachment; filename="${filename}"`,
               "cache-control": "no-store",
               "x-content-sha256": stored.sha256,
+              "x-damm-methodology-status": stored.methodologyStatus,
+              ...(legacy
+                ? {
+                    warning:
+                      '299 DAR-Studio "Legacy artifact: DAMM methodology identity was not recorded"',
+                  }
+                : {}),
             },
           });
         }

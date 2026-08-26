@@ -17,20 +17,31 @@
  * different endings with three different remedies, and each is recorded as itself rather
  * than as a generic failure.
  */
-import { spawn } from "node:child_process";
+import { execFileSync, spawn } from "node:child_process";
 import { createHash } from "node:crypto";
 import {
   closeSync,
+  constants as fsConstants,
   lstatSync,
   openSync,
   readFileSync,
   readdirSync,
+  realpathSync,
   readSync,
   statSync,
 } from "node:fs";
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { mkdir, open as openFile, readFile } from "node:fs/promises";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 
+import {
+  DAMM_MODEL_EXPORT,
+  DAMM_MODEL_FILENAME,
+  DAMM_MODEL_IDENTITY,
+  DAMM_MODEL_SCHEMA_FILENAME,
+  DAMM_MODEL_SOURCE_SHA256,
+} from "./model.ts";
+import { canonicalIndicatorCensus, runMethodologyManifest } from "./methodology.ts";
 import { parseChunk, statusOnExit, type RunEvent } from "./run-output.ts";
 import type { ClaimedRun, Run, RunPass, RunStatus } from "./runs.ts";
 import type { WorkflowArtifactWrite } from "./run-store.ts";
@@ -155,6 +166,105 @@ export function workflowRunDir(run: Pick<Run, "outBasename">): string {
   return path.join(pipelineDir(), "gauntlet/loop-1", `${run.outBasename}_workflow`);
 }
 
+/** A workflow workspace must be one real, direct child of the pinned executable tree. */
+function safeWorkflowRunDir(
+  run: Pick<Run, "outBasename">,
+  requireExisting: boolean,
+): string | null {
+  const loopRoot = path.resolve(pipelineDir(), "gauntlet/loop-1");
+  const candidate = path.resolve(workflowRunDir(run));
+  if (path.dirname(candidate) !== loopRoot) return null;
+  let canonicalLoopRoot: string;
+  try {
+    if (!lstatSync(loopRoot).isDirectory()) return null;
+    canonicalLoopRoot = realpathSync(loopRoot);
+  } catch {
+    return null;
+  }
+  try {
+    const stat = lstatSync(candidate);
+    if (stat.isSymbolicLink() || !stat.isDirectory()) return null;
+    const canonicalCandidate = realpathSync(candidate);
+    return canonicalCandidate.startsWith(`${canonicalLoopRoot}${path.sep}`) ? candidate : null;
+  } catch (error) {
+    if (
+      !requireExisting &&
+      typeof error === "object" &&
+      error !== null &&
+      "code" in error &&
+      error.code === "ENOENT"
+    ) {
+      return candidate;
+    }
+    return null;
+  }
+}
+
+function errorCode(error: unknown): string | null {
+  return typeof error === "object" && error !== null && "code" in error
+    ? String(error.code)
+    : null;
+}
+
+async function ensureContainedDirectory(root: string, relative: string): Promise<string> {
+  let current = "";
+  for (const segment of relative.split("/").filter(Boolean)) {
+    current = current ? `${current}/${segment}` : segment;
+    const candidate = path.join(root, ...current.split("/"));
+    try {
+      await mkdir(candidate, { mode: 0o700 });
+    } catch (error) {
+      if (errorCode(error) !== "EEXIST") throw error;
+    }
+    const verified = containedPath(root, current);
+    if (verified !== candidate || !lstatSync(candidate).isDirectory()) {
+      throw new Error(`The workflow directory ${current} is not a real contained directory.`);
+    }
+  }
+  return path.join(root, ...relative.split("/").filter(Boolean));
+}
+
+async function writeImmutableContainedFile(
+  root: string,
+  relative: string,
+  value: string | Uint8Array,
+): Promise<string> {
+  const parentRelative = path.posix.dirname(relative);
+  const parent = containedPath(root, parentRelative);
+  const filename = path.join(root, ...relative.split("/"));
+  if (parent !== path.dirname(filename) || !lstatSync(parent).isDirectory()) {
+    throw new Error(`The workflow file ${relative} has no real contained parent directory.`);
+  }
+
+  const expected = Buffer.from(value);
+  let handle;
+  try {
+    handle = await openFile(
+      filename,
+      fsConstants.O_WRONLY |
+        fsConstants.O_CREAT |
+        fsConstants.O_EXCL |
+        fsConstants.O_NOFOLLOW,
+      0o600,
+    );
+    await handle.writeFile(expected);
+  } catch (error) {
+    if (errorCode(error) !== "EEXIST") throw error;
+    const existingPath = containedPath(root, relative);
+    if (!existingPath || !lstatSync(existingPath).isFile()) throw error;
+    const existing = await readFile(existingPath);
+    if (!existing.equals(expected)) throw error;
+  } finally {
+    await handle?.close();
+  }
+
+  const verified = containedPath(root, relative);
+  if (verified !== filename || !lstatSync(filename).isFile()) {
+    throw new Error(`The workflow file ${relative} is not a real contained file.`);
+  }
+  return filename;
+}
+
 /**
  * The launch envelope is deliberately separate from the coordinator's frozen copy at
  * `inputs/uploads-manifest.json`. It and every extracted upload live under `--out`, so
@@ -212,24 +322,30 @@ export async function writeWorkflowUploadSnapshot(
   const violations = frozenWorkflowUploadViolations(uploads);
   if (violations.length)
     throw new Error(`Invalid frozen workflow uploads: ${violations.join("; ")}`);
-  const root = workflowRunDir(run);
-  const contentDir = path.join(root, "inputs/upload-content");
-  const originalDir = path.join(root, "inputs/upload-originals");
-  await mkdir(contentDir, { recursive: true });
-  await mkdir(originalDir, { recursive: true });
+  const pendingRoot = safeWorkflowRunDir(run, false);
+  if (!pendingRoot) throw new Error("The workflow workspace is outside the pinned pipeline tree.");
+  const root = pendingRoot;
+  try {
+    await mkdir(root, { mode: 0o700 });
+  } catch (error) {
+    if (errorCode(error) !== "EEXIST") throw error;
+  }
+  if (safeWorkflowRunDir(run, true) !== root) {
+    throw new Error("The workflow workspace is not a real directory in the pinned pipeline tree.");
+  }
+  await ensureContainedDirectory(root, "inputs/upload-content");
+  await ensureContainedDirectory(root, "inputs/upload-originals");
 
   const documents = [] as Array<Record<string, unknown>>;
   for (const [index, upload] of uploads.entries()) {
     const canonicalKind = workflowUploadKind(upload.kind);
     const stable = sha256(upload.id).slice(0, 16);
     const contentFilename = `${String(index + 1).padStart(3, "0")}-${stable}.txt`;
-    const contentPath = path.join(contentDir, contentFilename);
-    try {
-      await writeFile(contentPath, upload.content, { encoding: "utf8", flag: "wx" });
-    } catch (error) {
-      const existing = await readFile(contentPath, "utf8").catch(() => null);
-      if (existing !== upload.content) throw error;
-    }
+    await writeImmutableContainedFile(
+      root,
+      path.posix.join("inputs", "upload-content", contentFilename),
+      upload.content,
+    );
     const original = Buffer.from(upload.sourceBase64, "base64");
     if (
       original.byteLength !== upload.sourceBytes ||
@@ -242,13 +358,11 @@ export async function writeWorkflowUploadSnapshot(
       .toLowerCase()
       .replace(/[^.a-z0-9]/g, "");
     const originalFilename = `${String(index + 1).padStart(3, "0")}-${stable}${extension}`;
-    const originalPath = path.join(originalDir, originalFilename);
-    try {
-      await writeFile(originalPath, original, { flag: "wx" });
-    } catch (error) {
-      const existing = await readFile(originalPath).catch(() => null);
-      if (!existing || !existing.equals(original)) throw error;
-    }
+    await writeImmutableContainedFile(
+      root,
+      path.posix.join("inputs", "upload-originals", originalFilename),
+      original,
+    );
     documents.push({
       id: upload.id,
       kind: canonicalKind,
@@ -271,7 +385,6 @@ export async function writeWorkflowUploadSnapshot(
     });
   }
 
-  const manifestPath = workflowUploadManifestPath(run);
   const bytes = `${JSON.stringify(
     {
       schema_version: "damm.uploads-manifest/v1",
@@ -280,13 +393,7 @@ export async function writeWorkflowUploadSnapshot(
     null,
     2,
   )}\n`;
-  try {
-    await writeFile(manifestPath, bytes, { encoding: "utf8", flag: "wx" });
-  } catch (error) {
-    const existing = await readFile(manifestPath, "utf8").catch(() => null);
-    if (existing !== bytes) throw error;
-  }
-  return manifestPath;
+  return writeImmutableContainedFile(root, "launch-uploads-manifest.json", bytes);
 }
 
 export function argsFor(run: Run): { script: string; args: string[] } {
@@ -358,7 +465,13 @@ export function defaultDeps(): WorkerDeps {
   return {
     store: dbStore(),
     async prepareWorkflowInputs(run) {
-      const { workflowUploadSnapshot } = await import("./run-store.ts");
+      const { workflowRunUsesCanonicalMethodology, workflowUploadSnapshot } =
+        await import("./run-store.ts");
+      if (!(await workflowRunUsesCanonicalMethodology(run.id))) {
+        throw new Error("The workflow run is not pinned to this canonical DAMM methodology.");
+      }
+      const methodology = verifyPipelineMethodology();
+      if (!methodology.ok) throw new Error(methodology.reason);
       const uploads = await workflowUploadSnapshot(run.id);
       if (!uploads) throw new Error("The canonical workflow has no durable launch snapshot.");
       await writeWorkflowUploadSnapshot(run, uploads);
@@ -368,8 +481,17 @@ export function defaultDeps(): WorkerDeps {
       return verified.ok ? { ok: true } : verified;
     },
     async publishWorkflowArtifacts(run, workerId) {
+      const methodology = verifyPipelineMethodology();
+      if (!methodology.ok) throw new Error(methodology.reason);
+      const {
+        publishWorkflowArtifactSet,
+        saveWorkflowArtifact,
+        workflowRunUsesCanonicalMethodology,
+      } = await import("./run-store.ts");
+      if (!(await workflowRunUsesCanonicalMethodology(run.id))) {
+        throw new Error("The workflow run methodology changed before artifact publication.");
+      }
       const records = await collectWorkflowArtifacts(run);
-      const { publishWorkflowArtifactSet, saveWorkflowArtifact } = await import("./run-store.ts");
       for (const record of records) {
         const held = await saveWorkflowArtifact(run.id, workerId, run.claimToken, record);
         if (!held) throw new Error("the workflow claim was lost while publishing downloads");
@@ -384,9 +506,12 @@ export function defaultDeps(): WorkerDeps {
     },
     spawnPipeline(run) {
       const { script, args } = argsFor(run);
-      const child = spawn(pipelinePython(), ["-u", script, ...args], {
+      // Bytecode beside the executable source tree would be an unpinned Python program.
+      // Prevent normal runs from creating it so the source attestation can reject every
+      // ignored or untracked .pyc without making the second run fail on the first run's cache.
+      const child = spawn(pipelinePython(), ["-B", "-u", script, ...args], {
         cwd: scriptDir(),
-        env: { ...process.env },
+        env: { ...process.env, PYTHONDONTWRITEBYTECODE: "1" },
       });
       let onErr: (chunk: string) => void = () => {};
       return {
@@ -419,8 +544,12 @@ export function defaultDeps(): WorkerDeps {
     async readLedger(run) {
       if (run.pass === "workflow") {
         try {
+          const root = safeWorkflowRunDir(run, true);
+          if (!root) return null;
+          const manifestPath = containedPath(root, "workflow-manifest.json");
+          if (!manifestPath) return null;
           const manifest = JSON.parse(
-            await readFile(path.join(workflowRunDir(run), "workflow-manifest.json"), "utf8"),
+            await readFile(manifestPath, "utf8"),
           );
           // Null is meaningful: at least one handler could not report spend, so keeping
           // the last event value is more honest than treating an incomplete sum as total.
@@ -503,6 +632,17 @@ const CONTENT_TYPE_BY_EXTENSION: Record<string, string> = {
   zip: ZIP_T,
 };
 
+const APP_MODEL_DATA_DIRECTORY = fileURLToPath(new URL("../../data/", import.meta.url));
+
+function methodologyAssetPath(asset: "export_manifest" | "model" | "schema"): string {
+  const filename = {
+    export_manifest: "damm_model_manifest.json",
+    model: DAMM_MODEL_FILENAME,
+    schema: DAMM_MODEL_SCHEMA_FILENAME,
+  }[asset];
+  return path.join(APP_MODEL_DATA_DIRECTORY, filename);
+}
+
 const WORKFLOW_ARTIFACTS: Artifact[] = artifactLinksFor("workflow").map((link) => {
   if (!link.extension || !link.workflowSource) {
     throw new Error(`Workflow artifact ${link.key} has no manifest selector`);
@@ -582,9 +722,34 @@ function containedPath(root: string, relative: string): string | null {
   if (!relative || relative.includes("\\")) return null;
   const absoluteRoot = path.resolve(root);
   const candidate = path.resolve(absoluteRoot, relative);
-  return candidate === absoluteRoot || candidate.startsWith(`${absoluteRoot}${path.sep}`)
-    ? candidate
-    : null;
+  if (candidate !== absoluteRoot && !candidate.startsWith(`${absoluteRoot}${path.sep}`)) {
+    return null;
+  }
+  try {
+    const canonicalRoot = realpathSync(absoluteRoot);
+    const canonicalCandidate = realpathSync(candidate);
+    if (
+      canonicalCandidate !== canonicalRoot &&
+      !canonicalCandidate.startsWith(`${canonicalRoot}${path.sep}`)
+    ) {
+      return null;
+    }
+
+    // A final-component lstat cannot see a symlink in an ancestor. Reject every
+    // workspace-relative symlink component so a manifest cannot route an otherwise
+    // hash-matching artifact through a directory outside the run workspace.
+    let component = absoluteRoot;
+    for (const segment of path
+      .relative(absoluteRoot, candidate)
+      .split(path.sep)
+      .filter(Boolean)) {
+      component = path.join(component, segment);
+      if (lstatSync(component).isSymbolicLink()) return null;
+    }
+    return candidate;
+  } catch {
+    return null;
+  }
 }
 
 interface RecordedArtifact {
@@ -597,6 +762,7 @@ interface RecordedArtifact {
 interface VerifiedWorkflow {
   manifest: Record<string, unknown>;
   stage8Artifacts: RecordedArtifact[];
+  assessmentInput: RecordedArtifact;
   uploadManifest: {
     path: string;
     sha256: string;
@@ -711,6 +877,204 @@ function artifactDigestSync(filename: string): string | null {
   }
 }
 
+export type PipelineMethodologyRole = "model" | "model_schema" | "engine" | "renderer";
+
+export interface PipelineMethodologyFile {
+  role: PipelineMethodologyRole;
+  path: string;
+  sha256: string;
+}
+
+/**
+ * Every pipeline-owned byte that can change the meaning or labels of a diagnostic. The
+ * indicator census is not in this list because DAR Studio generates it directly from
+ * the pinned model. These explicit digests complement the clean source-commit check by
+ * making the most consequential identity failures specific and diagnosable.
+ */
+export const CANONICAL_PIPELINE_METHODOLOGY_FILES: readonly PipelineMethodologyFile[] =
+  Object.freeze(
+    (
+      [
+        {
+          role: "model",
+          path: DAMM_MODEL_EXPORT.source.model_path,
+          sha256: DAMM_MODEL_SOURCE_SHA256[DAMM_MODEL_EXPORT.source.model_path],
+        },
+        {
+          role: "model_schema",
+          path: DAMM_MODEL_EXPORT.source.schema_path,
+          sha256: DAMM_MODEL_SOURCE_SHA256[DAMM_MODEL_EXPORT.source.schema_path],
+        },
+        {
+          role: "engine",
+          path: DAMM_MODEL_EXPORT.runtime.engine.path,
+          sha256: DAMM_MODEL_EXPORT.runtime.engine.sha256,
+        },
+        {
+          role: "renderer",
+          path: DAMM_MODEL_EXPORT.runtime.renderer.path,
+          sha256: DAMM_MODEL_EXPORT.runtime.renderer.sha256,
+        },
+      ] satisfies PipelineMethodologyFile[]
+    ).map((entry) => Object.freeze(entry)),
+  );
+
+export interface VerifiedPipelineMethodology {
+  sourceCommit: string;
+  files: readonly PipelineMethodologyFile[];
+}
+
+function verifyPipelineSourceCheckout(
+  root: string,
+  expectedCommit: string,
+): { ok: true; commit: string } | { ok: false; reason: string } {
+  try {
+    const git = (...args: string[]) =>
+      execFileSync("git", ["-C", root, ...args], {
+        encoding: "utf8",
+        stdio: ["ignore", "pipe", "pipe"],
+      }).trim();
+    const topLevel = git("rev-parse", "--show-toplevel");
+    const commit = git("rev-parse", "HEAD");
+    const trackedChanges = git("status", "--porcelain=v1", "--untracked-files=no");
+    const trackedSource = git("ls-files", "-z", "--", "gauntlet/loop-1");
+    const untrackedSource = git(
+      "ls-files",
+      "--others",
+      "--exclude-standard",
+      "-z",
+      "--",
+      "gauntlet/loop-1",
+    );
+    const ignoredSource = git(
+      "ls-files",
+      "--others",
+      "--ignored",
+      "--exclude-standard",
+      "-z",
+      "--",
+      "gauntlet/loop-1",
+    );
+    const hasUnpinnedExecutable = [untrackedSource, ignoredSource].some((files) =>
+      files
+        .split("\0")
+        .some((filename) => /\.(?:py|pyi|pyx|pyw|pyz|pyc|pyo|so|pyd)$/i.test(filename)),
+    );
+    const hasSourceSymlink = [trackedSource, untrackedSource, ignoredSource].some((files) =>
+      files
+        .split("\0")
+        .filter(Boolean)
+        .some((filename) => lstatSync(path.join(root, filename)).isSymbolicLink()),
+    );
+    if (
+      realpathSync(topLevel) !== realpathSync(root) ||
+      commit !== expectedCommit ||
+      trackedChanges.length > 0 ||
+      hasUnpinnedExecutable ||
+      hasSourceSymlink
+    ) {
+      return {
+        ok: false,
+        reason: "The DAMM pipeline checkout is not the clean pinned source revision.",
+      };
+    }
+    return { ok: true, commit };
+  } catch {
+    return {
+      ok: false,
+      reason: "The DAMM pipeline checkout cannot attest its pinned source revision.",
+    };
+  }
+}
+
+/** Refuse a pipeline checkout whose executable model, schema, engine, or renderer drifted. */
+export function verifyPipelineMethodology(
+  root = pipelineDir(),
+  expected: readonly PipelineMethodologyFile[] = CANONICAL_PIPELINE_METHODOLOGY_FILES,
+  expectedSourceCommit = DAMM_MODEL_IDENTITY.sourceCommit,
+): { ok: true; value: VerifiedPipelineMethodology } | { ok: false; reason: string } {
+  const roles = new Set<PipelineMethodologyRole>();
+  const paths = new Set<string>();
+  for (const component of expected) {
+    if (
+      roles.has(component.role) ||
+      paths.has(component.path) ||
+      !/^[a-f0-9]{64}$/.test(component.sha256)
+    ) {
+      return { ok: false, reason: "The canonical pipeline methodology manifest is invalid." };
+    }
+    roles.add(component.role);
+    paths.add(component.path);
+    const filename = containedPath(root, component.path);
+    if (!filename || artifactDigestSync(filename) !== component.sha256) {
+      return {
+        ok: false,
+        reason: `The DAMM ${component.role.replaceAll("_", " ")} does not match the pinned methodology revision.`,
+      };
+    }
+  }
+  const requiredRoles: PipelineMethodologyRole[] = ["model", "model_schema", "engine", "renderer"];
+  if (requiredRoles.some((role) => !roles.has(role))) {
+    return { ok: false, reason: "The canonical pipeline methodology manifest is incomplete." };
+  }
+
+  // The coordinator and every tracked stage/export dependency are pinned by the clean
+  // source tree, while the four meaning-bearing files below also receive explicit
+  // content checks and version-label validation. A source commit is never self-attested.
+  const checkout = verifyPipelineSourceCheckout(root, expectedSourceCommit);
+  if (!checkout.ok) return checkout;
+
+  const modelRecord = expected.find((component) => component.role === "model");
+  const schemaRecord = expected.find((component) => component.role === "model_schema");
+  const engineRecord = expected.find((component) => component.role === "engine");
+  const rendererRecord = expected.find((component) => component.role === "renderer");
+  try {
+    const parsedModel = object(
+      JSON.parse(readFileSync(containedPath(root, modelRecord!.path)!, "utf8")),
+    );
+    const parsedSchema = object(
+      JSON.parse(readFileSync(containedPath(root, schemaRecord!.path)!, "utf8")),
+    );
+    if (
+      !parsedModel ||
+      parsedModel.model !== DAMM_MODEL_IDENTITY.modelId ||
+      parsedModel.version !== DAMM_MODEL_IDENTITY.version ||
+      parsedModel.revision !== DAMM_MODEL_IDENTITY.revision ||
+      parsedModel.status !== DAMM_MODEL_IDENTITY.status ||
+      parsedModel.ratified !== DAMM_MODEL_IDENTITY.ratified ||
+      !parsedSchema
+    ) {
+      return {
+        ok: false,
+        reason: "The pipeline model or schema carries a stale DAMM revision or status label.",
+      };
+    }
+    const engineText = readFileSync(containedPath(root, engineRecord!.path)!, "utf8");
+    const rendererText = readFileSync(containedPath(root, rendererRecord!.path)!, "utf8");
+    if (
+      !engineText.includes(`DAMM v${DAMM_MODEL_EXPORT.runtime.engine.version}`) ||
+      !rendererText.includes(`DAMM v${DAMM_MODEL_EXPORT.runtime.renderer.version}`)
+    ) {
+      return {
+        ok: false,
+        reason: "The pipeline engine or renderer carries a stale DAMM version label.",
+      };
+    }
+  } catch (error) {
+    return {
+      ok: false,
+      reason: `The pinned pipeline methodology cannot be read: ${String(error)}`,
+    };
+  }
+  return {
+    ok: true,
+    value: {
+      sourceCommit: checkout.commit,
+      files: expected.map((component) => Object.freeze({ ...component })),
+    },
+  };
+}
+
 function stageOutputHashes(value: unknown): Map<string, string[]> | null {
   const result = new Map<string, string[]>();
   const add = (key: unknown, digest: unknown) => {
@@ -822,10 +1186,15 @@ export function verifyWorkflowCompletion(
     "id" | "countryName" | "iso3" | "outBasename" | "ceilingUsd" | "vendor"
   >,
 ): { ok: true; value: VerifiedWorkflow } | { ok: false; reason: string } {
-  const root = workflowRunDir(run);
+  const root = safeWorkflowRunDir(run, true);
+  if (!root) {
+    return { ok: false, reason: "The workflow workspace is not inside the pipeline tree." };
+  }
   let manifest: Record<string, unknown>;
   try {
-    const parsed = JSON.parse(readFileSync(path.join(root, "workflow-manifest.json"), "utf8"));
+    const manifestPath = containedPath(root, "workflow-manifest.json");
+    if (!manifestPath) throw new Error("manifest path is not a real contained file");
+    const parsed = JSON.parse(readFileSync(manifestPath, "utf8"));
     const candidate = object(parsed);
     if (!candidate) throw new Error("manifest root is not an object");
     manifest = candidate;
@@ -985,6 +1354,7 @@ export function verifyWorkflowCompletion(
   }
 
   let stage8Artifacts: RecordedArtifact[] = [];
+  let assessmentInput: RecordedArtifact | null = null;
   for (const [index, contractStage] of DAR_WORKFLOW.stages.entries()) {
     const stage = object(manifest.stages[index]);
     if (
@@ -1033,7 +1403,24 @@ export function verifyWorkflowCompletion(
         reason: `Canonical stage ${contractStage.ordinal} has an invalid stage manifest.`,
       };
     }
+    if (contractStage.id === "damm_diagnostic") {
+      const engineInputs = valid.filter((artifact) => artifact.key === "engine_input");
+      const matches = engineInputs.length
+        ? engineInputs
+        : valid.filter((artifact) => artifact.key === "damm_observations");
+      if (matches.length !== 1) {
+        return {
+          ok: false,
+          reason: "Canonical stage 1 does not identify one hash-bound assessment input.",
+        };
+      }
+      assessmentInput = matches[0];
+    }
     if (contractStage.id === "export_package") stage8Artifacts = valid;
+  }
+
+  if (!assessmentInput) {
+    return { ok: false, reason: "The completed workflow has no assessment input binding." };
   }
 
   return {
@@ -1041,6 +1428,7 @@ export function verifyWorkflowCompletion(
     value: {
       manifest,
       stage8Artifacts,
+      assessmentInput,
       uploadManifest: {
         path: uploadsRecord.path,
         sha256: uploadsRecord.sha256,
@@ -1238,7 +1626,8 @@ async function archivedWorkflowPackageFiles(
   run: Run,
   completed: VerifiedWorkflow,
 ): Promise<{ index: VerifiedPackageIndex; content: Map<string, Uint8Array> } | null> {
-  const root = workflowRunDir(run);
+  const root = safeWorkflowRunDir(run, true);
+  if (!root) return null;
   const index = verifiedPackageIndex(root, completed);
   if (!index) return null;
   const bundle = verifiedStage8File(root, completed.stage8Artifacts, "complete_bundle");
@@ -1299,16 +1688,23 @@ export function artifactPath(run: Run, key: string): { path: string; artifact: A
   const artifact = artifactsFor(run.pass).find((x) => x.key === key);
   if (!artifact) return null;
   if (run.pass === "workflow") {
-    const root = workflowRunDir(run);
+    const root = safeWorkflowRunDir(run, true);
+    if (!root) return null;
     const verified = verifyWorkflowCompletion(run);
     if (!verified.ok || !artifact.workflowSource) return null;
     const source = artifact.workflowSource;
-    const resolved =
-      source.kind === "root"
-        ? containedPath(root, source.path)
-        : source.kind === "stage8"
-          ? verifiedStage8File(root, verified.value.stage8Artifacts, source.artifactKey)
-          : workflowPackageFile(root, verified.value, source.selector);
+    let resolved: string | null;
+    if (source.kind === "root") resolved = containedPath(root, source.path);
+    else if (source.kind === "stage8") {
+      resolved = verifiedStage8File(root, verified.value.stage8Artifacts, source.artifactKey);
+    } else if (source.kind === "package") {
+      resolved = workflowPackageFile(root, verified.value, source.selector);
+    } else {
+      resolved =
+        source.asset === "run_manifest" || source.asset === "indicator_census"
+          ? null
+          : methodologyAssetPath(source.asset);
+    }
     return resolved ? { artifact, path: resolved } : null;
   }
   return {
@@ -1331,8 +1727,10 @@ export async function collectWorkflowArtifacts(run: Run): Promise<WorkflowArtifa
     throw new Error("Only a canonical workflow publishes an artifact set.");
   const verified = verifyWorkflowCompletion(run);
   if (!verified.ok) throw new Error(verified.reason);
+  const assessmentInputSha256 = verified.value.assessmentInput.sha256;
 
-  const root = workflowRunDir(run);
+  const root = safeWorkflowRunDir(run, true);
+  if (!root) throw new Error("The completed workflow workspace failed containment verification.");
   const archive = await archivedWorkflowPackageFiles(run, verified.value);
   if (!archive) throw new Error("The completed DAR bundle does not match its package manifest.");
 
@@ -1342,7 +1740,9 @@ export async function collectWorkflowArtifacts(run: Run): Promise<WorkflowArtifa
   let total = 0;
 
   function addArtifact(
-    artifact: Omit<WorkflowArtifactWrite, "content"> & { content: Uint8Array },
+    artifact: Omit<WorkflowArtifactWrite, "content" | "assessmentInputSha256"> & {
+      content: Uint8Array;
+    },
     label: string,
     limit = MAX_WORKFLOW_ARTIFACT_BYTES,
   ) {
@@ -1358,11 +1758,80 @@ export async function collectWorkflowArtifacts(run: Run): Promise<WorkflowArtifa
         `The canonical download set exceeds its ${Math.floor(MAX_WORKFLOW_ARTIFACT_TOTAL_BYTES / 1024 / 1024)} MB storage limit.`,
       );
     }
-    records.push(artifact);
+    records.push({
+      ...artifact,
+      assessmentInputSha256,
+    });
   }
 
   for (const link of artifactsFor("workflow")) {
     const source = link.workflowSource;
+    if (source?.kind === "methodology") {
+      let content: Uint8Array;
+      let relativePath: string;
+      let filename: string;
+      if (source.asset === "run_manifest") {
+        content = new TextEncoder().encode(
+          `${JSON.stringify(
+            runMethodologyManifest(run.id, {
+              path: verified.value.assessmentInput.path,
+              sha256: verified.value.assessmentInput.sha256,
+            }),
+            null,
+            2,
+          )}\n`,
+        );
+        relativePath = "methodology/run-methodology.json";
+        filename = "run-methodology.json";
+      } else if (source.asset === "indicator_census") {
+        content = new TextEncoder().encode(
+          `${JSON.stringify(canonicalIndicatorCensus(), null, 2)}\n`,
+        );
+        filename = `${DAMM_MODEL_IDENTITY.modelId}-v${DAMM_MODEL_IDENTITY.version}-indicator-census.json`;
+        relativePath = `methodology/${filename}`;
+        if (
+          createHash("sha256").update(content).digest("hex") !==
+          DAMM_MODEL_EXPORT.runtime.indicator_census.sha256
+        ) {
+          throw new Error("The generated indicator census does not match the model manifest.");
+        }
+      } else {
+        content = new Uint8Array(await readFile(methodologyAssetPath(source.asset)));
+        const modelBasename = `${DAMM_MODEL_IDENTITY.modelId}-v${DAMM_MODEL_IDENTITY.version}`;
+        const names = {
+          export_manifest: "damm-model-export.json",
+          model: `${modelBasename}-model.json`,
+          schema: `${modelBasename}-model.schema.json`,
+        } as const;
+        filename = names[source.asset];
+        relativePath = `methodology/${filename}`;
+        const digest = createHash("sha256").update(content).digest("hex");
+        if (
+          (source.asset === "model" && digest !== DAMM_MODEL_IDENTITY.modelSha256) ||
+          (source.asset === "schema" && digest !== DAMM_MODEL_IDENTITY.schemaSha256)
+        ) {
+          throw new Error(`The app-owned ${source.asset} bytes drifted after startup.`);
+        }
+        if (source.asset === "export_manifest") {
+          const parsed = JSON.parse(new TextDecoder().decode(content));
+          if (JSON.stringify(parsed) !== JSON.stringify(DAMM_MODEL_EXPORT)) {
+            throw new Error("The app-owned model export manifest drifted after startup.");
+          }
+        }
+      }
+      addArtifact(
+        {
+          key: link.key,
+          relativePath,
+          filename,
+          contentType: link.contentType,
+          sha256: createHash("sha256").update(content).digest("hex"),
+          content,
+        },
+        link.label,
+      );
+      continue;
+    }
     if (source?.kind === "package") {
       const matches = archive.index.records.filter((record) =>
         matchesPackageSelector(record, source.selector),

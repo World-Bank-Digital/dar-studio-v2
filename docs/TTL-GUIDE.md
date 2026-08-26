@@ -155,6 +155,12 @@ honest result when the gating fact could not be established.
   canonical workflow. A TTL does not choose providers or supply a key during an
   active run.
 
+The completed download set also carries a methodology manifest, the exact DAMM
+model and schema, and an indicator census generated from that model. Their
+SHA-256 digests bind the diagnostic to the model revision, engine, renderer,
+and Stage 1 assessment input that produced it. The model is still explicitly a
+draft for review; this provenance record does not claim ratification.
+
 Older ladder, manual import, gate-clearing, dossier, and delivery-gauntlet
 instructions are **superseded for normal DAR generation**. They may remain for
 historical comparison or explicitly authorized administration, but they do not

@@ -742,6 +742,6 @@ export const recordDarReview = createServerFn({ method: "POST" })
       : {
           ok: false as const,
           error:
-            "Review is available only for the exact verified Draft DAR package produced after Stage 8.",
+            "Review is available only for the exact published Draft DAR package produced after Stage 8.",
         };
   });

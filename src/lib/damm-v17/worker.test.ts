@@ -1,20 +1,33 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
+import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
-import { lstat, mkdir, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
+import {
+  lstat,
+  mkdir,
+  mkdtemp,
+  readFile,
+  readdir,
+  rename,
+  rm,
+  symlink,
+  writeFile,
+} from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 
 import {
   argsFor,
   artifactPath,
+  CANONICAL_PIPELINE_METHODOLOGY_FILES,
   defaultDeps,
   degradationNotes,
   passFilePaths,
   drain,
   collectWorkflowArtifacts,
   runOne,
+  verifyPipelineMethodology,
   verifyWorkflowCompletion,
   workflowRunDir,
   workflowUploadManifestPath,
@@ -23,6 +36,7 @@ import {
   type RunStore,
   type SpawnedProcess,
   type WorkerDeps,
+  type PipelineMethodologyFile,
 } from "./worker.ts";
 import { defaultVendorFor, type ClaimedRun, type Run } from "./runs.ts";
 import { artifactsFor } from "./worker-artifacts.ts";
@@ -115,6 +129,7 @@ describe("freezing optional uploads at launch", () => {
     const temp = await mkdtemp(path.join(tmpdir(), "damm-workflow-test-"));
     process.env.DAMM_PIPELINE_DIR = temp;
     try {
+      await mkdir(path.join(temp, "gauntlet/loop-1"), { recursive: true });
       const workflow = run({ pass: "workflow", outBasename: "EGY_snapshot" });
       const original = Buffer.from("original pdf bytes");
       const manifestPath = await writeWorkflowUploadSnapshot(workflow, [
@@ -174,12 +189,48 @@ describe("freezing optional uploads at launch", () => {
     const temp = await mkdtemp(path.join(tmpdir(), "damm-workflow-empty-"));
     process.env.DAMM_PIPELINE_DIR = temp;
     try {
+      await mkdir(path.join(temp, "gauntlet/loop-1"), { recursive: true });
       const manifestPath = await writeWorkflowUploadSnapshot(
         run({ pass: "workflow", outBasename: "EGY_empty" }),
         [],
       );
       const manifest = JSON.parse(await readFile(manifestPath, "utf8"));
       assert.deepEqual(manifest.documents, []);
+    } finally {
+      if (before === undefined) delete process.env.DAMM_PIPELINE_DIR;
+      else process.env.DAMM_PIPELINE_DIR = before;
+      await rm(temp, { recursive: true, force: true });
+    }
+  });
+
+  it("refuses symlinked upload directories and the final launch manifest", async () => {
+    const before = process.env.DAMM_PIPELINE_DIR;
+    const temp = await mkdtemp(path.join(tmpdir(), "damm-workflow-input-symlink-"));
+    process.env.DAMM_PIPELINE_DIR = temp;
+    try {
+      const loopRoot = path.join(temp, "gauntlet/loop-1");
+      await mkdir(loopRoot, { recursive: true });
+
+      const directoryRun = run({ pass: "workflow", outBasename: "EGY_input_link" });
+      const directoryRoot = workflowRunDir(directoryRun);
+      const externalDirectory = path.join(temp, "outside-upload-content");
+      await mkdir(path.join(directoryRoot, "inputs"), { recursive: true });
+      await mkdir(externalDirectory);
+      await symlink(externalDirectory, path.join(directoryRoot, "inputs/upload-content"), "dir");
+      await assert.rejects(
+        writeWorkflowUploadSnapshot(directoryRun, []),
+        /real contained directory/i,
+      );
+      assert.deepEqual(await readdir(externalDirectory), []);
+
+      const manifestRun = run({ pass: "workflow", outBasename: "EGY_manifest_link" });
+      const manifestRoot = workflowRunDir(manifestRun);
+      const externalManifest = path.join(temp, "outside-launch-manifest.json");
+      await mkdir(manifestRoot);
+      await writeFile(externalManifest, "external bytes");
+      await symlink(externalManifest, path.join(manifestRoot, "launch-uploads-manifest.json"));
+      await assert.rejects(writeWorkflowUploadSnapshot(manifestRun, []));
+      assert.equal(await readFile(externalManifest, "utf8"), "external bytes");
     } finally {
       if (before === undefined) delete process.env.DAMM_PIPELINE_DIR;
       else process.env.DAMM_PIPELINE_DIR = before;
@@ -661,6 +712,161 @@ async function fileHash(filename: string): Promise<string> {
     .update(await readFile(filename))
     .digest("hex");
 }
+
+async function writePipelineMethodologyFixture(
+  root: string,
+  engineVersion = "1.7",
+): Promise<PipelineMethodologyFile[]> {
+  const contentByRole: Record<PipelineMethodologyFile["role"], Uint8Array> = {
+    model: new Uint8Array(await readFile(new URL("../../data/model_v1_7.json", import.meta.url))),
+    model_schema: new Uint8Array(
+      await readFile(new URL("../../data/model_v1_7.schema.json", import.meta.url)),
+    ),
+    engine: new TextEncoder().encode(`"""DAMM v${engineVersion} engine"""\n`),
+    renderer: new TextEncoder().encode('"""DAMM v1.7 renderer"""\n'),
+  };
+  const expected: PipelineMethodologyFile[] = [];
+  for (const component of CANONICAL_PIPELINE_METHODOLOGY_FILES) {
+    const filename = path.join(root, component.path);
+    await mkdir(path.dirname(filename), { recursive: true });
+    const content = contentByRole[component.role];
+    await writeFile(filename, content);
+    expected.push({
+      ...component,
+      sha256: createHash("sha256").update(content).digest("hex"),
+    });
+  }
+  return expected;
+}
+
+function commitPipelineFixture(root: string): string {
+  const git = (...args: string[]) =>
+    execFileSync("git", args, {
+      cwd: root,
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "pipe"],
+    }).trim();
+  git("init", "-q");
+  git("config", "user.email", "methodology-test@example.invalid");
+  git("config", "user.name", "Methodology Test");
+  git("add", ".");
+  git("commit", "-q", "-m", "fixture");
+  return git("rev-parse", "HEAD");
+}
+
+describe("canonical pipeline methodology preflight", () => {
+  it("accepts one exact model/schema/engine/renderer set and rejects byte drift", async () => {
+    const temp = await mkdtemp(path.join(tmpdir(), "damm-methodology-test-"));
+    try {
+      const expected = await writePipelineMethodologyFixture(temp);
+      const commit = commitPipelineFixture(temp);
+      assert.equal(verifyPipelineMethodology(temp, expected, commit).ok, true);
+      const model = expected.find((component) => component.role === "model")!;
+      await writeFile(path.join(temp, model.path), "{}\n");
+      const rejected = verifyPipelineMethodology(temp, expected, commit);
+      assert.equal(rejected.ok, false);
+      assert.match(rejected.ok ? "" : rejected.reason, /model.*pinned/i);
+    } finally {
+      await rm(temp, { recursive: true, force: true });
+    }
+  });
+
+  it("rejects a stale executable version label even when its new bytes are self-declared", async () => {
+    const temp = await mkdtemp(path.join(tmpdir(), "damm-methodology-label-test-"));
+    try {
+      const expected = await writePipelineMethodologyFixture(temp, "1.6");
+      const commit = commitPipelineFixture(temp);
+      const rejected = verifyPipelineMethodology(temp, expected, commit);
+      assert.equal(rejected.ok, false);
+      assert.match(rejected.ok ? "" : rejected.reason, /stale DAMM version label/i);
+    } finally {
+      await rm(temp, { recursive: true, force: true });
+    }
+  });
+
+  it("rejects coordinator or exporter drift outside the four explicit methodology files", async () => {
+    const temp = await mkdtemp(path.join(tmpdir(), "damm-methodology-source-test-"));
+    try {
+      const expected = await writePipelineMethodologyFixture(temp);
+      const coordinator = path.join(temp, "gauntlet/loop-1/research_pipeline/run_workflow.py");
+      await mkdir(path.dirname(coordinator), { recursive: true });
+      await writeFile(coordinator, '"""canonical coordinator"""\n');
+      const commit = commitPipelineFixture(temp);
+      assert.equal(verifyPipelineMethodology(temp, expected, commit).ok, true);
+
+      // Canonical stages write untracked JSON/HTML work products beside the scripts.
+      // Those must not invalidate a clean tracked executable closure.
+      await writeFile(path.join(temp, "gauntlet/loop-1/EGY_stage-output.json"), "{}\n");
+      await writeFile(path.join(temp, "gauntlet/loop-1/EGY_stage-output.html"), "<p>ok</p>\n");
+      assert.equal(verifyPipelineMethodology(temp, expected, commit).ok, true);
+
+      const rogueHandler = path.join(
+        temp,
+        "gauntlet/loop-1/research_pipeline/rogue_handler.py",
+      );
+      await writeFile(rogueHandler, '"""untracked executable"""\n');
+      const rogueRejected = verifyPipelineMethodology(temp, expected, commit);
+      assert.equal(rogueRejected.ok, false);
+      assert.match(rogueRejected.ok ? "" : rogueRejected.reason, /clean pinned source revision/i);
+      await rm(rogueHandler);
+
+      await writeFile(coordinator, '"""stale coordinator"""\n');
+      const rejected = verifyPipelineMethodology(temp, expected, commit);
+      assert.equal(rejected.ok, false);
+      assert.match(rejected.ok ? "" : rejected.reason, /clean pinned source revision/i);
+    } finally {
+      await rm(temp, { recursive: true, force: true });
+    }
+  });
+
+  it("rejects ignored Python source and bytecode in the executable source tree", async () => {
+    const temp = await mkdtemp(path.join(tmpdir(), "damm-methodology-ignored-source-test-"));
+    try {
+      const expected = await writePipelineMethodologyFixture(temp);
+      const sourceDir = path.join(temp, "gauntlet/loop-1/research_pipeline");
+      await mkdir(sourceDir, { recursive: true });
+      await writeFile(path.join(sourceDir, "run_workflow.py"), '"""canonical coordinator"""\n');
+      await writeFile(path.join(temp, ".gitignore"), "*.ignored.py\n__pycache__/\n");
+      const commit = commitPipelineFixture(temp);
+      assert.equal(verifyPipelineMethodology(temp, expected, commit).ok, true);
+
+      const ignoredSource = path.join(sourceDir, "rogue_handler.ignored.py");
+      await writeFile(ignoredSource, '"""ignored executable source"""\n');
+      const sourceRejected = verifyPipelineMethodology(temp, expected, commit);
+      assert.equal(sourceRejected.ok, false);
+      assert.match(
+        sourceRejected.ok ? "" : sourceRejected.reason,
+        /clean pinned source revision/i,
+      );
+      await rm(ignoredSource);
+
+      const externalPackage = path.join(temp, "ignored-external-package");
+      await mkdir(externalPackage);
+      await writeFile(path.join(externalPackage, "__init__.py"), 'raise RuntimeError("rogue")\n');
+      const packageLink = path.join(sourceDir, "anthropic");
+      await symlink(externalPackage, packageLink, "dir");
+      const packageRejected = verifyPipelineMethodology(temp, expected, commit);
+      assert.equal(packageRejected.ok, false);
+      assert.match(
+        packageRejected.ok ? "" : packageRejected.reason,
+        /clean pinned source revision/i,
+      );
+      await rm(packageLink);
+
+      const bytecode = path.join(sourceDir, "__pycache__/rogue_handler.cpython-312.pyc");
+      await mkdir(path.dirname(bytecode), { recursive: true });
+      await writeFile(bytecode, new Uint8Array([0xa7, 0x0d, 0x0d, 0x0a]));
+      const bytecodeRejected = verifyPipelineMethodology(temp, expected, commit);
+      assert.equal(bytecodeRejected.ok, false);
+      assert.match(
+        bytecodeRejected.ok ? "" : bytecodeRejected.reason,
+        /clean pinned source revision/i,
+      );
+    } finally {
+      await rm(temp, { recursive: true, force: true });
+    }
+  });
+});
 
 async function directoryHash(directory: string): Promise<string> {
   const files: string[] = [];
@@ -1226,6 +1432,95 @@ describe("where a pass's output lives", () => {
     }
   });
 
+  it("rejects artifacts reached through an intermediate directory symlink outside the workspace", async () => {
+    const before = process.env.DAMM_PIPELINE_DIR;
+    const temp = await mkdtemp(path.join(tmpdir(), "damm-artifacts-symlink-escape-"));
+    process.env.DAMM_PIPELINE_DIR = temp;
+    try {
+      const workflow = run({ pass: "workflow", outBasename: "EGY_symlink_escape" });
+      const fixture = await writeCompletedWorkflow(workflow, [
+        {
+          path: "narratives/07_draft_dar/draft_dar_report.pdf",
+          category: "narrative",
+          stage_id: "draft_dar",
+          artifact_id: "draft_dar_report",
+          content: "original",
+        },
+      ]);
+      assert.equal(verifyWorkflowCompletion(workflow).ok, true);
+
+      const internalGroup = path.join(
+        fixture.root,
+        "stages/08-export_package/artifacts/narrative_exports",
+      );
+      const externalGroup = path.join(temp, "outside-workflow-narrative-exports");
+      await rename(internalGroup, externalGroup);
+      await symlink(externalGroup, internalGroup, "dir");
+
+      const rejected = verifyWorkflowCompletion(workflow);
+      assert.equal(rejected.ok, false);
+      assert.equal(artifactPath(workflow, "draft-pdf"), null);
+    } finally {
+      if (before === undefined) delete process.env.DAMM_PIPELINE_DIR;
+      else process.env.DAMM_PIPELINE_DIR = before;
+      await rm(temp, { recursive: true, force: true });
+    }
+  });
+
+  it("rejects a workflow workspace root symlink before writes and completed reads", async () => {
+    const before = process.env.DAMM_PIPELINE_DIR;
+    const temp = await mkdtemp(path.join(tmpdir(), "damm-workspace-root-symlink-"));
+    process.env.DAMM_PIPELINE_DIR = temp;
+    try {
+      const loopRoot = path.join(temp, "gauntlet/loop-1");
+      await mkdir(loopRoot, { recursive: true });
+      const external = path.join(temp, "outside-loop-root");
+      await mkdir(external);
+
+      const unwritten = run({ pass: "workflow", outBasename: "EGY_unwritten_symlink" });
+      await symlink(external, workflowRunDir(unwritten), "dir");
+      await assert.rejects(
+        writeWorkflowUploadSnapshot(unwritten, []),
+        /workflow workspace/i,
+      );
+
+      const completed = run({ pass: "workflow", outBasename: "EGY_completed_symlink" });
+      const fixture = await writeCompletedWorkflow(completed, completePackageFixtureFiles());
+      assert.equal(verifyWorkflowCompletion(completed).ok, true);
+      const relocated = path.join(temp, "outside-loop-completed");
+      await rename(fixture.root, relocated);
+      await symlink(relocated, fixture.root, "dir");
+      assert.equal(verifyWorkflowCompletion(completed).ok, false);
+      assert.equal(artifactPath(completed, "bundle"), null);
+    } finally {
+      if (before === undefined) delete process.env.DAMM_PIPELINE_DIR;
+      else process.env.DAMM_PIPELINE_DIR = before;
+      await rm(temp, { recursive: true, force: true });
+    }
+  });
+
+  it("rejects a symlinked root workflow manifest at the point of use", async () => {
+    const before = process.env.DAMM_PIPELINE_DIR;
+    const temp = await mkdtemp(path.join(tmpdir(), "damm-root-manifest-symlink-"));
+    process.env.DAMM_PIPELINE_DIR = temp;
+    try {
+      const workflow = run({ pass: "workflow", outBasename: "EGY_manifest_symlink" });
+      const fixture = await writeCompletedWorkflow(workflow, completePackageFixtureFiles());
+      assert.equal(verifyWorkflowCompletion(workflow).ok, true);
+
+      const manifestPath = path.join(fixture.root, "workflow-manifest.json");
+      const externalManifest = path.join(temp, "outside-workflow-manifest.json");
+      await rename(manifestPath, externalManifest);
+      await symlink(externalManifest, manifestPath);
+      assert.equal(verifyWorkflowCompletion(workflow).ok, false);
+      assert.equal(artifactPath(workflow, "bundle"), null);
+    } finally {
+      if (before === undefined) delete process.env.DAMM_PIPELINE_DIR;
+      else process.env.DAMM_PIPELINE_DIR = before;
+      await rm(temp, { recursive: true, force: true });
+    }
+  });
+
   it("binds the immutable ceiling and vendor to the queued database run", async () => {
     const before = process.env.DAMM_PIPELINE_DIR;
     const temp = await mkdtemp(path.join(tmpdir(), "damm-workflow-identity-"));
@@ -1295,6 +1590,24 @@ describe("where a pass's output lives", () => {
       const published = await collectWorkflowArtifacts(workflow);
       assert.ok(published.some((artifact) => artifact.key === "bundle"));
       assert.ok(published.some((artifact) => artifact.relativePath === "inputs/uploads-manifest.json"));
+      assert.ok(published.some((artifact) => artifact.key === "canonical-model"));
+      assert.ok(published.some((artifact) => artifact.key === "canonical-model-schema"));
+      const census = published.find((artifact) => artifact.key === "canonical-indicator-census");
+      assert.ok(census);
+      assert.equal(JSON.parse(new TextDecoder().decode(census.content)).indicators.length, 57);
+      assert.ok(published.some((artifact) => artifact.key === "model-export-manifest"));
+      const methodology = published.find((artifact) => artifact.key === "methodology-manifest");
+      assert.ok(methodology);
+      const methodologyPayload = JSON.parse(new TextDecoder().decode(methodology.content));
+      assert.equal(methodologyPayload.schema_version, "damm.run-methodology/v1");
+      assert.equal(methodologyPayload.run_id, workflow.id);
+      assert.equal(methodologyPayload.model.version, "1.7");
+      assert.equal(methodologyPayload.model.revision, 2);
+      assert.equal(methodologyPayload.model.ratified, false);
+      assert.match(methodologyPayload.indicator_census.sha256, /^[a-f0-9]{64}$/);
+      assert.equal(methodologyPayload.engine.version, "1.7");
+      assert.equal(methodologyPayload.renderer.version, "1.7");
+      assert.equal(methodologyPayload.assessment_input.sha256, methodology.assessmentInputSha256);
 
       const JSZip = (await import("jszip")).default;
       const zip = await JSZip.loadAsync(await readFile(fixture.bundle));

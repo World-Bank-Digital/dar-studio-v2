@@ -6,8 +6,21 @@ import { tanstackStart } from "@tanstack/react-start/plugin/vite";
 import viteReact from "@vitejs/plugin-react";
 import tailwindcss from "@tailwindcss/vite";
 import { nitro } from "nitro/vite";
+// @ts-expect-error JS integrity gate alongside the TS vite config
+import { verifyDammMethodologyAssets } from "./scripts/damm-methodology-integrity.mjs";
 // @ts-expect-error JS plugin alongside the TS vite config
 import { grokPwaPlugin } from "./scripts/grok-pwa-plugin.mjs";
+
+/** Fail every app build if its canonical model-derived assets have drifted. */
+function dammMethodologyIntegrityPlugin(): Plugin {
+  return {
+    name: "damm:methodology-integrity",
+    apply: "build",
+    buildStart() {
+      verifyDammMethodologyAssets(process.cwd());
+    },
+  };
+}
 
 /**
  * Finish PGLite bootstrap during dev-server setup (before traffic). Vite awaits
@@ -183,6 +196,7 @@ export default defineConfig(({ command }) => ({
   },
   resolve: { tsconfigPaths: true },
   plugins: [
+    dammMethodologyIntegrityPlugin(),
     pgliteBootstrapPlugin(),
     dammWorkerPlugin(),
     pgliteAssetsPlugin(),

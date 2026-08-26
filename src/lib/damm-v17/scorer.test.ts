@@ -105,6 +105,17 @@ describe("scorer parity with the assessment pipeline", () => {
     assert.equal(a1.margin, 0, "every row at level 3 must read +0.00, not an edge value");
   });
 
+  it("derives band levels from model order instead of stale presentation labels", () => {
+    const renamedModel = structuredClone(model);
+    renamedModel.bands = renamedModel.bands.map((band, index) => ({
+      ...band,
+      name: `Level ${index + 1}`,
+    }));
+    const a1 = new Scorer(renamedModel).run(egyptObs as Observations).pillars.A1;
+    assert.equal(a1.band, "Level 3");
+    assert.equal(a1.margin, 0, "renaming a canonical band must not change its arithmetic");
+  });
+
   it("ruling 13.4: the consent prerequisite binds more than the AGI column", () => {
     // Egypt records 7.12 as Absent. Under the old AGI-only binding that blocked one
     // column; it now blocks every column drawing on personal or farm-level data.

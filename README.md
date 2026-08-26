@@ -57,6 +57,33 @@ It also produces a ZIP bundle and SHA-256 manifest. When files were uploaded
 before launch, the bundle includes each frozen original file, its verified text
 extraction, and its provenance envelope.
 
+### Methodology identity
+
+DAR Studio executes one content-addressed DAMM v1.7 methodology revision. The
+[model export manifest](src/data/damm_model_manifest.json) pins the draft model,
+schema, upstream source commit, engine, and renderer by version and SHA-256. The
+indicator census is generated from that model rather than maintained as a
+second editable inventory.
+
+Launch stores this identity atomically beside the immutable uploads. Before the
+worker starts—and again before it publishes—it requires the configured DAMM
+repository to be at the exact clean pinned commit and verifies its model, schema,
+engine, and renderer bytes. App builds separately fail if the shipped model,
+generated census, mappings, or version labels drift from the export manifest.
+Every published artifact row is stamped with the model revision and
+assessment-input hash. Published rows are immutable; current-run bytes are
+verified before publication, while historical packages are SHA-256 checked once
+before they can appear in Documents or review. The completed download set
+includes the model, schema, generated census, export manifest, and a per-run
+methodology manifest. The model remains honestly labelled `draft for review`
+and `ratified: false`; provenance does not imply ratification.
+
+On upgrade, migration `0011` stops before changing the schema if an older
+workflow is still active. Allow that workflow to finish under the prior release,
+then retry the deployment; no in-flight run is failed or relaunched. A deferred
+database invariant prevents a still-running old app process from committing an
+unattributed workflow during a rolling deployment.
+
 ## Running locally
 
 ```bash
@@ -79,10 +106,15 @@ The canonical worker is a separate long-running process:
 DATABASE_URL=... DAMM_PIPELINE_DIR=/path/to/DAMM npm run worker
 ```
 
-It must use the same database as the web app and a DAMM checkout containing the
-matching workflow contract. The worker resumes from durable checkpoints and
-persists verified artifacts in the database, so completion does not depend on a
-particular worker's local filesystem.
+It must use the same database as the web app and a clean Git checkout of the
+manifest-pinned DAMM commit containing the matching workflow contract. Git
+metadata is required so the coordinator and complete tracked stage/export
+dependency closure can be attested, not merely the four explicitly hashed
+methodology files. The executable tree must also contain no ignored or
+untracked Python source, bytecode, or native modules; the worker disables
+bytecode generation for its own runs. The worker resumes from durable
+checkpoints and persists verified artifacts in the database, so completion does
+not depend on a particular worker's local filesystem.
 
 ## Verification
 

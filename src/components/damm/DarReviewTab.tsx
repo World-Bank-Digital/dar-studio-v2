@@ -15,6 +15,7 @@ interface ReviewState {
     artifactSetId: string;
     bundleSha256: string;
     completedAt: string;
+    methodologyStatus: "canonical" | "legacy_unverified";
   } | null;
   reviews: Array<{
     id: string;
@@ -23,6 +24,7 @@ interface ReviewState {
     outcome: ReviewOutcome;
     notes: string;
     reviewedAt: string;
+    methodologyStatus: "canonical" | "legacy_unverified";
   }>;
 }
 
@@ -104,6 +106,12 @@ export function DarReviewTab({ countryId }: { countryId: string }) {
               Stage 8 completed {new Date(state.target.completedAt).toLocaleString()}. This review
               is permanently associated with bundle SHA-256 {state.target.bundleSha256.slice(0, 16)}…
             </p>
+            {state.target.methodologyStatus === "legacy_unverified" ? (
+              <p className="mt-2 text-xs font-medium text-amber-800" role="status">
+                Legacy package: this run predates methodology identity recording. Downloads are
+                SHA-256 checked and marked LEGACY-UNVERIFIED.
+              </p>
+            ) : null}
           </div>
         </div>
         <fieldset className="mt-4 flex flex-wrap gap-4 text-sm">
@@ -161,6 +169,11 @@ export function DarReviewTab({ countryId }: { countryId: string }) {
                     {new Date(review.reviewedAt).toLocaleString()}
                   </span>
                 </div>
+                {review.methodologyStatus === "legacy_unverified" ? (
+                  <p className="mt-1 text-xs font-medium text-amber-800">
+                    Legacy methodology identity was not recorded.
+                  </p>
+                ) : null}
                 {review.notes ? <p className="mt-2 whitespace-pre-wrap text-muted">{review.notes}</p> : null}
               </li>
             ))}

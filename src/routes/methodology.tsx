@@ -1,7 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { AppShell } from "@/components/AppShell";
 import { Card } from "@/components/ui/card";
-import { model, disclaimer } from "@/lib/damm-v17/model";
+import { model, disclaimer, pillarIds } from "@/lib/damm-v17/model";
 
 export const Route = createFileRoute("/methodology")({ component: Methodology });
 
@@ -19,7 +19,7 @@ function Methodology() {
       </p>
       <h1 className="mt-1 font-display text-3xl font-semibold">{model.title}</h1>
       <p className="mt-3 max-w-3xl text-muted">
-        {model.indicators.length} indicators across seven pillars, each scored from a recorded value with its source,
+        {model.indicators.length} indicators across {pillarIds.length} pillars, each scored from a recorded value with its source,
         tier and year. Evidence classes, levels, bands, prerequisites and the use-case readiness matrix are derived from
         what was recorded — never chosen, never weighted by opinion.
       </p>

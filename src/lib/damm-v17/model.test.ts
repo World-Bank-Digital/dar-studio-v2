@@ -1,7 +1,17 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
+import { readFile } from "node:fs/promises";
 
 import {
+  DAMM_MODEL_EXPORT,
+  DAMM_MODEL_FILENAME,
+  DAMM_MODEL_IDENTITY,
+  DAMM_MODEL_SCHEMA_FILENAME,
+  DAMM_MODEL_SCHEMA_SHA256,
+  DAMM_MODEL_SHA256,
+  DAMM_MODEL_SOURCE_SHA256,
+  DAMM_RUNTIME_IDENTITY,
   chapterMayCite,
   darChapter,
   model,
@@ -13,8 +23,70 @@ import {
   prerequisites,
   useCaseIds,
 } from "./model.ts";
+import { canonicalIndicatorCensus } from "./methodology.ts";
+
+async function fileSha256(filename: string): Promise<string> {
+  const bytes = await readFile(new URL(`../../data/${filename}`, import.meta.url));
+  return createHash("sha256").update(bytes).digest("hex");
+}
 
 describe("model file contract", () => {
+  it("is the exact pinned DAMM export named by its cryptographic manifest", async () => {
+    assert.equal(await fileSha256(DAMM_MODEL_FILENAME), DAMM_MODEL_SHA256);
+    assert.equal(await fileSha256(DAMM_MODEL_SCHEMA_FILENAME), DAMM_MODEL_SCHEMA_SHA256);
+    assert.equal(DAMM_MODEL_SOURCE_SHA256[DAMM_MODEL_EXPORT.source.model_path], DAMM_MODEL_SHA256);
+    assert.equal(
+      DAMM_MODEL_SOURCE_SHA256[DAMM_MODEL_EXPORT.source.schema_path],
+      "20abd0d06355d7426610158cc5c799b17229e00defff0ebb35044c18c946df93",
+    );
+  });
+
+  it("binds its draft model identity to one immutable upstream revision", () => {
+    assert.deepEqual(DAMM_MODEL_IDENTITY, {
+      modelId: model.model,
+      version: model.version,
+      revision: model.revision,
+      status: model.status,
+      ratified: model.ratified,
+      sourceRepository: "https://github.com/World-Bank-Digital/DAMM",
+      sourceCommit: "141ebd4db7fb8ebb0d21ed64ead6aef24a7d7027",
+      sourceModelPath: "model/DAMM-v1.7-model.json",
+      sourceSchemaPath: "model/DAMM-v1.7-model.schema.json",
+      modelSha256: DAMM_MODEL_SHA256,
+      schemaSha256: DAMM_MODEL_SCHEMA_SHA256,
+    });
+    assert.equal(Object.isFrozen(DAMM_MODEL_IDENTITY), true);
+    assert.equal(DAMM_MODEL_EXPORT.model_status, "draft for review");
+    assert.equal(DAMM_MODEL_EXPORT.ratified, false);
+  });
+
+  it("pins the indicator census, engine, and renderer used by every build", () => {
+    assert.deepEqual(DAMM_RUNTIME_IDENTITY, {
+      indicator_census: {
+        revision: "DAMM-v1.7-r2",
+        path: "generated:model_v1_7.json#indicators",
+        sha256: "f42b21112ae383aabb40c71331ee4c0071f6b5aed99aba747a7087e3db3eaac1",
+      },
+      engine: {
+        version: "1.7",
+        path: model.generated_from,
+        sha256: "8a133af8653e9933c14b09b2897aa89be4dedc18446d9395f021a12183e27062",
+      },
+      renderer: {
+        version: "1.7",
+        path: "gauntlet/loop-1/render_v17.py",
+        sha256: "98f2a52e0be7f54ff38095db86a3f01525527661a4e6993f7c2ee0da1d2cb9c3",
+      },
+    });
+    assert.equal(Object.isFrozen(DAMM_RUNTIME_IDENTITY), true);
+    assert.equal(Object.isFrozen(DAMM_RUNTIME_IDENTITY.engine), true);
+    const censusBytes = `${JSON.stringify(canonicalIndicatorCensus(), null, 2)}\n`;
+    assert.equal(
+      createHash("sha256").update(censusBytes).digest("hex"),
+      DAMM_RUNTIME_IDENTITY.indicator_census.sha256,
+    );
+  });
+
   it("is v1.7, versioned by revision, and generated from the pipeline engine", () => {
     assert.equal(model.version, "1.7");
     assert.ok(model.revision >= 1);

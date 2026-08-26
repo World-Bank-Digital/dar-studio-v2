@@ -54,10 +54,10 @@ function Landing() {
       </h1>
       <p className="mt-4 text-lg text-muted">
         DAR Studio carries the Digital Agriculture Maturity Model as its instrument:{" "}
-        {model.indicators.length} indicators across seven pillars, scored from recorded evidence.
-        Add optional source documents before launch, then one autonomous workflow researches,
-        analyses, and packages a complete Draft DAR. Human review begins only after all eight stages
-        finish.
+        {model.indicators.length} indicators across {pillarIds.length} pillars, scored from recorded
+        evidence. Add optional source documents before launch, then one autonomous workflow
+        researches, analyses, and packages a complete Draft DAR. Human review begins only after all
+        eight stages finish.
       </p>
       <div className="mt-6 flex flex-wrap gap-3">
         <Button asChild>

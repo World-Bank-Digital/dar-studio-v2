@@ -82,6 +82,31 @@ instructions. Worker completion is accepted only when the workflow identity,
 contract hash, immutable input snapshot, stage set, artifact hashes, and ZIP
 contents all match the database run.
 
+The methodology has the same fail-closed boundary. A workflow run freezes the
+model id/version/revision/status, app and upstream model/schema digests, upstream
+commit, generated census revision/digest, engine version/digest, and renderer
+version/digest. App builds verify the model-derived assets. The worker checks an
+exact clean source commit plus the pipeline-owned model, schema, engine, and
+renderer bytes before execution and before publication. Ignored or untracked
+Python source, bytecode, and native modules in the executable tree are rejected;
+worker launches disable bytecode generation. Artifact sets must carry one model
+identity and one Stage 1 assessment-input digest. The app-generated
+census, scorer band order, pillar count, and downloadable provenance files all
+derive from the pinned model; do not reintroduce separate threshold, mapping,
+census, or version-label constants.
+
+Worker staging verifies current-run bytes before publication, and publication
+makes the selected artifact rows immutable. Pre-methodology historical rows are
+explicitly legacy/unverified and receive a one-time SHA-256 byte check before
+they can appear in Documents or become a review target; failed checks remain
+hidden. Downloads always recheck the requested bytes before serving them.
+
+Migration `0011` refuses to install while any pre-methodology workflow is still
+active. Let the existing release finish those runs, then retry deployment; the
+migration must never terminate or relaunch an in-flight workflow. Its deferred
+database invariant also rejects old-version launches during a rolling deployment
+unless the launch transaction contains the required methodology snapshot.
+
 Stage 8 must provide:
 
 - narrative artifacts in Markdown, DOCX, PDF, and HTML;

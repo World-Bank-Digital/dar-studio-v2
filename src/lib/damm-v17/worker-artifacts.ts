@@ -23,6 +23,10 @@ export interface WorkflowPackageSelector {
 export type WorkflowArtifactSource =
   | { kind: "root"; path: "workflow-manifest.json" | "workflow-events.jsonl" }
   | { kind: "stage8"; artifactKey: "workflow_manifest" | "complete_bundle" }
+  | {
+      kind: "methodology";
+      asset: "run_manifest" | "export_manifest" | "model" | "schema" | "indicator_census";
+    }
   | { kind: "package"; selector: WorkflowPackageSelector };
 
 export interface ArtifactLink {
@@ -163,6 +167,36 @@ const packagedWorkflowLinks: ArtifactLink[] = [
 if (!draftStage) throw new Error("Canonical workflow has no Draft DAR stage");
 
 const WORKFLOW_ARTIFACTS: ArtifactLink[] = [
+  {
+    key: "methodology-manifest",
+    label: "Run methodology manifest",
+    extension: "json",
+    workflowSource: { kind: "methodology", asset: "run_manifest" },
+  },
+  {
+    key: "model-export-manifest",
+    label: "Canonical DAMM model export manifest",
+    extension: "json",
+    workflowSource: { kind: "methodology", asset: "export_manifest" },
+  },
+  {
+    key: "canonical-model",
+    label: "Canonical DAMM model",
+    extension: "json",
+    workflowSource: { kind: "methodology", asset: "model" },
+  },
+  {
+    key: "canonical-model-schema",
+    label: "Canonical DAMM model schema",
+    extension: "json",
+    workflowSource: { kind: "methodology", asset: "schema" },
+  },
+  {
+    key: "canonical-indicator-census",
+    label: "Canonical DAMM indicator census",
+    extension: "json",
+    workflowSource: { kind: "methodology", asset: "indicator_census" },
+  },
   {
     key: "manifest",
     label: "Workflow manifest",

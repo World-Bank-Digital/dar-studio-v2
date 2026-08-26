@@ -55,22 +55,17 @@ type Row = {
   layer: LayerId;
 };
 
-/** The level each band is named for (ruling 13.1). */
-const BAND_LEVEL: Record<string, number> = {
-  Nascent: 1,
-  Emerging: 2,
-  Established: 3,
-  Advanced: 4,
-  Transformative: 5,
-};
-
 export class Scorer {
   private readonly m: DammModelV17;
   private readonly ind: Map<string, IndicatorDef>;
+  private readonly bandLevel: Map<string, number>;
 
   constructor(m: DammModelV17) {
     this.m = m;
     this.ind = new Map(m.indicators.map((i) => [i.id, i]));
+    // Ruling 13.1 defines each band by its ordered position in the model. Labels
+    // are presentation data and must never become a second scoring configuration.
+    this.bandLevel = new Map(m.bands.map((band, index) => [band.name, index + 1]));
   }
 
   /** Derived from what was recorded, never chosen. */
@@ -135,6 +130,7 @@ export class Scorer {
       const judgedRated = rs.filter((v) => v.cls === "Judged" && v.level !== null).length;
       const mean = lv.length ? r2(lv.reduce((a, b) => a + b, 0) / lv.length) : null;
       const bandName = mean !== null ? this.band(mean) : "Not rated";
+      const bandLevel = this.bandLevel.get(bandName);
       pillars[p] = {
         n: rs.length,
         rated,
@@ -144,7 +140,7 @@ export class Scorer {
         // Ruling 13.1: the signed distance from the level the band is named for. Measured
         // from the level, not the interval midpoint: the end bands are half-width, so a
         // pillar with every row at level 1 would otherwise read -0.25 instead of +0.00.
-        margin: mean !== null && bandName in BAND_LEVEL ? r2(mean - BAND_LEVEL[bandName]) : null,
+        margin: mean !== null && bandLevel !== undefined ? r2(mean - bandLevel) : null,
         weak: judgedRated + comp.Gap + held > rated - judgedRated,
         comp,
         stale: rs.filter((v) => v.stale).length,

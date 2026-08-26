@@ -1,10 +1,10 @@
 /**
  * DAMM v1.7 — validated model loader.
  *
- * The model file is generated from the assessment pipeline's engine (the source of
- * truth, `generated_from` names it) and validated here against the same contract as
- * `src/data/model_v1_7.schema.json`. Validation runs once at module load: a model
- * file that fails the contract is a build error, not a runtime surprise.
+ * The model file is DAR Studio's canonical executable methodology revision. Its
+ * `generated_from` field records the upstream engine lineage, while the export manifest
+ * pins both sides by digest. It is validated here against the same contract as
+ * `src/data/model_v1_7.schema.json`; a mismatch is a build error, not a runtime surprise.
  *
  * Twelve design decisions are open in the model's `open_decisions`. Every value they
  * can change is data in the file — band edges, thresholds, prerequisite mappings,
@@ -14,6 +14,7 @@
  * `ratification` field) rather than presenting it as settled.
  */
 import { z } from "zod";
+import exportManifestJson from "../../data/damm_model_manifest.json" with { type: "json" };
 import raw from "../../data/model_v1_7.json" with { type: "json" };
 import type {
   DammModelV17,
@@ -25,6 +26,87 @@ import type {
 } from "./types.ts";
 
 const LAYERS = ["Foundation", "Enablers", "Transformation", "Outcomes"] as const;
+
+export const DAMM_MODEL_FILENAME = "model_v1_7.json";
+export const DAMM_MODEL_SCHEMA_FILENAME = "model_v1_7.schema.json";
+
+const sha256Schema = z.string().regex(/^[a-f0-9]{64}$/);
+const modelExportSchema = z
+  .object({
+    schema_version: z.literal("damm.model-export/v1"),
+    model_id: z.string().min(1),
+    model_version: z.string().regex(/^\d+\.\d+$/),
+    model_revision: z.number().int().min(1),
+    model_status: z.string().min(1),
+    ratified: z.boolean(),
+    source: z
+      .object({
+        repository: z.string().url(),
+        commit: z.string().regex(/^[a-f0-9]{40}$/),
+        model_path: z.string().min(1),
+        schema_path: z.string().min(1),
+      })
+      .strict(),
+    sha256: z
+      .object({
+        [DAMM_MODEL_FILENAME]: sha256Schema,
+        [DAMM_MODEL_SCHEMA_FILENAME]: sha256Schema,
+      })
+      .strict(),
+    source_sha256: z.record(z.string().min(1), sha256Schema),
+    runtime: z
+      .object({
+        indicator_census: z
+          .object({
+            revision: z.string().min(1),
+            path: z.string().min(1),
+            sha256: sha256Schema,
+          })
+          .strict(),
+        engine: z
+          .object({
+            version: z.string().min(1),
+            path: z.string().min(1),
+            sha256: sha256Schema,
+          })
+          .strict(),
+        renderer: z
+          .object({
+            version: z.string().min(1),
+            path: z.string().min(1),
+            sha256: sha256Schema,
+          })
+          .strict(),
+      })
+      .strict(),
+  })
+  .strict();
+
+const parsedModelExport = modelExportSchema.parse(exportManifestJson);
+
+/** The provenance manifest for the exact model and schema bytes shipped by this app. */
+export const DAMM_MODEL_EXPORT = Object.freeze({
+  ...parsedModelExport,
+  source: Object.freeze({ ...parsedModelExport.source }),
+  sha256: Object.freeze({ ...parsedModelExport.sha256 }),
+  source_sha256: Object.freeze({ ...parsedModelExport.source_sha256 }),
+  runtime: Object.freeze({
+    indicator_census: Object.freeze({ ...parsedModelExport.runtime.indicator_census }),
+    engine: Object.freeze({ ...parsedModelExport.runtime.engine }),
+    renderer: Object.freeze({ ...parsedModelExport.runtime.renderer }),
+  }),
+});
+
+export const DAMM_MODEL_SHA256 = DAMM_MODEL_EXPORT.sha256[DAMM_MODEL_FILENAME];
+export const DAMM_MODEL_SCHEMA_SHA256 = DAMM_MODEL_EXPORT.sha256[DAMM_MODEL_SCHEMA_FILENAME];
+export const DAMM_MODEL_SOURCE_SHA256 = DAMM_MODEL_EXPORT.source_sha256;
+export const DAMM_RUNTIME_IDENTITY = DAMM_MODEL_EXPORT.runtime;
+
+function requiredSourceDigest(path: string): string {
+  const digest = DAMM_MODEL_SOURCE_SHA256[path];
+  if (!digest) throw new Error(`DAMM model export manifest has no digest for ${path}`);
+  return digest;
+}
 
 const indicatorSchema = z.object({
   id: z.string().regex(/^\d+\.\d+$/),
@@ -222,6 +304,42 @@ const modelSchema = z
   });
 
 export const model: DammModelV17 = modelSchema.parse(raw) as DammModelV17;
+
+if (
+  DAMM_MODEL_EXPORT.model_id !== model.model ||
+  DAMM_MODEL_EXPORT.model_version !== model.version ||
+  DAMM_MODEL_EXPORT.model_revision !== model.revision ||
+  DAMM_MODEL_EXPORT.model_status !== model.status ||
+  DAMM_MODEL_EXPORT.ratified !== model.ratified ||
+  requiredSourceDigest(DAMM_MODEL_EXPORT.source.model_path) !== DAMM_MODEL_SHA256 ||
+  !DAMM_MODEL_SOURCE_SHA256[DAMM_MODEL_EXPORT.source.schema_path] ||
+  DAMM_RUNTIME_IDENTITY.engine.version !== model.version ||
+  DAMM_RUNTIME_IDENTITY.renderer.version !== model.version ||
+  DAMM_RUNTIME_IDENTITY.indicator_census.revision !== `DAMM-v${model.version}-r${model.revision}` ||
+  DAMM_RUNTIME_IDENTITY.indicator_census.path !== `generated:${DAMM_MODEL_FILENAME}#indicators` ||
+  DAMM_RUNTIME_IDENTITY.engine.path !== model.generated_from
+) {
+  throw new Error("DAMM model export manifest does not match the executable model");
+}
+
+/**
+ * Stable identity stored beside every workflow run and artifact set. The status and
+ * ratification flag are part of the identity so a draft model cannot be relabelled as
+ * settled downstream without changing the manifest.
+ */
+export const DAMM_MODEL_IDENTITY = Object.freeze({
+  modelId: DAMM_MODEL_EXPORT.model_id,
+  version: DAMM_MODEL_EXPORT.model_version,
+  revision: DAMM_MODEL_EXPORT.model_revision,
+  status: DAMM_MODEL_EXPORT.model_status,
+  ratified: DAMM_MODEL_EXPORT.ratified,
+  sourceRepository: DAMM_MODEL_EXPORT.source.repository,
+  sourceCommit: DAMM_MODEL_EXPORT.source.commit,
+  sourceModelPath: DAMM_MODEL_EXPORT.source.model_path,
+  sourceSchemaPath: DAMM_MODEL_EXPORT.source.schema_path,
+  modelSha256: DAMM_MODEL_SHA256,
+  schemaSha256: DAMM_MODEL_SCHEMA_SHA256,
+});
 
 const byId = new Map(model.indicators.map((i) => [i.id, i]));
 
