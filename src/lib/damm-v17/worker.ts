@@ -1,5 +1,5 @@
 /**
- * The durable worker (design decision G1).
+ * The durable worker.
  *
  * It claims a run, spawns the pipeline, follows it, and records where it got to. Legacy
  * passes use `--resume` and checkpoint every row. The canonical coordinator owns its own
@@ -201,9 +201,7 @@ function safeWorkflowRunDir(
 }
 
 function errorCode(error: unknown): string | null {
-  return typeof error === "object" && error !== null && "code" in error
-    ? String(error.code)
-    : null;
+  return typeof error === "object" && error !== null && "code" in error ? String(error.code) : null;
 }
 
 async function ensureContainedDirectory(root: string, relative: string): Promise<string> {
@@ -241,10 +239,7 @@ async function writeImmutableContainedFile(
   try {
     handle = await openFile(
       filename,
-      fsConstants.O_WRONLY |
-        fsConstants.O_CREAT |
-        fsConstants.O_EXCL |
-        fsConstants.O_NOFOLLOW,
+      fsConstants.O_WRONLY | fsConstants.O_CREAT | fsConstants.O_EXCL | fsConstants.O_NOFOLLOW,
       0o600,
     );
     await handle.writeFile(expected);
@@ -438,9 +433,10 @@ export function argsFor(run: Run): { script: string; args: string[] } {
     };
   }
 
-  // gate2.py takes --run because it reads an existing pass rather than naming a new one.
-  // Passing --out there is accepted by argparse as unknown and the review reads the
-  // wrong basename.
+  // The upstream `gate2.py` compatibility script is an automated vendor challenge,
+  // never G2 human review. It takes --run because it reads an existing pass rather than
+  // naming a new one. Passing --out there is accepted as unknown and machine QC reads
+  // the wrong basename.
   const nameFlag = run.pass === "g2" ? "--run" : "--out";
   return {
     script: path.join(dir, script),
@@ -489,7 +485,7 @@ export function defaultDeps(): WorkerDeps {
         workflowRunUsesCanonicalMethodology,
       } = await import("./run-store.ts");
       if (!(await workflowRunUsesCanonicalMethodology(run.id))) {
-        throw new Error("The workflow run methodology changed before artifact publication.");
+        throw new Error("The workflow run methodology changed before Draft artifacts were stored.");
       }
       const records = await collectWorkflowArtifacts(run);
       for (const record of records) {
@@ -502,7 +498,9 @@ export function defaultDeps(): WorkerDeps {
         run.claimToken,
         records.map((record) => record.key),
       );
-      if (!published) throw new Error("the verified workflow download set was not published");
+      if (!published) {
+        throw new Error("the verified Stage 8 Draft download set was not made available");
+      }
     },
     spawnPipeline(run) {
       const { script, args } = argsFor(run);
@@ -548,9 +546,7 @@ export function defaultDeps(): WorkerDeps {
           if (!root) return null;
           const manifestPath = containedPath(root, "workflow-manifest.json");
           if (!manifestPath) return null;
-          const manifest = JSON.parse(
-            await readFile(manifestPath, "utf8"),
-          );
+          const manifest = JSON.parse(await readFile(manifestPath, "utf8"));
           // Null is meaningful: at least one handler could not report spend, so keeping
           // the last event value is more honest than treating an incomplete sum as total.
           return typeof manifest?.spent_usd === "number" ? manifest.spent_usd : null;
@@ -665,13 +661,13 @@ const ARTIFACTS: Record<RunPass, Artifact[]> = {
   g2: [
     {
       key: "input",
-      label: "Reviewed engine input",
+      label: "Machine-QC engine input",
       filename: "_g2_input.json",
       contentType: JSON_T,
     },
     {
       key: "findings",
-      label: "Review findings",
+      label: "Automated challenge findings",
       filename: "_g2_findings.json",
       contentType: JSON_T,
     },
@@ -739,10 +735,7 @@ function containedPath(root: string, relative: string): string | null {
     // workspace-relative symlink component so a manifest cannot route an otherwise
     // hash-matching artifact through a directory outside the run workspace.
     let component = absoluteRoot;
-    for (const segment of path
-      .relative(absoluteRoot, candidate)
-      .split(path.sep)
-      .filter(Boolean)) {
+    for (const segment of path.relative(absoluteRoot, candidate).split(path.sep).filter(Boolean)) {
       component = path.join(component, segment);
       if (lstatSync(component).isSymbolicLink()) return null;
     }
@@ -1166,10 +1159,7 @@ function verifyStageManifest(
   if (expected.size !== outputHashes.size) return false;
   for (const [key, digests] of expected) {
     const actual = outputHashes.get(key);
-    if (
-      !actual ||
-      [...actual].sort().join("\n") !== [...digests].sort().join("\n")
-    ) {
+    if (!actual || [...actual].sort().join("\n") !== [...digests].sort().join("\n")) {
       return false;
     }
   }
@@ -1181,10 +1171,7 @@ function verifyStageManifest(
  * with every required artifact recorded under its isolated workspace.
  */
 export function verifyWorkflowCompletion(
-  run: Pick<
-    Run,
-    "id" | "countryName" | "iso3" | "outBasename" | "ceilingUsd" | "vendor"
-  >,
+  run: Pick<Run, "id" | "countryName" | "iso3" | "outBasename" | "ceilingUsd" | "vendor">,
 ): { ok: true; value: VerifiedWorkflow } | { ok: false; reason: string } {
   const root = safeWorkflowRunDir(run, true);
   if (!root) {
@@ -1405,16 +1392,15 @@ export function verifyWorkflowCompletion(
     }
     if (contractStage.id === "damm_diagnostic") {
       const engineInputs = valid.filter((artifact) => artifact.key === "engine_input");
-      const matches = engineInputs.length
-        ? engineInputs
-        : valid.filter((artifact) => artifact.key === "damm_observations");
-      if (matches.length !== 1) {
+      if (engineInputs.length !== 1) {
         return {
           ok: false,
-          reason: "Canonical stage 1 does not identify one hash-bound assessment input.",
+          reason:
+            "Canonical stage 1 does not identify one hash-bound scored engine input. " +
+            "Raw research observations cannot stand in for the assessment rows reviewed at G1.",
         };
       }
-      assessmentInput = matches[0];
+      assessmentInput = engineInputs[0];
     }
     if (contractStage.id === "export_package") stage8Artifacts = valid;
   }
@@ -1475,8 +1461,7 @@ function packageRecord(value: unknown): PackageFileRecord | null {
     (record.stage_id !== undefined && typeof record.stage_id !== "string") ||
     (record.artifact_id !== undefined && typeof record.artifact_id !== "string") ||
     (record.source_sha256 !== undefined &&
-      (typeof record.source_sha256 !== "string" ||
-        !/^[a-f0-9]{64}$/.test(record.source_sha256))) ||
+      (typeof record.source_sha256 !== "string" || !/^[a-f0-9]{64}$/.test(record.source_sha256))) ||
     (record.input_id !== undefined && typeof record.input_id !== "string") ||
     (record.input_kind !== undefined && typeof record.input_kind !== "string")
   ) {
@@ -1697,6 +1682,8 @@ export function artifactPath(run: Run, key: string): { path: string; artifact: A
     if (source.kind === "root") resolved = containedPath(root, source.path);
     else if (source.kind === "stage8") {
       resolved = verifiedStage8File(root, verified.value.stage8Artifacts, source.artifactKey);
+    } else if (source.kind === "assessment_input") {
+      resolved = containedPath(root, verified.value.assessmentInput.path);
     } else if (source.kind === "package") {
       resolved = workflowPackageFile(root, verified.value, source.selector);
     } else {
@@ -2071,7 +2058,7 @@ export async function runOne(run: ClaimedRun, workerId: string, deps: WorkerDeps
         await deps.publishWorkflowArtifacts(run, workerId);
       } catch (error) {
         seen.finished = false;
-        seen.failure = `The verified workflow downloads could not be published: ${String(error)}`;
+        seen.failure = `The verified Stage 8 Draft downloads could not be made available: ${String(error)}`;
       }
     }
   }

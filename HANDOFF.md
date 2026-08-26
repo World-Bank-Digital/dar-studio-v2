@@ -1,7 +1,7 @@
 # HANDOFF — DAR Studio v2
 
-*Updated 2026-08-27. Read this document and [LEARNINGS.md](LEARNINGS.md) before
-changing retrieval, scoring, drafting, or export behavior.*
+_Updated 2026-08-27. Read this document and [LEARNINGS.md](LEARNINGS.md) before
+changing retrieval, scoring, drafting, or export behavior._
 
 ## Normative product contract
 
@@ -69,9 +69,74 @@ artifacts bound to the immutable run snapshot.
 - Budget is authorized before launch and divided into fixed, protected stage
   allocations. A stage cannot borrow another stage's allocation, and no one
   can increase the ceiling during execution.
-- Human review is post-completion only. It may revise a Draft or promote an
-  approved version to Final, and is required before publication. It is not a
-  prerequisite for Stage 8.
+- Human review is post-completion only. Stage 8 always produces an immutable,
+  downloadable `Draft · pre-review`; workflow completion never means approved,
+  Final, publication-ready, or externally circulable. G1/G2/G3 govern later
+  promotion and circulation and are not prerequisites for Stage 8.
+
+## Post-completion human-control invariant
+
+G1, G2, and G3 are not workflow stages and must never appear in an active-run
+state machine, budget decision, vendor pass, or retry path:
+
+1. **G1** is performed by a named, authenticated assessor assigned to the exact
+   Stage 8 package. The decision must cover every row from the exact stored
+   Stage 1 engine input used by the diagnostic, including unscored carried
+   candidates; raw research observations cannot stand in for it. Persisted row
+   hashes are derived inside PostgreSQL, and the reviewer surface preserves
+   exact numeric spellings rather than rounding through JavaScript.
+2. **G2** is performed after accepted G1 by a different authenticated user. It
+   covers every prerequisite and `Judged` row plus a deterministic 15% sample
+   of the remainder. Its immutable versioned affirmation records the protocol's
+   source-resolution, evidence-class, and quality/scale ladder checks. An
+   automated challenge or vendor model is not G2.
+3. **G3** is recorded only after accepted G1 and G2 by the authenticated owner
+   of the country workspace, which is the product's designated TTL/country-owner
+   identity. The sign-off records the four prohibitions, treatment of
+   parenthesized bands, source-tier/illustrative handling of register rows, and
+   QC-footer accuracy.
+
+The approval package snapshots the workflow run ID, artifact-set ID,
+complete-bundle SHA-256, workflow contract version/hash, full DAMM model
+identity and source commit, assessment-input SHA-256, and row-set hashes.
+Assignments, decisions, identity snapshots, timestamps, and releases are
+append-only. A revision finding terminates that package's chain; corrections
+belong to a new autonomous Draft run, with a new approval chain.
+
+A still-pending G1 or G2 assignment may be replaced atomically by the country
+owner with an exact-assignment optimistic guard and a required reason. The old
+record remains immutable but loses review and artifact access at the same
+commit that creates its successor. Decided assignments cannot be superseded,
+and reviewers receive only their own decision record rather than the package's
+complete human audit.
+
+G3 creates a separately versioned release record and manifest tied to the exact
+Draft and its three decision records. It never mutates Stage 8 bytes. A model
+whose recorded status is not ratified or whose `ratified` flag is false can
+produce only an `approved_draft` release, never `canonical_final`. Issue 4 does
+not ratify DAMM v1.7.
+
+Approval-package materialization re-verifies the complete stored artifact set,
+all byte counts and digests, the canonical eight-stage/root/package manifests,
+the exhaustive ZIP census, upload and input-snapshot bindings, the workflow
+contract, and the pinned methodology/assessment input. Reviewer downloads use
+the exact assignment-bound package authorization and revoke with a superseded
+assignment; live-preview bearer credentials remain in request headers, never
+download URLs.
+
+The package/release digest dependency chain is explicitly versioned in SQL
+(`*_v1` row, prerequisite, canonical-JSON, and timestamp helpers). Unversioned
+aliases are compatibility entry points only and are never called by historical
+v1 identity verification; later canonicalization rules must use new versioned
+names rather than replacing v1 behavior.
+
+The pinned upstream exporter currently omits its supplemental `engine_input`
+from the Stage 8 ZIP even though the root workflow and methodology manifests
+bind it. The app worker therefore persists the already-verified input as the
+canonical `assessment-input` artifact in the same immutable artifact set. G1
+rows and the approval/release identity are derived from those bytes. Upstream
+should still add that supplemental input to the package itself; doing so later
+will not require weakening this app-side binding.
 
 ## Artifact and trust boundary
 
@@ -180,11 +245,11 @@ contract and its zero-human execution rules.
 
 ## Governance
 
-The completed package has lifecycle state `draft`. No cross-country ranking,
-DAMM band used as a PDO/DLI/disbursement condition, automatic financing
+The completed package has lifecycle state `draft_pre_review`. No cross-country
+ranking, DAMM band used as a PDO/DLI/disbursement condition, automatic financing
 decision, or public claim before human review is permitted. These restrictions
-apply to use and publication after generation; they do not block autonomous
-Draft production.
+apply to promotion and circulation after generation; they do not block
+autonomous Draft production or pre-review Draft downloads.
 
 The standing engineering rule remains: every live-run defect lands as a fix to
 the cause, a regression test that pins it, and a learning-ledger entry. A fix

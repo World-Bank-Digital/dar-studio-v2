@@ -39,6 +39,7 @@ import {
   type PipelineMethodologyFile,
 } from "./worker.ts";
 import { defaultVendorFor, type ClaimedRun, type Run } from "./runs.ts";
+import { verifyStoredStage8Boundary } from "./stage8-boundary.server.ts";
 import { artifactsFor } from "./worker-artifacts.ts";
 import { DAR_WORKFLOW, DAR_WORKFLOW_SHA256 } from "./workflow.ts";
 import dammStageManifestFixture from "./fixtures/damm-workflow-stage-v1.json" with { type: "json" };
@@ -86,10 +87,10 @@ describe("how the worker invokes the pipeline", () => {
     assert.equal(args[args.indexOf("--iso") + 1], "EGY");
   });
 
-  it("calls the second review with --run, which is a different flag for the same name", () => {
-    // gate2.py takes --run because it reads an existing pass rather than naming a new
-    // one. Passing --out there is silently accepted by argparse as unknown and the
-    // review would read the wrong basename.
+  it("calls the automated vendor challenge with --run for the inherited name", () => {
+    // The upstream gate2.py compatibility script is machine QC, not G2 human review. It
+    // takes --run because it reads an existing pass rather than naming a new one. Passing
+    // --out is silently accepted as unknown and the challenge reads the wrong basename.
     const { script, args } = argsFor(run({ pass: "g2" }));
     assert.match(script, /gate2\.py$/);
     assert.equal(args[args.indexOf("--run") + 1], "EGY_run1");
@@ -800,10 +801,7 @@ describe("canonical pipeline methodology preflight", () => {
       await writeFile(path.join(temp, "gauntlet/loop-1/EGY_stage-output.html"), "<p>ok</p>\n");
       assert.equal(verifyPipelineMethodology(temp, expected, commit).ok, true);
 
-      const rogueHandler = path.join(
-        temp,
-        "gauntlet/loop-1/research_pipeline/rogue_handler.py",
-      );
+      const rogueHandler = path.join(temp, "gauntlet/loop-1/research_pipeline/rogue_handler.py");
       await writeFile(rogueHandler, '"""untracked executable"""\n');
       const rogueRejected = verifyPipelineMethodology(temp, expected, commit);
       assert.equal(rogueRejected.ok, false);
@@ -834,10 +832,7 @@ describe("canonical pipeline methodology preflight", () => {
       await writeFile(ignoredSource, '"""ignored executable source"""\n');
       const sourceRejected = verifyPipelineMethodology(temp, expected, commit);
       assert.equal(sourceRejected.ok, false);
-      assert.match(
-        sourceRejected.ok ? "" : sourceRejected.reason,
-        /clean pinned source revision/i,
-      );
+      assert.match(sourceRejected.ok ? "" : sourceRejected.reason, /clean pinned source revision/i);
       await rm(ignoredSource);
 
       const externalPackage = path.join(temp, "ignored-external-package");
@@ -963,6 +958,7 @@ async function writeCompletedWorkflow(
   );
 
   const stageRecords: Array<Record<string, unknown>> = [];
+  const stageArtifactSources = new Map<string, { path: string; sha256: string }>();
   for (const stage of DAR_WORKFLOW.stages.slice(0, -1)) {
     const stageDir = path.join(
       root,
@@ -980,6 +976,16 @@ async function writeCompletedWorkflow(
         key,
         path: path.relative(root, filename).split(path.sep).join("/"),
         sha256: await fileHash(filename),
+        media_type: "application/json",
+      });
+    }
+    if (stage.id === "damm_diagnostic") {
+      const engineInput = path.join(stageDir, "99-engine_input.json");
+      await writeFile(engineInput, JSON.stringify({ "1.1": { value: 1, cls: "Measured" } }));
+      artifacts.push({
+        key: "engine_input",
+        path: path.relative(root, engineInput).split(path.sep).join("/"),
+        sha256: await fileHash(engineInput),
         media_type: "application/json",
       });
     }
@@ -1021,6 +1027,19 @@ async function writeCompletedWorkflow(
       sha256: await fileHash(stageManifest),
       media_type: "application/json",
     });
+    for (const artifact of artifacts) {
+      if (
+        typeof artifact.key !== "string" ||
+        typeof artifact.path !== "string" ||
+        typeof artifact.sha256 !== "string"
+      ) {
+        throw new Error(`Invalid fixture artifact for ${stage.id}`);
+      }
+      stageArtifactSources.set(`${stage.id}\0${artifact.key}`, {
+        path: artifact.path,
+        sha256: artifact.sha256,
+      });
+    }
     stageRecords.push({
       ordinal: stage.ordinal,
       id: stage.id,
@@ -1044,8 +1063,73 @@ async function writeCompletedWorkflow(
   const packageRecords = [] as Array<Record<string, unknown>>;
   const packageContents = new Map<string, Uint8Array>();
   const uploadManifestBytes = new Uint8Array(await readFile(uploadsManifest));
+  const workflowContractBytes = new Uint8Array(
+    await readFile(new URL("../../data/dar_workflow_v1.json", import.meta.url)),
+  );
+  const inputSnapshotBytes = new Uint8Array(await readFile(inputSnapshot));
+  const packagedWorkflowBytes = new TextEncoder().encode(
+    JSON.stringify({
+      schema_version: "damm.workflow-run/v1",
+      run_id: workflow.id,
+      workflow_id: DAR_WORKFLOW.workflow_id,
+      workflow_version: DAR_WORKFLOW.workflow_version,
+      contract_sha256: DAR_WORKFLOW_SHA256,
+      country: workflow.countryName,
+      iso3: workflow.iso3,
+      status: "running",
+      input_snapshot: {
+        path: "inputs/input-snapshot.json",
+        sha256: await fileHash(inputSnapshot),
+      },
+      uploads_manifest: uploadsRecord,
+      stages: [
+        ...stageRecords,
+        { ordinal: 8, id: "export_package", status: "running", attempts: 1, artifacts: [] },
+      ],
+    }),
+  );
+  const packagedWorkflowSha256 = createHash("sha256").update(packagedWorkflowBytes).digest("hex");
+  const boundPackageFiles = await Promise.all(
+    packageFiles.map(async (file) => {
+      if (file.category !== "workflow") return file;
+      if (file.artifact_id === "workflow_contract") {
+        return {
+          ...file,
+          content: workflowContractBytes,
+          source_sha256: DAR_WORKFLOW_SHA256,
+        };
+      }
+      if (file.artifact_id === "input_snapshot") {
+        return {
+          ...file,
+          content: inputSnapshotBytes,
+          source_sha256: await fileHash(inputSnapshot),
+        };
+      }
+      if (file.artifact_id === "workflow_manifest") {
+        return {
+          ...file,
+          content: packagedWorkflowBytes,
+          source_sha256: packagedWorkflowSha256,
+        };
+      }
+      return file;
+    }),
+  );
+  for (const [index, file] of boundPackageFiles.entries()) {
+    if (!file.stage_id || !file.artifact_id) continue;
+    const source = stageArtifactSources.get(`${file.stage_id}\0${file.artifact_id}`);
+    if (!source) continue;
+    boundPackageFiles[index] = {
+      ...file,
+      source_sha256: source.sha256,
+      ...(file.category === "narrative"
+        ? {}
+        : { content: new Uint8Array(await readFile(path.join(root, source.path))) }),
+    };
+  }
   const allPackageFiles: PackageFixtureFile[] = [
-    ...packageFiles,
+    ...boundPackageFiles,
     {
       path: "inputs/uploads-manifest.json",
       category: "input",
@@ -1113,6 +1197,7 @@ async function writeCompletedWorkflow(
       iso3: workflow.iso3,
       lifecycle_state: "draft",
       input_snapshot_sha256: await fileHash(inputSnapshot),
+      workflow_manifest_sha256: packagedWorkflowSha256,
       upload_inputs: {
         schema_version: "damm.uploads-manifest/v1",
         manifest_path: uploadsRecord.path,
@@ -1311,7 +1396,10 @@ describe("where a pass's output lives", () => {
         Object.prototype.hasOwnProperty.call(dammStageManifestFixture, field),
       ),
     );
-    assert.equal(dammStageManifestFixture.quality_checks.every((check) => check.ok), true);
+    assert.equal(
+      dammStageManifestFixture.quality_checks.every((check) => check.ok),
+      true,
+    );
   });
 
   const at = (pass: Run["pass"], key: string) =>
@@ -1479,10 +1567,7 @@ describe("where a pass's output lives", () => {
 
       const unwritten = run({ pass: "workflow", outBasename: "EGY_unwritten_symlink" });
       await symlink(external, workflowRunDir(unwritten), "dir");
-      await assert.rejects(
-        writeWorkflowUploadSnapshot(unwritten, []),
-        /workflow workspace/i,
-      );
+      await assert.rejects(writeWorkflowUploadSnapshot(unwritten, []), /workflow workspace/i);
 
       const completed = run({ pass: "workflow", outBasename: "EGY_completed_symlink" });
       const fixture = await writeCompletedWorkflow(completed, completePackageFixtureFiles());
@@ -1553,6 +1638,44 @@ describe("where a pass's output lives", () => {
     }
   });
 
+  it("rejects raw observations as a substitute for the scored G1 assessment input", async () => {
+    const before = process.env.DAMM_PIPELINE_DIR;
+    const temp = await mkdtemp(path.join(tmpdir(), "damm-workflow-engine-input-"));
+    process.env.DAMM_PIPELINE_DIR = temp;
+    try {
+      const workflow = run({ pass: "workflow", vendor: null, outBasename: "EGY_engine_input" });
+      const fixture = await writeCompletedWorkflow(workflow, []);
+      const rootManifestPath = path.join(fixture.root, "workflow-manifest.json");
+      const rootManifest = JSON.parse(await readFile(rootManifestPath, "utf8"));
+      const stage1 = rootManifest.stages[0];
+      const stageManifestBinding = stage1.artifacts.find(
+        (artifact: { key: string }) => artifact.key === "stage_manifest",
+      );
+      assert.ok(stageManifestBinding);
+      stage1.artifacts = stage1.artifacts.filter(
+        (artifact: { key: string }) => artifact.key !== "engine_input",
+      );
+
+      const stageManifestPath = path.resolve(fixture.root, stageManifestBinding.path);
+      const stageManifest = JSON.parse(await readFile(stageManifestPath, "utf8"));
+      stageManifest.artifacts = stageManifest.artifacts.filter(
+        (artifact: { key: string }) => artifact.key !== "engine_input",
+      );
+      delete stageManifest.output_hashes.engine_input;
+      await writeFile(stageManifestPath, JSON.stringify(stageManifest));
+      stageManifestBinding.sha256 = await fileHash(stageManifestPath);
+      await writeFile(rootManifestPath, JSON.stringify(rootManifest));
+
+      const verification = verifyWorkflowCompletion(workflow);
+      assert.equal(verification.ok, false);
+      if (!verification.ok) assert.match(verification.reason, /scored engine input/);
+    } finally {
+      if (before === undefined) delete process.env.DAMM_PIPELINE_DIR;
+      else process.env.DAMM_PIPELINE_DIR = before;
+      await rm(temp, { recursive: true, force: true });
+    }
+  });
+
   it("rejects a self-hashed stage record whose stage manifest omits required provenance", async () => {
     const before = process.env.DAMM_PIPELINE_DIR;
     const temp = await mkdtemp(path.join(tmpdir(), "damm-stage-manifest-"));
@@ -1589,7 +1712,12 @@ describe("where a pass's output lives", () => {
       const fixture = await writeCompletedWorkflow(workflow, completePackageFixtureFiles());
       const published = await collectWorkflowArtifacts(workflow);
       assert.ok(published.some((artifact) => artifact.key === "bundle"));
-      assert.ok(published.some((artifact) => artifact.relativePath === "inputs/uploads-manifest.json"));
+      const assessmentInput = published.find((artifact) => artifact.key === "assessment-input");
+      assert.ok(assessmentInput);
+      assert.match(assessmentInput.relativePath, /engine_input\.json$/);
+      assert.ok(
+        published.some((artifact) => artifact.relativePath === "inputs/uploads-manifest.json"),
+      );
       assert.ok(published.some((artifact) => artifact.key === "canonical-model"));
       assert.ok(published.some((artifact) => artifact.key === "canonical-model-schema"));
       const census = published.find((artifact) => artifact.key === "canonical-indicator-census");
@@ -1608,6 +1736,43 @@ describe("where a pass's output lives", () => {
       assert.equal(methodologyPayload.engine.version, "1.7");
       assert.equal(methodologyPayload.renderer.version, "1.7");
       assert.equal(methodologyPayload.assessment_input.sha256, methodology.assessmentInputSha256);
+      assert.equal(methodologyPayload.assessment_input.sha256, assessmentInput.sha256);
+
+      const artifactSetId = "worker-published-boundary-set";
+      const boundary = await verifyStoredStage8Boundary(
+        {
+          runId: workflow.id,
+          artifactSetId,
+          pass: "workflow",
+          status: "done",
+          countryName: workflow.countryName,
+          iso3: workflow.iso3,
+          ceilingUsd: workflow.ceilingUsd,
+          vendor: workflow.vendor,
+          workflowId: DAR_WORKFLOW.workflow_id,
+          workflowVersion: DAR_WORKFLOW.workflow_version,
+          workflowContractSha256: DAR_WORKFLOW_SHA256,
+        },
+        published.map((artifact) => ({
+          runId: workflow.id,
+          artifactSetId,
+          artifactKey: artifact.key,
+          relativePath: artifact.relativePath,
+          filename: artifact.filename,
+          contentType: artifact.contentType,
+          sha256: artifact.sha256,
+          byteSize: artifact.content.byteLength,
+          workflowId: DAR_WORKFLOW.workflow_id,
+          workflowVersion: DAR_WORKFLOW.workflow_version,
+          workflowContractSha256: DAR_WORKFLOW_SHA256,
+          content: artifact.content,
+        })),
+      );
+      assert.equal(boundary.bundleSha256, published.find((item) => item.key === "bundle")?.sha256);
+      assert.equal(boundary.assessmentInputSha256, methodology.assessmentInputSha256);
+      assert.equal(boundary.assessmentInputArtifactKey, "assessment-input");
+      assert.equal(boundary.assessmentInputSourcePath, assessmentInput.relativePath);
+      assert.deepEqual(boundary.assessmentInputContent, assessmentInput.content);
 
       const JSZip = (await import("jszip")).default;
       const zip = await JSZip.loadAsync(await readFile(fixture.bundle));

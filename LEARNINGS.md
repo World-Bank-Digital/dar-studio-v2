@@ -14,13 +14,14 @@ When a run (manual, `qa:delivery`, or production) surfaces a failure:
 1. Reproduce it, then fix the **cause**, not the symptom.
 2. Add a test that fails on the old behaviour. Name the incident in a comment.
 3. Record it below: incident → root cause → fix → pinning test.
-4. If the failure was a *silent* success (the run "passed" while doing the
+4. If the failure was a _silent_ success (the run "passed" while doing the
    wrong thing), also add an assertion to `scripts/qa-delivery.mjs` so the
    end-to-end loop would catch a recurrence.
 
 ## Ledger
 
 ### L1 — The demo pack failed its own readiness gate
+
 **Incident:** the Bhutan showcase scored E·39 on all 13 core gates; the
 flagship demo demonstrated failure.
 **Root cause:** fixture rows shipped `sourceUrl: null`, and the evidence scorer
@@ -31,6 +32,7 @@ UI enforces on humans.
 **Pinned by:** `fixture.test.ts` — "clears its own readiness gate".
 
 ### L2 — QA scripts hardcoded the build sandbox's paths
+
 **Incident:** all eight Playwright scripts crashed outside Grok's sandbox
 (`/workspace/screenshots/`).
 **Root cause:** generated code assumed its birthplace was the world.
@@ -38,6 +40,7 @@ UI enforces on humans.
 **Pinned by:** the scripts run in CI/dev at all; `browser-smoke` exits 0 locally.
 
 ### L3 — Search silently required one specific vendor
+
 **Incident:** with a Claude key stored, web search did nothing, with no error.
 **Root cause:** `resolveSearchKey` looked only for `provider = 'xai'`; absence
 was treated as "feature off" rather than "misconfigured".
@@ -46,6 +49,7 @@ ingest messages whenever a pass is skipped and why.
 **Pinned by:** `search.test.ts` catalogue tests; skip-reasons asserted in audit.
 
 ### L4 — Jina's single-site scope was applied to every query
+
 **Incident:** first live dossier sweep returned 22 of 27 items from CAPMAS;
 "data protection law" was searched against the census bureau.
 **Root cause:** Jina's `X-Site` header scopes to ONE host, and the NSO domain
@@ -56,12 +60,14 @@ confined to the statistics office (`dossier.ts`).
 items/4 hosts → 61 items/44 hosts.
 
 ### L5 — Professional-network posts surfaced as citable sources
+
 **Incident:** LinkedIn posts appeared alongside FAO and World Bank documents.
 **Root cause:** the blocked-host list predated real search and never met one.
 **Fix:** `linkedin.com` added to `BLOCKED_HOSTS`.
 **Pinned by:** `search.test.ts` — "excluded hosts".
 
 ### L6 — A mistyped model id was accepted silently
+
 **Incident:** `deepseek/v4-pro` stored and "tested" OK; the real id is
 `deepseek/deepseek-v4-pro`. Every drafting call would have 404'd.
 **Root cause:** the key test verified the key, not the model id, and no check
@@ -72,8 +78,9 @@ catalogue on save and returns the warning immediately.
 verification path in `actions.ts`.
 
 ### L7 — A stored key did not make the feature work
+
 **Incident:** keys entered and encrypted, yet the drafter ran as "none" —
-storing and *activating* were separate, and the second step was easy to miss.
+storing and _activating_ were separate, and the second step was easy to miss.
 **Root cause:** UI design: a select defaulting to "Deterministic assembler
 only" after a successful key save.
 **Fix:** `saveApiKey` auto-activates the provider when nothing is active yet.
@@ -81,6 +88,7 @@ only" after a successful key save.
 key-based ingest; a stored-but-inactive key now cannot occur silently.
 
 ### L8 — The quote checker could be gamed by appending a clause
+
 **Incident (caught in test, pre-live):** a genuine sentence with an invented
 clause bolted on passed the sliding-window quote match.
 **Root cause:** "some window matches" tolerates additions; the tolerance was
@@ -91,6 +99,7 @@ markers in normalisation instead of loosening the threshold.
 clause bolted on" / "still tolerates a footnote marker".
 
 ### L9 — Serial prose generation could not survive the 17-chapter outline
+
 **Incident (caught by inspection before the first full run):** up to 28
 sequential model calls at ≤60 s each inside one HTTP request.
 **Root cause:** the prose loop was written for a 10-part outline and scaled
@@ -101,6 +110,7 @@ never sent to the model** — they are the evidence record and stay verbatim.
 `outline.test.ts` — "allows model prose only on numbered chapters".
 
 ### L10 — The E2E suite certified failure as success
+
 **Incident:** `qa-gauntlet.mjs`'s pass condition required `gauntletLocked` —
 it could only ever prove the roadmap stayed locked.
 **Root cause:** the test was written to validate the safety rails, and nobody
@@ -112,10 +122,11 @@ run writes a comparable JSON report to `qa-reports/`.
 **Pinned by:** itself — it is the pin.
 
 ### L11 — The retrieval pass repeated the dossier's over-scoping bug (first live delivery run)
+
 **Incident:** the verified web-search pass accepted **0 readings** — 2 documents
 across 8 batches, most Jina queries answered 422 "no results".
 **Root cause:** three stacked problems. (1) `retrieveVerifiedReadings` scoped
-*every* indicator query to the NSO domain — the exact bug fixed in the dossier
+_every_ indicator query to the NSO domain — the exact bug fixed in the dossier
 path as L4, recurring in the sibling path nobody re-checked. (2) Jina reports
 an empty result set as HTTP 422, which the adapter recorded as a provider
 error. (3) Queries carried registry notation verbatim — "(%)", "(Mbps)",
@@ -128,6 +139,7 @@ class of mistake rarely has one instance.**
 "query hygiene"; `search.test.ts` — "jina no-results handling".
 
 ### L12 — The E2E harness clicked links instead of rows, and masked its own exit code
+
 **Incident:** run 1 died at gate 4.1 — the evidence editor never opened — and
 the harness reported exit 0 anyway.
 **Root cause:** Playwright clicks an element's centre; on evidence rows that
@@ -141,6 +153,7 @@ invocation pattern. The JSON report in `qa-reports/` is the source of truth
 for pass/fail, not the shell exit code.
 
 ### L13 — Every prose call timed out, and the run still looked green (delivery run 2)
+
 **Incident:** run 2 passed formally, but 16 of 17 chapter-prose calls timed out
 at the adapter's 60s default; the draft shipped fully deterministic while the
 report counted "1 chapter with prose" — which was the document header.
@@ -157,6 +170,7 @@ needs an alarm, or grace becomes the steady state.**
 the `llmProse` call site.
 
 ### L14 — A reasoning model produced a full draft with zero prose and zero errors
+
 **Incident:** with timeouts fixed, the re-draft "succeeded" in 5.5 minutes —
 0 prose chapters, 0 rejections, 0 errors. A live probe reproduced it exactly:
 `finish_reason: "length"`, `reasoning_tokens: 4000`, `contentChars: 0`.
@@ -175,6 +189,7 @@ chapters; raised to 24k. The diagnosis message named the cause in the audit on
 its first outing, which is what made the follow-up a one-line fix.
 
 ### L15 — The fidelity gate's first live firing was half right (prose retest)
+
 **Incident:** 5 of 17 chapters rejected. One rejection was the gate working
 ("is established" asserted with no claimable stage). Four were false
 positives: numbered subsection headings ("10.1 No-regret actions") read as
@@ -197,6 +212,7 @@ now keeps ranges out of the figure scan. The 2016 catch recurred — the gate is
 consistent about it, which is what a guard should be.
 
 ### L16 — "Clerk-shaped" sign-in expectations met reality (passkeys + auth email)
+
 **Incident:** the user reported passkeys "not activated" and sign-in emails
 "not triggered". Neither was failing — neither existed: the build shipped only
 broker OAuth and bare email/password. Separately, Google sign-in on localhost
@@ -219,6 +235,7 @@ exists is a product decision pending — either build it or make its absence
 visible in the interface.**
 
 ### L17 — Document starvation: 100 documents retrieved, 2 readings accepted
+
 **Incident:** the verified search pass retrieved 100 documents across 8 batches
 and produced 2 readings, with zero rejections — the verification gate was never
 even consulted.
@@ -234,6 +251,7 @@ Starvation is now structurally impossible rather than statistically unlikely.
 it means the gate's input dried up upstream. Instrument the whole funnel.**
 
 ### L22 — The night the provider gave out: a lost race and a dry pass (runs 10–11)
+
 **Incident:** run 10 failed on the harness's 30-minute draft deadline — while
 the server-side re-draft completed at minute 30, seconds after the timeout
 fired, on a night the model provider was degraded (one chapter call timed out
@@ -263,6 +281,7 @@ exhausted retries surface the network error); the deadline comment in
 `qa-delivery.mjs`.
 
 ### L23 — The red team's first act was to flag its own safety machinery
+
 **Incident:** inspecting run 13's 56 red-team findings, 5 (9%) were the same
 false positive: the deterministic stage-assertion check firing on the FIDELITY
 GATE'S rejection notice. When model prose fails the fidelity check the chapter
@@ -297,6 +316,7 @@ in another. That last one looks like a real data-rendering inconsistency and
 is now an open thread.
 
 ### L24 — The document answered the same question two ways
+
 **Incident:** the assembled Egypt draft said, of the same Step 3 decision,
 both "Rejected alternatives: (none recorded)" (chapter 10, from the targeting
 table) and "Rejected: Rice expansion" (chapters 2, 9 and 17, from the decision
@@ -337,6 +357,7 @@ two-minute check. **When a harness walks a fixed sequence, resetting into the
 middle of it is not a smaller version of the test — it is a different one.**
 
 ### L25 — The stage cascade read every threshold as a ceiling instead of a floor
+
 **Incident:** migrating to DAMM v1.5 surfaced that the engine scored the
 regression fixture Stage 3 where the methodology scores it Stage 2, and would
 have scored Egypt (CMS 3.07) Stage 3 against the workbook's Stage 2. Every
@@ -369,6 +390,7 @@ while the engine computed something else.
 ## Design shifts
 
 ### D1 — Draft-first: gates moved from in front of the work to inside the document
+
 **What changed (2026-08-17, user decision):** the ladder and the readiness
 gauntlet no longer block drafting. The automated run goes straight to a full
 17-chapter DAR; unrecorded decisions and unverified gates become stated
@@ -385,6 +407,7 @@ and the health page — provenance made impossible to miss, instead of work
 made impossible to reach.
 
 ### D5 — DAMM v1.5: the model moves, and the process gets a diagnostic package (user decision, 2026-08-20)
+
 **What changed:** the app now reads DAMM **v1.5** (102 indicators, 14 core
 gates, E1/E2 at 70/30, explicit Stage-5 floors, a leapfrog-fragility gap of
 1.5, and "Data Gap" as an explicit confidence tag weighted 0). v1.5 is a clean
@@ -421,6 +444,7 @@ which is the L20 lesson (a catalogue's own contents are the test fixture)
 applied to versioning.
 
 ### D4 — Team keys, a red team, and the roadmap as a deck (user decision, 2026-08-18)
+
 **What changed:** three additions around the pipeline. (1) **Team BYOK keys**
 (`team_keys`, migration 0007): an administrator — defined by the operator
 through `DAR_ADMIN_EMAILS`, never through the interface — stores keys the
@@ -469,6 +493,7 @@ flagging, annexes excluded, prohibitions on the closing slide), and the two
 adversarial pass on; the deck download must be a plausible .pptx).
 
 ### D3 — The pipeline explains itself, then casts three nets (user decision, 2026-08-18)
+
 **What changed:** the run sequence is now: (1) explain the DAMM — a
 deterministic explainer computed from the model configuration opens the run,
 the Guide tab and the draft; (2) collect all 97 indicators, each carrying
@@ -502,6 +527,7 @@ withheld throughout, zero console errors. Ingest 34.9 min including both
 sweeps — reasoning-off extraction keeps paying for the added work.
 
 ### D2 — Rubrics are researched, not skipped (user decision, same date)
+
 Anchored rubrics (42 indicators) and locally-sourced quantitative gaps (29) are
 now researched on the open web. Rubric proposals must argue clause-by-clause
 against the anchor text, state why the next level up was NOT proposed, and
@@ -511,6 +537,7 @@ Proposals are provisional suggested levels (provenance `machine-researched`);
 validation converts or corrects them. `rubric.test.ts` pins the contract.
 
 ### L18 — The adversarial review harvest: 27 confirmed findings in one diff
+
 **Incident:** a four-lens adversarial review (31 agents, every finding re-verified
 by a skeptic against the code) of the draft-first + rubric-research change
 confirmed 27 defects I would have shipped, plus one more surfaced by the live
@@ -555,6 +582,7 @@ point at retrieval (Jina ranking for this phrase), not validation; the levers
 are an Exa key (user's call) or a non-reasoning extraction model.
 
 ### L19 — Round 3: the funnel's three leaks, each fixed at its own stage
+
 **Incident (delivery run 5, instrumented funnel):** machine fill plateaued at
 33/97 with three distinct leaks. (1) Quantitative extraction: 119 documents
 retrieved across 9 batches produced 3 candidate readings — retrieval
@@ -608,6 +636,7 @@ one-repair-only, no repair for non-quote rejections, re-attribution rules,
 9k window, reading trail).
 
 ### L20 — One catalogue name killed the whole rubric pass (delivery run 6)
+
 **Incident:** run 6 died at "Researching documentary rubrics — 41 of 42" with
 no pass summary, a 22-minute audit silence, one `ingest_error` ("Cannot read
 properties of undefined (reading 'replace')"), and a QA harness death by
@@ -639,6 +668,7 @@ the catalogue"; the containment comment at the `mapLimit` worker in
 `actions.ts`.
 
 ### L21 — Round 3b: the memory-quote diagnosis, and what the reading trail caught (delivery run 8)
+
 **Incident:** run 7's six failed quotes all survived a repair pass unchanged
 and read as fluent, specific spans — not paraphrase. Working hypothesis was
 cross-document misattribution; the alternative was quoting from model memory.
@@ -687,6 +717,7 @@ trail, foreign-doc exclusion from the prompt, open-web scope for rubrics);
 hosts untouched, unknown-country no-op).
 
 ### L26 — One version label concealed several different methodologies
+
 **Incident:** the final-DAR review found DAMM v1.7 documents carrying different
 band edges, readiness rules, prerequisite mappings, and indicator metadata from
 the executable model while every surface still used the same version label.
@@ -703,3 +734,46 @@ assessment-input hash, and publishes a per-run methodology manifest. The model
 stays explicitly draft and unratified.
 **Pinned by:** `model.test.ts`, `scorer.test.ts`, `run-store.test.ts`, and
 `worker.test.ts` methodology-provenance regressions.
+
+### L27 — Machine completion and machine challenge are not human approval
+
+**Incident:** the final-DAR review found that a successful autonomous workflow
+could be read as an approved deliverable, while a generic owner review and an
+automated vendor pass carried language resembling the DAMM G1/G2 human
+controls. No durable mechanism proved that a named assessor reviewed every
+machine-filled row, that an independent person performed G2, or that a named
+and dated country owner completed G3 before circulation.
+**Root cause:** workflow execution state and downstream governance shared one
+surface and one loose review record. The record was not bound to the complete
+methodology/package identity, had no row scope, did not enforce reviewer
+independence or sequencing, and could not create an immutable versioned release
+without relabelling the generated files.
+**Fix:** Stage 8 remains an immutable, downloadable `Draft · pre-review`.
+Package-scoped assignments and append-only human decisions now bind G1, G2,
+and G3 to the exact run, artifact set, bundle, workflow contract, methodology,
+assessment input, and reviewed row hashes. G1 covers every machine-filled row;
+G2 uses a different authenticated user and the QC-protocol scope; G3 is the
+country owner's server-dated seven-point sign-off. Revisions terminate that
+package's chain. Accepted G3 creates a separate versioned release manifest and
+never mutates the Stage 8 bytes; an unratified methodology can produce only an
+approved Draft release. Pending reviewer mistakes are repaired through an
+atomic, append-only supersession with an owner identity/reason/time audit; the
+old assignment immediately loses access, while completed decisions and their
+identity snapshots cannot be replaced. Package materialization independently
+re-verifies every stored byte and the exhaustive ZIP/manifests before any human
+gate can start, and reviewer downloads carry preview bearer credentials only in
+authorization headers. The reviewed rows come from the persisted Stage 1
+engine input actually used for scoring—not the earlier raw observations or a
+manifest-declared hash without corresponding stored bytes. That set includes
+model-authorized carried candidates. PostgreSQL is the single authority for
+persisted row hashes so decimal scale, exponent notation, and unsafe integers
+never cross a lossy JavaScript hashing boundary; reviewer payloads retain the
+database-canonical numeric spelling. G2 also persists the exact version, text,
+and SHA-256 of its substantive source/class/ladder QC affirmation, rather than
+a generic checked boolean.
+**Meta-lesson: completion proves that automation finished; approval proves who
+reviewed exactly which immutable bytes under which methodology. Those are
+different state machines and must have different identities, records, and
+terminology.**
+**Pinned by:** `approvals.test.ts`, `approval-store.test.ts`, exact-package
+document-set regressions, and the white-background contract.

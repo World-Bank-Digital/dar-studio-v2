@@ -48,4 +48,21 @@ describe("the application canvas", () => {
     assert.match(portfolio, /max-w-lg rounded-2xl border border-subtle p-6/);
     assert.doesNotMatch(portfolio, /fixed inset-0[^"\n]*bg-ink/);
   });
+
+  it("keeps every post-completion human-control surface explicitly white", async () => {
+    const [ownerControls, reviewer, identity, reviewRoute] = await Promise.all([
+      source("../../components/damm/DarReviewTab.tsx"),
+      source("../../components/damm/AssignedReviewPage.tsx"),
+      source("../../components/damm/ApprovalPackageIdentity.tsx"),
+      source("../../routes/review.$assignmentId.tsx"),
+    ]);
+
+    for (const surface of [ownerControls, reviewer, identity, reviewRoute]) {
+      assert.match(surface, /bg-white/);
+      assert.doesNotMatch(surface, /dark:/);
+    }
+    assert.match(reviewRoute, /min-h-dvh bg-white text-ink/);
+    assert.match(reviewer, /space-y-5 bg-white/);
+    assert.match(ownerControls, /space-y-5 bg-white/);
+  });
 });

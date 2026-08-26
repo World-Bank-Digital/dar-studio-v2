@@ -6,6 +6,8 @@ import { DAR_WORKFLOW } from "./workflow.ts";
 
 // Verbatim lines from the Egypt and Nigeria runs of 24 and 25 August 2026. Copied rather
 // than composed: a parser tested against invented input tests the invention.
+// The historical upstream "decision G3" text below names a budget design decision. The
+// parser deliberately drops it; it is unrelated to TTL/country-owner G3 sign-off.
 const RESEARCH = `Egypt (EGY) · 59 rows · vendor anthropic/claude-opus-5
 budget $500, research allocation $200 (decision G3)
 
@@ -20,7 +22,9 @@ H [ 6/59] 1.5          hold   Documented LNone No national all-crop post-harvest
 wrote EGY_shadow_input.json — 59 rows, 23 gaps, 10 held
 spend $15.14 of $200 allocated ($500 country ceiling) in 23 minutes, 1003 vendor calls`;
 
-const GATE2 = `Gate 2 on EGY_shadow · reviewer openai/gpt-5.6-terra
+// Verbatim upstream compatibility output. Despite its historical labels, this is an
+// automated vendor challenge and has no G1/G2 human-review or approval effect.
+const AUTOMATED_CHALLENGE = `Gate 2 on EGY_shadow · reviewer openai/gpt-5.6-terra
 scope: 38 of 57 rows — 12 prerequisites, 22 gaps, 11 holds (7 overlap)
 
   [ 1/38] 1.6          gap          confirmed -> upheld     $  0.32   66s
@@ -56,7 +60,7 @@ describe("reading the pipeline's progress", () => {
     assert.equal((held as { outcome: string }).outcome, "hold");
   });
 
-  it("reads the second review's rows, which report a different outcome vocabulary", () => {
+  it("reads automated-challenge rows, which report a different outcome vocabulary", () => {
     const e = parseLine(
       "F [11/38] 3.7          hold         adjust    -> filled     $  2.10  147s",
     );
@@ -92,10 +96,15 @@ describe("reading the pipeline's progress", () => {
     assert.equal(ev.at(-1)?.kind, "finished");
   });
 
-  it("reads a whole second review end to end", () => {
-    const ev = parseChunk(GATE2);
+  it("reads a whole automated vendor challenge end to end without calling it human review", () => {
+    const ev = parseChunk(AUTOMATED_CHALLENGE);
+    const finalEvent = ev.at(-1);
     assert.equal(ev.filter((e) => e.kind === "row").length, 3);
-    assert.equal(ev.at(-1)?.kind, "finished");
+    assert.equal(finalEvent?.kind, "finished");
+    assert.match(
+      finalEvent?.kind === "finished" ? finalEvent.message : "",
+      /does not satisfy G1 or G2 human review/,
+    );
   });
 
   it("recognises budget exhaustion and an unresearched remainder", () => {

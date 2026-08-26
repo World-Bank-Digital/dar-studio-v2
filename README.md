@@ -18,16 +18,16 @@ input, its provenance, and its SHA-256 digest into an immutable snapshot.
 
 The eight stages then run in this strict order:
 
-| # | Stage | Required product |
-| ---: | --- | --- |
-| 1 | **DAMM diagnostic** | DAMM v1.7 observations, independent automated challenge, scored assessment, and diagnostic report |
-| 2 | **Country research and source inventory** | Country-specific evidence beyond DAMM, a consolidated inventory of credible sources, and any pre-launch TTL documents with provenance |
-| 3 | **AI in digital agriculture assessment** | A separate assessment of the country's as-is AI position, peer-country experience, and a recommended national AI agenda |
-| 4 | **International strategies and lessons** | Recent, relevant country strategies and transferable lessons, with selection rationale and limitations |
-| 5 | **Strategic foresight** | Country-specific scenarios, preferred future, and backcast milestones; uploaded material is synthesized when present and autonomous research is used when absent |
-| 6 | **Investment options and cost-benefit analysis** | Prioritized options with baseline, counterfactual, cost and benefit ranges, assumptions, sensitivity, risks, distributional effects, and evidence gaps |
-| 7 | **Integrated Draft DAR** | One comprehensive Draft DAR synthesizing Stages 1–6, with claim-level provenance and explicit epistemic status |
-| 8 | **Export package** | Downloadable stage products, structured data, source inventories, manifest, and complete ZIP bundle |
+|   # | Stage                                            | Required product                                                                                                                                                 |
+| --: | ------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+|   1 | **DAMM diagnostic**                              | DAMM v1.7 observations, independent automated challenge, scored assessment, and diagnostic report                                                                |
+|   2 | **Country research and source inventory**        | Country-specific evidence beyond DAMM, a consolidated inventory of credible sources, and any pre-launch TTL documents with provenance                            |
+|   3 | **AI in digital agriculture assessment**         | A separate assessment of the country's as-is AI position, peer-country experience, and a recommended national AI agenda                                          |
+|   4 | **International strategies and lessons**         | Recent, relevant country strategies and transferable lessons, with selection rationale and limitations                                                           |
+|   5 | **Strategic foresight**                          | Country-specific scenarios, preferred future, and backcast milestones; uploaded material is synthesized when present and autonomous research is used when absent |
+|   6 | **Investment options and cost-benefit analysis** | Prioritized options with baseline, counterfactual, cost and benefit ranges, assumptions, sensitivity, risks, distributional effects, and evidence gaps           |
+|   7 | **Integrated Draft DAR**                         | One comprehensive Draft DAR synthesizing Stages 1–6, with claim-level provenance and explicit epistemic status                                                   |
+|   8 | **Export package**                               | Downloadable stage products, structured data, source inventories, manifest, and complete ZIP bundle                                                              |
 
 ### Zero-human active execution
 
@@ -45,9 +45,52 @@ operator safety control, not a normal workflow step. A document added after
 launch belongs to a new workflow version and cannot mutate an active or
 completed run.
 
-Human review begins only after Stage 8 has created the Draft package. Review may
-correct evidence, validate recommendations, and create a revised Draft or Final
-version. It is required before Final/publication, not before Draft generation.
+Human review begins only after Stage 8 has created the Draft package. A
+successful run means **Draft execution complete**, not reviewed, approved,
+Final, publication-ready, or safe for external circulation. The original Stage
+8 files remain immutable and downloadable throughout post-completion review.
+
+### Post-completion human controls
+
+G1, G2, and G3 are package-bound human controls outside the eight-stage
+workflow:
+
+- **G1 — named assessor:** an assigned, authenticated person confirms or marks
+  for revision every row from the exact stored DAMM engine input that was
+  used for the Draft package, including unscored carried candidate rows. Raw
+  pre-challenge research observations cannot substitute for that assessment
+  input. Database-derived row hashes and lossless numeric display prevent JSON
+  scale, exponent, or unsafe-integer values from being changed by JavaScript.
+- **G2 — independent peer reviewer:** a different assigned, authenticated
+  person rechecks all prerequisite rows, all `Judged` rows, and a deterministic
+  15% sample of the remainder. The G1 assessor cannot perform G2. Its immutable,
+  versioned affirmation attests that each scoped source resolves, its evidence
+  class is correctly derived, its ladder level is justified by evidence quality
+  and scale, and disagreements were resolved by evidence.
+- **G3 — TTL/country-owner sign-off:** after accepted G1 and G2, the
+  authenticated owner of the country workspace (the product's designated
+  TTL/country owner) records the seven QC affirmations and a
+  server-dated external-circulation decision.
+
+Machine derivation, the Stage 1 automated evidence challenge, vendor review,
+and other machine QC never populate or satisfy G1 or G2. Every assignment and
+decision is append-only and bound to the run, artifact set, complete-bundle
+digest, workflow contract identity, DAMM methodology identity, source commit,
+and assessment-input digest. Revisions or another package require a new chain;
+approvals never transfer.
+
+A country owner may replace a still-pending G1 or G2 assignment only by naming
+its exact active assignment and recording a required reason. Replacement is one
+atomic, append-only supersession: the old assignment remains in the audit trail
+but immediately loses review and artifact access, while the successor receives
+the unchanged package scope. An assignment with a completed decision can never
+be replaced or have its recorded identity altered.
+
+Accepted G3 creates a separate, versioned release manifest referring to the
+reviewed Draft and its exact G1/G2/G3 records. It never relabels or overwrites
+the Stage 8 files. While the pinned DAMM model is `draft for review` with
+`ratified: false`, that release is an **approved Draft release**, not a
+canonical Final release or a claim of methodological ratification.
 
 ### Download contract
 
@@ -137,8 +180,13 @@ The Draft bundle is not a public claim. These DAMM prohibitions remain in force:
 3. no automatic financing decision; and
 4. no public claim before human review.
 
-They govern use and publication after generation; they do not insert a human
-approval step into Stages 1–8.
+They govern promotion and circulation after generation; they do not insert a
+human approval step into Stages 1–8. The complete pre-review Draft remains
+downloadable before G1, G2, or G3.
+
+Both cookie-authenticated deployments and bearer-authenticated live previews
+download artifacts through the same authorized application route. The bearer
+is sent only in the request header and is never placed in a download URL.
 
 ## Legacy and administrative surfaces
 

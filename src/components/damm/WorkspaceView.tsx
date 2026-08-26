@@ -45,10 +45,10 @@ type Tab =
 const TABS: Array<{ id: Tab; label: string }> = [
   { id: "overview", label: "Overview" },
   { id: "readiness", label: "Readiness" },
-  { id: "evidence", label: "Manual evidence review" },
+  { id: "evidence", label: "Editable evidence workspace" },
   { id: "research", label: "DAR workflow" },
   { id: "documents", label: "Draft downloads" },
-  { id: "review", label: "Draft DAR review" },
+  { id: "review", label: "Human controls" },
   { id: "questions", label: "Manual open questions" },
   { id: "audit", label: "Audit" },
 ];
@@ -472,6 +472,11 @@ function EvidenceTab({ ws, onChange }: { ws: Workspace; onChange: () => Promise<
 
   return (
     <div className="space-y-6">
+      <p className="rounded-sm border border-amber-500/30 bg-amber-500/10 p-3 text-sm text-amber-900">
+        <b>This editable workspace is not G1.</b> G1 reviews every machine-filled row in one
+        immutable Stage 8 Draft package. Changes made here become inputs to a new workflow run and
+        never alter or approve an existing Draft package.
+      </p>
       <p className="text-sm text-muted">
         Enter what the instrument takes: a value (a number scores a threshold row; prose with a
         source reads Documented; a search trail beginning “DATA GAP” records a gap), the source and
@@ -782,9 +787,9 @@ function QuestionsTab({ ws }: { ws: Workspace }) {
       <Card className="p-4">
         <h2 className="text-sm font-semibold">Design decisions open for ratification</h2>
         <p className="mt-1 text-xs text-muted">
-          This is a manual model-governance surface outside the active DAR workflow. These
-          questions are not launch inputs and never pause Draft generation.{" "}
-          Every value these rulings can change is data in the model file (version {ws.modelVersion}
+          This is a manual model-governance surface outside the active DAR workflow. These questions
+          are not launch inputs and never pause Draft generation. Every value these rulings can
+          change is data in the model file (version {ws.modelVersion}
           ); a ruling updates the model, and nothing here presents an unratified value as settled.
         </p>
         <ul className="mt-3 space-y-2">

@@ -6,13 +6,16 @@
  *
  * Two things this route is careful about. The artifact is addressed by a key from a
  * closed list and the path is built from the run's own basename, so nothing the caller
- * sends becomes part of a filename. And the run must belong to the caller — a run id is
- * guessable enough that ownership has to be checked rather than assumed.
+ * sends becomes part of a filename. A run normally belongs to the caller; the only exception is a
+ * registered G1/G2 reviewer assigned to that exact immutable workflow package. Assignment access
+ * never extends to the country workspace or to non-workflow artifacts.
  */
 import { createFileRoute } from "@tanstack/react-router";
 
 import { auth } from "@/lib/auth/server";
+import type { ApprovalArtifactAccess } from "@/lib/damm-v17/approval-store";
 import { getPublishedWorkflowArtifact, getRun } from "@/lib/damm-v17/run-store";
+import { runPassName } from "@/lib/damm-v17/runs";
 import { artifactPath } from "@/lib/damm-v17/worker";
 import { artifactsFor } from "@/lib/damm-v17/worker-artifacts";
 
@@ -23,25 +26,55 @@ export const Route = createFileRoute("/api/runs/$runId/artifact")({
         const session = await auth.api.getSession({ headers: request.headers });
         if (!session?.user?.id) return new Response("Sign in first.", { status: 401 });
 
-        const run = await getRun(params.runId, session.user.id);
-        // A run that is not yours and a run that does not exist answer the same way.
-        if (!run || run.userId !== session.user.id) {
+        const key = new URL(request.url).searchParams.get("key") ?? "";
+        const ownedRun = await getRun(params.runId, session.user.id);
+        let run = ownedRun;
+        let artifactOwnerUserId = session.user.id;
+        let exactAccess: ApprovalArtifactAccess | null = null;
+
+        // Preserve the existing owner path, including legacy/unverified Draft warnings.
+        // Only an otherwise unauthorized caller may enter through an exact G1/G2 assignment.
+        if (!ownedRun && session.user.id !== "dev-user") {
+          const { getApprovalArtifactAccess } = await import("@/lib/damm-v17/approval-store");
+          const access = await getApprovalArtifactAccess(params.runId, key, session.user.id);
+          if (!access.ok) return new Response("Not found.", { status: 404 });
+          exactAccess = access.value;
+          artifactOwnerUserId = access.value.artifactOwnerUserId;
+          run = ownedRun ?? (await getRun(params.runId, artifactOwnerUserId));
+        }
+
+        // A missing run and an unauthorized run answer identically. Non-workflow
+        // artifacts remain strictly owner-only; assignments grant no workspace access.
+        if (!run || run.userId !== artifactOwnerUserId || (run.pass !== "workflow" && !ownedRun)) {
           return new Response("Not found.", { status: 404 });
         }
 
-        const key = new URL(request.url).searchParams.get("key") ?? "";
         if (run.pass === "workflow") {
           const advertised = artifactsFor("workflow").some((artifact) => artifact.key === key);
           const stored = advertised
-            ? await getPublishedWorkflowArtifact(run.id, key, session.user.id)
+            ? await getPublishedWorkflowArtifact(run.id, key, artifactOwnerUserId)
             : null;
           if (!stored) {
             return new Response(
-              `The completed workflow has no published artifact called "${key}".`,
+              `The completed Draft workflow has no stored artifact called "${key}".`,
               {
                 status: 404,
               },
             );
+          }
+          if (
+            exactAccess &&
+            (stored.runId !== exactAccess.runId ||
+              stored.artifactSetId !== exactAccess.artifactSetId ||
+              stored.key !== exactAccess.artifactKey ||
+              stored.sha256 !== exactAccess.artifactSha256 ||
+              (stored.key === "bundle" && stored.sha256 !== exactAccess.bundleSha256) ||
+              (exactAccess.accessAs === "assigned_reviewer" &&
+                (!exactAccess.packageId || !exactAccess.targetIdentitySha256)))
+          ) {
+            return new Response("The assigned package identity does not match this artifact.", {
+              status: 409,
+            });
           }
           const { createHash } = await import("node:crypto");
           if (createHash("sha256").update(stored.content).digest("hex") !== stored.sha256) {
@@ -73,9 +106,10 @@ export const Route = createFileRoute("/api/runs/$runId/artifact")({
 
         const found = artifactPath(run, key);
         if (!found) {
-          return new Response(`The ${run.pass} pass produces no artifact called "${key}".`, {
-            status: 404,
-          });
+          return new Response(
+            `The ${runPassName(run.pass)} produces no artifact called "${key}".`,
+            { status: 404 },
+          );
         }
 
         try {

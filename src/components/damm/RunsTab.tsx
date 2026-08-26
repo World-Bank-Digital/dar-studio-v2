@@ -13,6 +13,7 @@ import {
   Trash2,
 } from "lucide-react";
 
+import { ArtifactDownloadButton } from "@/components/damm/ArtifactDownloadButton";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import {
@@ -49,7 +50,7 @@ function StatusChip({ status }: { status: RunStatus }) {
     <span
       className={cn("rounded-sm border px-1.5 py-0.5 text-xs font-medium", STATUS_STYLE[status])}
     >
-      {status === "done" ? "complete" : status}
+      {status === "done" ? "execution complete" : status}
     </span>
   );
 }
@@ -266,7 +267,14 @@ function WorkflowRun({ run, onChange }: { run: RunView; onChange: () => Promise<
             {run.startedAt ? new Date(run.startedAt).toLocaleString() : "and queued"}
           </p>
         </div>
-        <StatusChip status={run.status} />
+        <div className="flex flex-wrap items-center gap-2">
+          {run.status === "done" ? (
+            <span className="rounded-sm border border-amber-500/30 bg-amber-500/10 px-1.5 py-0.5 text-xs font-medium text-amber-800">
+              Draft · pre-review
+            </span>
+          ) : null}
+          <StatusChip status={run.status} />
+        </div>
       </div>
       <ol className="mt-4 grid gap-2 sm:grid-cols-2">
         {DAR_WORKFLOW.stages.map((stage) => {
@@ -312,7 +320,7 @@ function WorkflowRun({ run, onChange }: { run: RunView; onChange: () => Promise<
         )}
       >
         {run.status === "done"
-          ? "The complete Draft DAR package is verified and ready for download. Human review is now available."
+          ? "The autonomous workflow is complete. Its immutable Draft DAR package is verified and downloadable; execution success is not G1, G2, G3, approval, Final status, or publication readiness. Post-completion human controls are now available."
           : run.summary}
       </p>
       <div className="mt-3 flex flex-wrap gap-2">
@@ -328,13 +336,13 @@ function WorkflowRun({ run, onChange }: { run: RunView; onChange: () => Promise<
             </summary>
             <div className="mt-2 flex flex-wrap gap-2">
               {artifactsFor("workflow").map((artifact) => (
-                <a
+                <ArtifactDownloadButton
                   key={artifact.key}
                   href={`/api/runs/${run.id}/artifact?key=${encodeURIComponent(artifact.key)}`}
                   className="inline-flex min-h-9 items-center gap-1.5 rounded-sm border border-border-strong px-3 text-xs font-medium hover:bg-moss"
                 >
                   <Download className="size-3.5" /> {artifact.label}
-                </a>
+                </ArtifactDownloadButton>
               ))}
             </div>
           </details>
@@ -383,25 +391,21 @@ export function RunsTab({ countryId }: { countryId: string }) {
     return () => clearInterval(timer);
   }, [active, refresh]);
 
-  const grouped = useMemo(
-    () => {
-      const canonicalKinds = new Set(
-        DAR_WORKFLOW.optional_launch_inputs.map((category) => category.id),
-      );
-      return Object.fromEntries(
-        DAR_WORKFLOW.optional_launch_inputs.map((category) => [
-          category.id,
-          uploads.filter(
-            (upload) =>
-              upload.kind === category.id ||
-              (category.id === "country_context_documents" &&
-                !canonicalKinds.has(upload.kind)),
-          ),
-        ]),
-      ) as Record<string, WorkflowUploadView[]>;
-    },
-    [uploads],
-  );
+  const grouped = useMemo(() => {
+    const canonicalKinds = new Set(
+      DAR_WORKFLOW.optional_launch_inputs.map((category) => category.id),
+    );
+    return Object.fromEntries(
+      DAR_WORKFLOW.optional_launch_inputs.map((category) => [
+        category.id,
+        uploads.filter(
+          (upload) =>
+            upload.kind === category.id ||
+            (category.id === "country_context_documents" && !canonicalKinds.has(upload.kind)),
+        ),
+      ]),
+    ) as Record<string, WorkflowUploadView[]>;
+  }, [uploads]);
   const hasLegacy = uploads.some((upload) => upload.extractionStatus !== "extracted");
   const setCategoryBusy = useCallback((categoryId: string, busy: boolean) => {
     setBusyCategories((current) => {
@@ -470,7 +474,9 @@ export function RunsTab({ countryId }: { countryId: string }) {
         <h2 className="text-sm font-semibold">Optional pre-launch source documents</h2>
         <p className="mt-1 text-xs text-muted">
           Originals and extracted text are hash-recorded with uploader and timestamp provenance.
-          Maximum 2 MB per direct upload, 10 MB combined, and 50 documents.
+          Maximum 2 MB per direct upload, 10 MB combined, and 50 documents. After a workflow has
+          launched, later uploads apply only to a new Draft workflow run; they cannot change its
+          frozen input snapshot or completed package.
         </p>
         <div className="mt-3 grid gap-3 lg:grid-cols-2">
           {DAR_WORKFLOW.optional_launch_inputs.map((category) => (

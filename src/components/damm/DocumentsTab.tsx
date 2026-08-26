@@ -7,10 +7,12 @@
  * reader to infer from an absence that nothing was meant to be there.
  */
 import { useCallback, useEffect, useState } from "react";
+import { CheckCircle2, CircleDashed, Download, Loader2 } from "lucide-react";
+
+import { ArtifactDownloadButton } from "@/components/damm/ArtifactDownloadButton";
 import { Card } from "@/components/ui/card";
-import { cn } from "@/lib/utils";
 import { countryDocuments, type DocumentState } from "@/lib/damm-v17/run-actions";
-import { CheckCircle2, CircleDashed, ExternalLink, Loader2 } from "lucide-react";
+import { cn } from "@/lib/utils";
 
 export function DocumentsTab({ countryId }: { countryId: string }) {
   const [docs, setDocs] = useState<DocumentState[] | null>(null);
@@ -52,8 +54,8 @@ export function DocumentsTab({ countryId }: { countryId: string }) {
         <p className="mt-2 text-xs text-muted">{status}</p>
         {!complete && (
           <p className="mt-2 text-xs text-muted">
-            The set is not complete, so it is not ready for that review. Each document
-            below says what would produce it.
+            The set is not complete, so it is not ready for that review. Each document below says
+            what would produce it.
           </p>
         )}
       </Card>
@@ -78,19 +80,17 @@ export function DocumentsTab({ countryId }: { countryId: string }) {
               </p>
             </div>
             {d.href ? (
-              <a
+              <ArtifactDownloadButton
                 href={d.href}
-                target="_blank"
-                rel="noreferrer"
                 className={cn(
                   "inline-flex min-h-9 shrink-0 items-center gap-1.5 rounded-sm",
                   "border border-border-strong bg-surface px-3 text-xs font-medium",
                   "text-ink hover:bg-moss",
                 )}
               >
-                <ExternalLink className="size-3.5" />
-                Open
-              </a>
+                <Download className="size-3.5" />
+                Download
+              </ArtifactDownloadButton>
             ) : (
               <span className="shrink-0 text-xs text-subtle">Not produced</span>
             )}

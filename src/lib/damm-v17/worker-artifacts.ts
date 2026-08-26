@@ -23,6 +23,7 @@ export interface WorkflowPackageSelector {
 export type WorkflowArtifactSource =
   | { kind: "root"; path: "workflow-manifest.json" | "workflow-events.jsonl" }
   | { kind: "stage8"; artifactKey: "workflow_manifest" | "complete_bundle" }
+  | { kind: "assessment_input" }
   | {
       kind: "methodology";
       asset: "run_manifest" | "export_manifest" | "model" | "schema" | "indicator_census";
@@ -168,6 +169,12 @@ if (!draftStage) throw new Error("Canonical workflow has no Draft DAR stage");
 
 const WORKFLOW_ARTIFACTS: ArtifactLink[] = [
   {
+    key: "assessment-input",
+    label: "Exact DAMM assessment input reviewed at G1",
+    extension: "json",
+    workflowSource: { kind: "assessment_input" },
+  },
+  {
     key: "methodology-manifest",
     label: "Run methodology manifest",
     extension: "json",
@@ -236,8 +243,8 @@ const ARTIFACTS: Record<RunPass, ArtifactLink[]> = {
     { key: "trail", label: "Research trail" },
   ],
   g2: [
-    { key: "input", label: "Reviewed engine input" },
-    { key: "findings", label: "Review findings" },
+    { key: "input", label: "Machine-QC engine input" },
+    { key: "findings", label: "Automated challenge findings" },
   ],
   scans: [
     { key: "scans", label: "Scan findings" },
@@ -274,6 +281,38 @@ export interface DocumentSlot {
   what: string;
   pass: RunPass;
   artifactKey: string;
+}
+
+/**
+ * One immutable Stage 8 Draft package. Document surfaces receive one of these first,
+ * then resolve every link inside that exact package. They must never fill a missing
+ * file from another run: a union of individually valid files is not a reviewed bundle.
+ */
+export interface WorkflowDocumentPackage {
+  runId: string;
+  artifactSetId: string;
+  bundleSha256: string;
+  completedAt: string;
+}
+
+export interface WorkflowDocumentAttempt {
+  runId: string;
+  status: string;
+}
+
+export interface WorkflowDocumentState extends DocumentSlot {
+  runId: string | null;
+  artifactSetId: string | null;
+  bundleSha256: string | null;
+  producedAt: string | null;
+  href: string | null;
+  missingBecause: string | null;
+}
+
+export interface WorkflowDocumentSet {
+  package: WorkflowDocumentPackage | null;
+  documents: WorkflowDocumentState[];
+  complete: boolean;
 }
 
 export const DOCUMENT_SLOTS: DocumentSlot[] = [
@@ -341,3 +380,54 @@ export const DOCUMENT_SLOTS: DocumentSlot[] = [
     artifactKey: "manifest",
   },
 ];
+
+/**
+ * Project the canonical download list from one selected package and no other.
+ *
+ * `artifactKeys` must come from the selected run's immutable artifact-set pointer.
+ * Keeping the selected identity on missing rows is deliberate: it makes a partial set
+ * visibly partial instead of inviting a fallback search through older completed runs.
+ */
+export function documentsForExactWorkflowPackage(
+  selected: WorkflowDocumentPackage | null,
+  artifactKeys: ReadonlySet<string>,
+  latestAttempt: WorkflowDocumentAttempt | null = null,
+): WorkflowDocumentSet {
+  const documents = DOCUMENT_SLOTS.map<WorkflowDocumentState>((slot) => {
+    const present =
+      selected !== null && slot.pass === "workflow" && artifactKeys.has(slot.artifactKey);
+    if (present) {
+      return {
+        ...slot,
+        runId: selected.runId,
+        artifactSetId: selected.artifactSetId,
+        bundleSha256: selected.bundleSha256,
+        producedAt: selected.completedAt,
+        href: `/api/runs/${selected.runId}/artifact?key=${encodeURIComponent(slot.artifactKey)}`,
+        missingBecause: null,
+      };
+    }
+
+    return {
+      ...slot,
+      runId: selected?.runId ?? latestAttempt?.runId ?? null,
+      artifactSetId: selected?.artifactSetId ?? null,
+      bundleSha256: selected?.bundleSha256 ?? null,
+      producedAt: null,
+      href: null,
+      missingBecause: selected
+        ? "The selected Stage 8 Draft package does not contain this artifact."
+        : latestAttempt
+          ? latestAttempt.status === "done"
+            ? "The completed workflow has no hash-verified Stage 8 Draft package."
+            : `The canonical Draft DAR workflow is ${latestAttempt.status}.`
+          : "The canonical Draft DAR workflow has not been run.",
+    };
+  });
+
+  return {
+    package: selected,
+    documents,
+    complete: selected !== null && documents.every((document) => document.href !== null),
+  };
+}

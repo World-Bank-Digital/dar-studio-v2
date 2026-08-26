@@ -51,6 +51,52 @@ function sqlFor(pg: PGlite): Sql {
   return sql;
 }
 
+function instrumentSql(
+  database: Sql,
+  hooks: {
+    onTransaction?: () => void;
+    beforeQuery?: (text: string) => void | Promise<void>;
+    afterQuery?: (text: string) => void | Promise<void>;
+  },
+): Sql {
+  const wrap = (delegate: Sql): Sql => {
+    const instrumented = (async <T = Record<string, unknown>>(
+      strings: TemplateStringsArray,
+      ...values: unknown[]
+    ): Promise<T[]> => {
+      const text = strings.join("$?");
+      await hooks.beforeQuery?.(text);
+      const rows = await delegate<T>(strings, ...values);
+      await hooks.afterQuery?.(text);
+      return rows;
+    }) as Sql;
+    instrumented.query = async <T = Record<string, unknown>>(
+      text: string,
+      values: unknown[] = [],
+    ) => {
+      await hooks.beforeQuery?.(text);
+      const rows = await delegate.query<T>(text, values);
+      await hooks.afterQuery?.(text);
+      return rows;
+    };
+    instrumented.transaction = (callback) =>
+      delegate.transaction((transaction) => {
+        hooks.onTransaction?.();
+        return callback(wrap(transaction));
+      });
+    return instrumented;
+  };
+  return wrap(database);
+}
+
+function deferred(): { promise: Promise<void>; resolve: () => void } {
+  let resolve!: () => void;
+  const promise = new Promise<void>((done) => {
+    resolve = done;
+  });
+  return { promise, resolve };
+}
+
 async function databaseThroughMigration(lastMigration?: string): Promise<{ pg: PGlite; sql: Sql }> {
   const pg = new PGlite();
   await pg.waitReady;
@@ -264,7 +310,11 @@ describe("0011 methodology upgrade", () => {
       const migrationTable = await sql.query<{ name: string | null }>(
         "select to_regclass('workflow_run_methodology')::text as name",
       );
-      assert.equal(migrationTable[0].name, null, "a blocked migration must leave no partial schema");
+      assert.equal(
+        migrationTable[0].name,
+        null,
+        "a blocked migration must leave no partial schema",
+      );
       const statusEvents = await sql.query<{ count: number }>(
         `select count(*)::int as count from run_events
          where run_id in ('legacy-queued', 'legacy-running') and kind = 'status'`,
@@ -460,15 +510,7 @@ describe("claim-fenced shared workflow artifacts", () => {
             (id, user_id, country_name, iso3, pass, status, ceiling_usd, out_basename,
              claimed_by, claim_token)
            values ($1, $2, $3, $4, 'workflow', 'running', 500, $5, $6, $7)`,
-          [
-            "artifact-run",
-            "user-1",
-            "Egypt",
-            "EGY",
-            "EGY_artifact",
-            "worker-new",
-            "claim-new",
-          ],
+          ["artifact-run", "user-1", "Egypt", "EGY", "EGY_artifact", "worker-new", "claim-new"],
         );
         await insertWorkflowMethodology(transaction, "artifact-run");
       });
@@ -536,19 +578,15 @@ describe("claim-fenced shared workflow artifacts", () => {
       );
       assert.ok(fromWebHost);
       assert.equal(new TextDecoder().decode(fromWebHost.content), "verified manifest bytes");
-      assert.deepEqual(
-        await listPublishedWorkflowArtifactKeys("artifact-run", "user-1", sql),
-        ["manifest"],
-      );
+      assert.deepEqual(await listPublishedWorkflowArtifactKeys("artifact-run", "user-1", sql), [
+        "manifest",
+      ]);
       assert.equal(await getRun("artifact-run", "user-2", sql), null);
       assert.equal(
         await getPublishedWorkflowArtifact("artifact-run", "manifest", "user-2", sql),
         null,
       );
-      assert.deepEqual(
-        await listPublishedWorkflowArtifactKeys("artifact-run", "user-2", sql),
-        [],
-      );
+      assert.deepEqual(await listPublishedWorkflowArtifactKeys("artifact-run", "user-2", sql), []);
       await assert.rejects(
         sql.query(
           "update workflow_run_methodology set model_revision = model_revision + 1 where run_id = $1",
@@ -589,10 +627,9 @@ describe("claim-fenced shared workflow artifacts", () => {
       );
       await assert.rejects(
         sql.transaction(async (transaction) => {
-          await transaction.query(
-            "update runs set workflow_artifact_set_id = null where id = $1",
-            ["artifact-run"],
-          );
+          await transaction.query("update runs set workflow_artifact_set_id = null where id = $1", [
+            "artifact-run",
+          ]);
           await transaction.query(
             "update workflow_run_artifacts set content = $1 where run_id = $2",
             [corrupted, "artifact-run"],
@@ -606,6 +643,142 @@ describe("claim-fenced shared workflow artifacts", () => {
       );
       assert.ok(await getPublishedWorkflowArtifact("artifact-run", "manifest", "user-1", sql));
     } finally {
+      await pg.close();
+    }
+  });
+
+  it("serializes an in-flight staged update before locking and publishing the complete set", async () => {
+    const { pg, sql } = await migratedDatabase();
+    const staged = deferred();
+    const releaseStagingCommit = deferred();
+    try {
+      await sql.transaction(async (transaction) => {
+        await transaction.query(
+          `insert into runs
+            (id, user_id, country_name, iso3, pass, status, ceiling_usd, out_basename,
+             claimed_by, claim_token)
+           values ($1, $2, $3, $4, 'workflow', 'running', 500, $5, $6, $7)`,
+          [
+            "artifact-race-run",
+            "user-1",
+            "Egypt",
+            "EGY",
+            "EGY_artifact_race",
+            "worker-1",
+            "claim-1",
+          ],
+        );
+        await insertWorkflowMethodology(transaction, "artifact-race-run");
+      });
+      const originalContent = Buffer.from("original staged bytes");
+      const artifact = {
+        key: "manifest",
+        relativePath: "workflow-manifest.json",
+        filename: "workflow-manifest.json",
+        contentType: "application/json",
+        sha256: createHash("sha256").update(originalContent).digest("hex"),
+        assessmentInputSha256: ASSESSMENT_INPUT_SHA256,
+        content: originalContent,
+      };
+      assert.equal(
+        await saveWorkflowArtifact("artifact-race-run", "worker-1", "claim-1", artifact, sql),
+        true,
+      );
+
+      const replacementContent = Buffer.from("replacement staged bytes");
+      const replacement = {
+        ...artifact,
+        sha256: createHash("sha256").update(replacementContent).digest("hex"),
+        content: replacementContent,
+      };
+      let pauseStaging = true;
+      const stagingSql = instrumentSql(sql, {
+        async afterQuery(text) {
+          if (pauseStaging && /insert into workflow_run_artifacts/i.test(text)) {
+            pauseStaging = false;
+            staged.resolve();
+            await releaseStagingCommit.promise;
+          }
+        },
+      });
+      const saving = saveWorkflowArtifact(
+        "artifact-race-run",
+        "worker-1",
+        "claim-1",
+        replacement,
+        stagingSql,
+      );
+      await staged.promise;
+
+      const publicationQueries: string[] = [];
+      let publicationTransactionEntered = false;
+      const publicationSql = instrumentSql(sql, {
+        onTransaction() {
+          publicationTransactionEntered = true;
+        },
+        beforeQuery(text) {
+          publicationQueries.push(text.replace(/\s+/g, " ").trim());
+        },
+      });
+      const publishing = publishWorkflowArtifactSet(
+        "artifact-race-run",
+        "worker-1",
+        "claim-1",
+        ["manifest"],
+        publicationSql,
+      );
+
+      await new Promise<void>((resolve) => setImmediate(resolve));
+      assert.equal(
+        publicationTransactionEntered,
+        false,
+        "publication must wait for the staging transaction to commit",
+      );
+      releaseStagingCommit.resolve();
+      assert.equal(await saving, true);
+      assert.equal(await publishing, true);
+
+      const runLock = publicationQueries.findIndex(
+        (query) => /from runs run/i.test(query) && /for update of run$/i.test(query),
+      );
+      const artifactSetLock = publicationQueries.findIndex(
+        (query) =>
+          /from workflow_run_artifacts/i.test(query) &&
+          /order by artifact_key for update$/i.test(query),
+      );
+      const pointerUpdate = publicationQueries.findIndex((query) =>
+        /^update runs set workflow_artifact_set_id/i.test(query),
+      );
+      assert.ok(runLock >= 0, "publication must lock the run first");
+      assert.ok(artifactSetLock > runLock, "publication must next lock every staged row");
+      assert.ok(pointerUpdate > artifactSetLock, "publication pointer must be written last");
+
+      const stored = await sql.query<{ content: unknown; sha256: string }>(
+        `select content, sha256 from workflow_run_artifacts
+         where run_id = $1 and artifact_set_id = $2 and artifact_key = $3`,
+        ["artifact-race-run", "claim-1", "manifest"],
+      );
+      assert.deepEqual(Buffer.from(stored[0].content as Uint8Array), replacementContent);
+      assert.equal(stored[0].sha256, replacement.sha256);
+
+      const laterContent = Buffer.from("too-late staged bytes");
+      assert.equal(
+        await saveWorkflowArtifact(
+          "artifact-race-run",
+          "worker-1",
+          "claim-1",
+          {
+            ...artifact,
+            sha256: createHash("sha256").update(laterContent).digest("hex"),
+            content: laterContent,
+          },
+          sql,
+        ),
+        false,
+        "the selected set is append-closed before finishRun",
+      );
+    } finally {
+      releaseStagingCommit.resolve();
       await pg.close();
     }
   });
@@ -697,7 +870,10 @@ describe("serialized canonical launch inputs", () => {
     const { pg, sql } = await migratedDatabase();
     try {
       await insertCountry(sql, "country-race");
-      assert.equal((await savePendingWorkflowUpload(uploadInput("before", "country-race"), sql)).ok, true);
+      assert.equal(
+        (await savePendingWorkflowUpload(uploadInput("before", "country-race"), sql)).ok,
+        true,
+      );
 
       const [launch, upload] = await Promise.all([
         createRun(workflowRunInput("run-race", "country-race"), sql),
@@ -733,7 +909,10 @@ describe("serialized canonical launch inputs", () => {
         savePendingWorkflowUpload(uploadInput("final-b", "country-cap"), sql),
       ]);
       assert.equal(results.filter((result) => result.ok).length, 1);
-      assert.equal(results.filter((result) => !result.ok && result.reason === "documents").length, 1);
+      assert.equal(
+        results.filter((result) => !result.ok && result.reason === "documents").length,
+        1,
+      );
       const [{ count }] = await sql.query<{ count: number }>(
         "select count(*)::int as count from uploads where country_id = $1",
         ["country-cap"],
@@ -850,15 +1029,7 @@ describe("post-completion Draft DAR review", () => {
         true,
       );
       assert.equal(
-        await finishRun(
-          "run-review",
-          "worker-review",
-          "claim-review",
-          "done",
-          "",
-          undefined,
-          sql,
-        ),
+        await finishRun("run-review", "worker-review", "claim-review", "done", "", undefined, sql),
         true,
       );
       const target = await latestWorkflowReviewTarget("country-review", "user-1", sql);

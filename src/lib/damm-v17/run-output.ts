@@ -1,9 +1,11 @@
 /**
  * Reading the pipeline's own progress output.
  *
- * The worker spawns `research_orchestrator.py` or `gate2.py` and has to know how far the
- * run has got, what it has spent, and why it stopped. Two channels carry that, and they
- * are used for different things on purpose:
+ * The worker spawns `research_orchestrator.py` or the legacy `gate2.py` automated
+ * vendor-challenge script and has to know how far the run has got, what it has spent,
+ * and why it stopped. That compatibility script performs machine QC only; it has no
+ * G1/G2 human-review or approval effect. Two channels carry progress, and they are used
+ * for different things on purpose:
  *
  *  - **The checkpoint files are authoritative.** `<out>_spend.json` carries the ledger and
  *    `<out>_state.json` the completed rows. Those are what the pipeline itself resumes
@@ -35,7 +37,7 @@ export type RunEvent =
       /** Cumulative pass spend as the pipeline reported it on this line. */
       spentUsd: number | null;
       seconds: number;
-      /** pass | hold | reject | gap for research; upheld | filled | withdrawn … for G2. */
+      /** Research outcomes, or machine-QC outcomes from the automated vendor challenge. */
       outcome: string;
     }
   | { kind: "exhausted"; message: string }
@@ -71,8 +73,8 @@ const INCOMPLETE = /^\s*!!\s*(\d+\s+rows not researched.*)$/i;
 /** `wrote EGY_shadow_input.json — 59 rows, 23 gaps, 10 held` */
 const FINISHED = /^\s*wrote\s+(\S+_input\.json.*)$/;
 
-/** `reviewed 38 rows · adjusted 3 · filled 4 · upheld 29` */
-const FINISHED_G2 = /^\s*(reviewed\s+\d+\s+rows.*)$/;
+/** Upstream compatibility output: `reviewed 38 rows · adjusted 3 · filled 4 · upheld 29`. */
+const FINISHED_AUTOMATED_CHALLENGE = /^\s*(reviewed\s+\d+\s+rows.*)$/;
 
 /**
  * `    ! 1.4: perplexity discovery unavailable — 401 ... quota ...`
@@ -209,7 +211,15 @@ export function parseLine(line: string, expectedWorkflowRunId?: string): RunEven
   if ((m = EXHAUSTED.exec(line))) return { kind: "exhausted", message: m[1].trim() };
   if ((m = INCOMPLETE.exec(line))) return { kind: "incomplete", message: m[1].trim() };
   if ((m = FINISHED.exec(line))) return { kind: "finished", message: m[1].trim() };
-  if ((m = FINISHED_G2.exec(line))) return { kind: "finished", message: m[1].trim() };
+  if ((m = FINISHED_AUTOMATED_CHALLENGE.exec(line))) {
+    const detail = m[1].trim().replace(/^reviewed/i, "machine-checked");
+    return {
+      kind: "finished",
+      message:
+        `Automated vendor challenge complete: ${detail}. ` +
+        "Machine QC does not satisfy G1 or G2 human review and records no approval.",
+    };
+  }
   if ((m = WORKFLOW_CONFIGURATION_ERROR.exec(line))) {
     return { kind: "failed", authoritative: true, message: m[1].trim() };
   }

@@ -20,7 +20,7 @@ import {
   type Run,
   type RunStatus,
   basenameFor,
-  canReview,
+  canRunAutomatedChallenge,
   defaultVendorFor,
   VENDOR_CHOICES,
   projectToFinish,
@@ -56,7 +56,7 @@ function run(over: Partial<Run> = {}): Run {
   };
 }
 
-describe("the budget, which is exported rather than restated (G3)", () => {
+describe("the budget, which is exported rather than restated", () => {
   it("per-pass caps exhaust the country ceiling", () => {
     // If they summed to less, a country could not spend its ceiling; if more, it could
     // spend past it by running every pass to its own limit.
@@ -85,7 +85,7 @@ describe("the budget, which is exported rather than restated (G3)", () => {
   });
 });
 
-describe("exhaustion is not failure (G2)", () => {
+describe("legacy-pass exhaustion is not failure", () => {
   it("keeps the two states apart", () => {
     assert.ok(isTerminal("failed"));
     assert.ok(!isTerminal("exhausted"), "an exhausted run is unfinished, not broken");
@@ -150,7 +150,7 @@ describe("transitions are a closed set", () => {
   });
 });
 
-describe("a dead worker does not strand a run (G1)", () => {
+describe("a dead worker does not strand a run", () => {
   const now = new Date("2026-08-25T12:00:00Z");
 
   it("a queued run is free", () => {
@@ -220,8 +220,9 @@ describe("which name a pass writes under", () => {
   });
 
   it("makes a later pass inherit the research name rather than mint its own", () => {
-    // gate2.py takes --run and reads an existing pass's files. A G2 run under a fresh
-    // name would find nothing to review and report a clean review of it.
+    // The upstream gate2.py automated challenge takes --run and reads an existing pass's
+    // files. A compatibility pass under a fresh name would inspect nothing and report a
+    // false clean machine-QC result.
     assert.equal(
       basenameFor("g2", "EGY", at, "EGY_202608251407_a1b2c3", "zzz"),
       "EGY_202608251407_a1b2c3",
@@ -244,26 +245,27 @@ describe("which name a pass writes under", () => {
   });
 });
 
-describe("who may review a pass", () => {
-  it("allows a reviewer from another vendor", () => {
-    assert.ok(canReview("anthropic/claude-opus-5", "openai/gpt-5.6-terra").ok);
+describe("which vendor may run the automated challenge", () => {
+  it("allows an automated challenger from another vendor family", () => {
+    assert.ok(canRunAutomatedChallenge("anthropic/claude-opus-5", "openai/gpt-5.6-terra").ok);
   });
 
-  it("refuses a vendor reviewing its own work", () => {
-    const t = canReview("anthropic/claude-opus-5", "anthropic/claude-sonnet-5");
+  it("refuses same-family machine self-checking", () => {
+    const t = canRunAutomatedChallenge("anthropic/claude-opus-5", "anthropic/claude-sonnet-5");
     assert.equal(t.ok, false);
-    assert.match(t.reason, /reviewing its own work/);
+    assert.match(t.reason, /same-family machine self-checking/);
+    assert.match(t.reason, /never counts as G1 or G2 human review/);
   });
 
-  it("catches the unnamed case, where nothing on screen would say so", () => {
-    // Research on openai, reviewer left at its default — which is also openai. This is
-    // the trap the rule exists for: both fields look empty and the review is not a peer.
-    const t = canReview("openai/gpt-5.6-terra", null);
+  it("catches an omitted challenge-vendor default", () => {
+    // Research on openai, challenge vendor left at its default — which is also openai.
+    // This is the case a null-vs-value comparison misses.
+    const t = canRunAutomatedChallenge("openai/gpt-5.6-terra", null);
     assert.equal(t.ok, false);
   });
 
   it("allows the two defaults, which is the arrangement the pipeline shipped with", () => {
-    assert.ok(canReview(null, null).ok);
+    assert.ok(canRunAutomatedChallenge(null, null).ok);
   });
 
   it("offers only vendor/model pairs the pipeline can resolve", () => {
@@ -312,7 +314,7 @@ describe("how much budget finishing would need", () => {
 });
 
 describe("which passes produce evidence", () => {
-  it("research and the second review do", () => {
+  it("research and the automated vendor challenge produce machine evidence", () => {
     assert.ok(producesEvidence("research"));
     assert.ok(producesEvidence("g2"));
   });

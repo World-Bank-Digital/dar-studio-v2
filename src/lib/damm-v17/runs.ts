@@ -1,5 +1,5 @@
 /**
- * Pipeline runs: the state machine, the claim rule, and the budget (G1, G2, G3).
+ * Pipeline runs: the state machine, the claim rule, and the budget.
  *
  * Everything here is pure. The SQL that persists it is thin by design, so the rules that
  * matter — when a run may be claimed, when it may stop, what it is allowed to spend — can
@@ -26,9 +26,20 @@ import vendors from "../../data/run_vendors.json" with { type: "json" };
 export type RunStatus =
   "queued" | "running" | "paused" | "exhausted" | "failed" | "done" | "cancelled";
 
-/** The pipeline's own budget passes. Named to match, so no translation is needed. */
+/**
+ * The pipeline's own budget passes. Named to match, so no translation is needed.
+ * The upstream compatibility id `g2` is an automated vendor challenge, not the G2
+ * independent human review and not a human approval of any kind.
+ */
 export type RunPass =
   "workflow" | "research" | "g2" | "scans" | "foresight" | "generation" | "diagnostic";
+
+/** Human-readable pass names; compatibility ids such as `g2` never reach product copy. */
+export function runPassName(pass: RunPass): string {
+  if (pass === "workflow") return "canonical Draft DAR workflow";
+  if (pass === "g2") return "automated vendor challenge (machine QC)";
+  return `${pass} pass`;
+}
 
 export interface Run {
   id: string;
@@ -111,10 +122,10 @@ export function isPublicRunPass(pass: RunPass): pass is (typeof PUBLIC_RUN_PASSE
 /**
  * Whether a pass produces rows for the evidence base.
  *
- * Research and the second review do. The scans gather what the instrument does not
- * measure, foresight produces milestones, and generation produces a document — none of
- * them score an indicator, and offering to import one into the evidence base would
- * suggest they might.
+ * Research and the automated vendor challenge do. The scans gather what the instrument
+ * does not measure, foresight produces milestones, and generation produces a document —
+ * none of them score an indicator, and offering to import one into the evidence base
+ * would suggest they might. Machine-produced rows never constitute G1 or G2 human review.
  */
 export function producesEvidence(pass: RunPass): boolean {
   return pass === "research" || pass === "g2";
@@ -163,25 +174,26 @@ export function vendorFamily(vendor: string | null): string | null {
 }
 
 /**
- * Whether a reviewer may review this pass.
+ * Whether another vendor may run the legacy automated challenge over this pass.
  *
- * The second review exists to be a peer, and the audition showed a vendor's own siblings
- * abstaining in the same places — so a model reviewing its own pass upholds it and the
- * review reports a clean bill it never earned. Families are compared after defaults are
- * resolved, because the trap is the unnamed case: research on openai and a G2 left at its
- * default is the same family, and nothing on screen would say so.
+ * The challenge is machine QC, not an independent human review. The audition showed a
+ * vendor's own sibling models abstaining in the same places, so a same-family challenge
+ * can return an unjustified clean result. Families are compared after defaults resolve,
+ * including the unnamed case where research and the compatibility `g2` pass both resolve
+ * to the same vendor family.
  */
-export function canReview(
+export function canRunAutomatedChallenge(
   researchVendor: string | null,
-  reviewerVendor: string | null,
+  challengeVendor: string | null,
 ): Transition {
   const primary = vendorFamily(researchVendor ?? defaultVendorFor("research"));
-  const reviewer = vendorFamily(reviewerVendor ?? defaultVendorFor("g2"));
-  if (!primary || !reviewer) return OK;
-  if (primary !== reviewer) return OK;
+  const challenger = vendorFamily(challengeVendor ?? defaultVendorFor("g2"));
+  if (!primary || !challenger) return OK;
+  if (primary !== challenger) return OK;
   return no(
-    `the research pass was run on ${primary} and a second review on ${reviewer} would be ` +
-      `that vendor reviewing its own work. Choose a reviewer from another vendor.`,
+    `the research pass was run on ${primary}, so an automated challenge on ${challenger} ` +
+      "would be same-family machine self-checking. Choose a different vendor family. " +
+      "This machine QC never counts as G1 or G2 human review.",
   );
 }
 
@@ -195,11 +207,11 @@ export function isActive(s: RunStatus): boolean {
 /**
  * The output basename a pass writes under.
  *
- * A research pass mints one. A second review does not: `gate2.py` takes `--run` and reads
- * an existing pass's files, so a G2 run that minted its own name would review nothing and
- * report a clean review of it. Every later pass inherits the research basename, which is
- * why this returns null when there is none to inherit — the caller has to refuse rather
- * than invent one.
+ * A research pass mints one. The legacy automated challenge does not: the upstream
+ * `gate2.py` compatibility script takes `--run` and reads an existing pass's files. If
+ * that pass minted its own name it would inspect nothing and report a false clean machine-
+ * QC result. Every later pass inherits the research basename, which is why this returns
+ * null when there is none to inherit — the caller has to refuse rather than invent one.
  *
  * `token` is what makes a minted name unique, and it is not decoration. The basename is
  * what the pipeline checkpoints under, and it is always invoked with `--resume`. A name
@@ -231,7 +243,7 @@ export function isResumable(s: RunStatus): boolean {
 export const DEFAULT_CEILING_USD: number = budget.default_ceiling_usd;
 const ALLOCATION = budget.allocation as Record<string, number>;
 
-/** What this pass may spend of the country ceiling (decision G3). */
+/** What this pass may spend of the country ceiling. */
 export function passCap(pass: RunPass, ceilingUsd: number): number {
   // The coordinator owns the whole preauthorized ceiling and enforces the contract's
   // protected stage allocations within it. Applying one legacy pass share to the outer

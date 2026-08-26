@@ -15,6 +15,7 @@ import { Route as MethodologyRouteImport } from './routes/methodology'
 import { Route as ResetPasswordRouteImport } from './routes/reset-password'
 import { Route as SettingsRouteImport } from './routes/settings'
 import { Route as CIdRouteImport } from './routes/c.$id'
+import { Route as ReviewAssignmentIdRouteImport } from './routes/review.$assignmentId'
 import { Route as ApiAuthSplatRouteImport } from './routes/api/auth/$'
 import { Route as ApiRunsRunIdArtifactRouteImport } from './routes/api/runs/$runId.artifact'
 
@@ -48,6 +49,11 @@ const CIdRoute = CIdRouteImport.update({
   path: '/c/$id',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ReviewAssignmentIdRoute = ReviewAssignmentIdRouteImport.update({
+  id: '/review/$assignmentId',
+  path: '/review/$assignmentId',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiAuthSplatRoute = ApiAuthSplatRouteImport.update({
   id: '/api/auth/$',
   path: '/api/auth/$',
@@ -66,6 +72,7 @@ export interface FileRoutesByFullPath {
   '/reset-password': typeof ResetPasswordRoute
   '/settings': typeof SettingsRoute
   '/c/$id': typeof CIdRoute
+  '/review/$assignmentId': typeof ReviewAssignmentIdRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
   '/api/runs/$runId/artifact': typeof ApiRunsRunIdArtifactRoute
 }
@@ -76,6 +83,7 @@ export interface FileRoutesByTo {
   '/reset-password': typeof ResetPasswordRoute
   '/settings': typeof SettingsRoute
   '/c/$id': typeof CIdRoute
+  '/review/$assignmentId': typeof ReviewAssignmentIdRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
   '/api/runs/$runId/artifact': typeof ApiRunsRunIdArtifactRoute
 }
@@ -87,6 +95,7 @@ export interface FileRoutesById {
   '/reset-password': typeof ResetPasswordRoute
   '/settings': typeof SettingsRoute
   '/c/$id': typeof CIdRoute
+  '/review/$assignmentId': typeof ReviewAssignmentIdRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
   '/api/runs/$runId/artifact': typeof ApiRunsRunIdArtifactRoute
 }
@@ -99,6 +108,7 @@ export interface FileRouteTypes {
     | '/reset-password'
     | '/settings'
     | '/c/$id'
+    | '/review/$assignmentId'
     | '/api/auth/$'
     | '/api/runs/$runId/artifact'
   fileRoutesByTo: FileRoutesByTo
@@ -109,6 +119,7 @@ export interface FileRouteTypes {
     | '/reset-password'
     | '/settings'
     | '/c/$id'
+    | '/review/$assignmentId'
     | '/api/auth/$'
     | '/api/runs/$runId/artifact'
   id:
@@ -119,6 +130,7 @@ export interface FileRouteTypes {
     | '/reset-password'
     | '/settings'
     | '/c/$id'
+    | '/review/$assignmentId'
     | '/api/auth/$'
     | '/api/runs/$runId/artifact'
   fileRoutesById: FileRoutesById
@@ -130,6 +142,7 @@ export interface RootRouteChildren {
   ResetPasswordRoute: typeof ResetPasswordRoute
   SettingsRoute: typeof SettingsRoute
   CIdRoute: typeof CIdRoute
+  ReviewAssignmentIdRoute: typeof ReviewAssignmentIdRoute
   ApiAuthSplatRoute: typeof ApiAuthSplatRoute
   ApiRunsRunIdArtifactRoute: typeof ApiRunsRunIdArtifactRoute
 }
@@ -178,6 +191,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof CIdRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/review/$assignmentId': {
+      id: '/review/$assignmentId'
+      path: '/review/$assignmentId'
+      fullPath: '/review/$assignmentId'
+      preLoaderRoute: typeof ReviewAssignmentIdRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/auth/$': {
       id: '/api/auth/$'
       path: '/api/auth/$'
@@ -202,6 +222,7 @@ const rootRouteChildren: RootRouteChildren = {
   ResetPasswordRoute: ResetPasswordRoute,
   SettingsRoute: SettingsRoute,
   CIdRoute: CIdRoute,
+  ReviewAssignmentIdRoute: ReviewAssignmentIdRoute,
   ApiAuthSplatRoute: ApiAuthSplatRoute,
   ApiRunsRunIdArtifactRoute: ApiRunsRunIdArtifactRoute,
 }

@@ -17,12 +17,13 @@ import {
   DEFAULT_CEILING_USD,
   basenameFor,
   canResume,
-  canReview,
+  canRunAutomatedChallenge,
   defaultVendorFor,
   isRunnable,
   producesEvidence,
   canTransition,
   progressOf,
+  runPassName,
   stoppedSummary,
   type Run,
   type RunPass,
@@ -31,7 +32,10 @@ import {
 import { loadRecords, rescore, writeAudit } from "./actions.ts";
 import { PIPELINE_ROLE, planImport, summariseImport, type PassRow } from "./import-plan.ts";
 import { readPassRows } from "./worker.ts";
-import { DOCUMENT_SLOTS } from "./worker-artifacts.ts";
+import {
+  documentsForExactWorkflowPackage,
+  type WorkflowDocumentState,
+} from "./worker-artifacts.ts";
 import { DAR_WORKFLOW, canonicalWorkflowLaunchRequest } from "./workflow.ts";
 import { decodeWorkflowUploadBase64, extractWorkflowUploadText } from "./workflow-upload.ts";
 import { model } from "./model.ts";
@@ -114,7 +118,7 @@ async function queueRun(userId: string, data: StartRunInput) {
   if (!isRunnable(data.pass)) {
     return {
       ok: false as const,
-      error: `The ${data.pass} pass has a share of the budget but no pipeline script yet, so it cannot be run.`,
+      error: `The ${runPassName(data.pass)} has a share of the budget but no pipeline script yet, so it cannot be run.`,
     };
   }
   if (
@@ -145,9 +149,9 @@ async function queueRun(userId: string, data: StartRunInput) {
         active.pass === "workflow"
           ? `The canonical workflow for ${name} is already ${active.status}. A second workflow cannot start against the same country ceiling; cancel this run only if it must be abandoned.`
           : resumable
-            ? `A ${active.pass} run for ${name} is ${active.status}. Continue it or cancel it ` +
+            ? `The ${runPassName(active.pass)} for ${name} is ${active.status}. Continue it or cancel it ` +
               `first — starting another would research the rows it has already paid for.`
-            : `A ${active.pass} run for ${name} is already ${active.status}.`,
+            : `The ${runPassName(active.pass)} for ${name} is already ${active.status}.`,
       runId: active.id,
     };
   }
@@ -169,16 +173,21 @@ async function queueRun(userId: string, data: StartRunInput) {
   if (!outBasename) {
     return {
       ok: false as const,
-      error: `A ${data.pass} pass reads the output of a completed research pass, and ${name} has none yet.`,
+      error: `The ${runPassName(data.pass)} reads the output of a completed research pass, and ${name} has none yet.`,
     };
   }
 
-  // The reviewer must not be the vendor that did the research. Checked here because
-  // this is where the vendor is chosen; refused before anything is queued, so the
-  // operator sees why rather than a review that upholds everything.
+  // The automated challenger must not be from the vendor family that did the research.
+  // This is machine QC only: it neither performs nor satisfies G1/G2 human review.
+  // Refuse it before queuing so an operator does not receive a false clean machine check.
   if (data.pass === "g2") {
-    const peer = canReview(prior?.vendor ?? null, data.vendor ?? null);
-    if (!peer.ok) return { ok: false as const, error: `Cannot start this review: ${peer.reason}` };
+    const challenge = canRunAutomatedChallenge(prior?.vendor ?? null, data.vendor ?? null);
+    if (!challenge.ok) {
+      return {
+        ok: false as const,
+        error: `Cannot start the automated vendor challenge: ${challenge.reason}`,
+      };
+    }
   }
 
   // Resolved rather than left null, so the run records the vendor it actually used and
@@ -217,7 +226,7 @@ async function queueRun(userId: string, data: StartRunInput) {
             (await findActiveRun(data.countryId, "workflow", userId)));
       return {
         ok: false as const,
-        error: `A ${activeWorkflow?.pass ?? data.pass} run for ${name} is already active.`,
+        error: `The ${runPassName(activeWorkflow?.pass ?? data.pass)} for ${name} is already active.`,
         ...(activeWorkflow ? { runId: activeWorkflow.id } : {}),
       };
     }
@@ -421,11 +430,7 @@ export const deleteWorkflowUpload = createServerFn({ method: "POST" })
   .middleware([authMiddleware])
   .validator((input: { countryId: string; uploadId: string }) => input)
   .handler(async ({ context, data }) => {
-    const result = await deletePendingWorkflowUpload(
-      context.userId,
-      data.countryId,
-      data.uploadId,
-    );
+    const result = await deletePendingWorkflowUpload(context.userId, data.countryId, data.uploadId);
     if (!result.ok && result.reason === "active") {
       return { ok: false as const, error: "Active workflow inputs are immutable." };
     }
@@ -468,7 +473,10 @@ export const stopRun = createServerFn({ method: "POST" })
     const owned = await ownedRun(data.runId, context.userId);
     if (!owned.ok) return owned;
     if (owned.run.pass !== "workflow" && !(await isRunAdmin(context.userId))) {
-      return { ok: false as const, error: "Legacy pass controls are restricted to administrators." };
+      return {
+        ok: false as const,
+        error: "Legacy pass controls are restricted to administrators.",
+      };
     }
     if (owned.run.pass === "workflow" && data.to === "paused") {
       return {
@@ -504,7 +512,10 @@ export const resumeRun = createServerFn({ method: "POST" })
     const owned = await ownedRun(data.runId, context.userId);
     if (!owned.ok) return owned;
     if (!(await isRunAdmin(context.userId))) {
-      return { ok: false as const, error: "Legacy pass controls are restricted to administrators." };
+      return {
+        ok: false as const,
+        error: "Legacy pass controls are restricted to administrators.",
+      };
     }
     const may = canResume(owned.run, data.ceilingUsd);
     if (!may.ok) return { ok: false as const, error: `Cannot resume: ${may.reason}` };
@@ -546,7 +557,7 @@ export const importPassOutput = createServerFn({ method: "POST" })
     if (!producesEvidence(run.pass)) {
       return {
         ok: false as const,
-        error: `The ${run.pass} pass does not produce indicator rows, so there is nothing to import into the evidence base. Its output feeds the roadmap documents.`,
+        error: `The ${runPassName(run.pass)} does not produce indicator rows, so there is nothing to import into the evidence base. Its output feeds the roadmap documents.`,
       };
     }
     if (run.status !== "done" && run.status !== "exhausted") {
@@ -563,7 +574,7 @@ export const importPassOutput = createServerFn({ method: "POST" })
         error:
           run.pass === "research"
             ? "This pass left no rows on disk. It may have stopped before its first checkpoint, or the pipeline directory is not the one it ran in."
-            : "This review stopped before it wrote its output. A partial review records findings against rows rather than rows themselves, so there is nothing to import until it finishes.",
+            : "This automated vendor challenge stopped before it wrote its output. Partial machine QC records findings against rows rather than rows themselves, so there is nothing to import until it finishes.",
       };
     }
 
@@ -600,25 +611,14 @@ export const importPassOutput = createServerFn({ method: "POST" })
       data.role,
       data.actorName,
       "import_pass",
-      `${run.pass} pass ${run.outBasename}${output.complete ? "" : " (partial — read from its checkpoint)"}: ${summary}`,
+      `${runPassName(run.pass)} ${run.outBasename}${output.complete ? "" : " (partial — read from its checkpoint)"}: ${summary}`,
     );
 
     await noteEvent(run.id, context.userId, "note", `Imported into the workspace: ${summary}`);
     return { ok: true as const, summary, held: plan.held, complete: output.complete };
   });
 
-export interface DocumentState {
-  key: string;
-  title: string;
-  what: string;
-  pass: RunPass;
-  /** The run that produced it, when one has. */
-  runId: string | null;
-  producedAt: string | null;
-  href: string | null;
-  /** Why it is not there yet, in the words the surface should use. */
-  missingBecause: string | null;
-}
+export type DocumentState = WorkflowDocumentState;
 
 /**
  * The document set for a country.
@@ -631,55 +631,34 @@ export const countryDocuments = createServerFn({ method: "GET" })
   .middleware([authMiddleware])
   .validator((input: { countryId: string }) => input)
   .handler(async ({ context, data }) => {
-    const runs = (await listRuns(context.userId, 200)).filter(
-      (r) => r.countryId === data.countryId,
+    const [allRuns, target] = await Promise.all([
+      listRuns(context.userId, 200),
+      latestWorkflowReviewTarget(data.countryId, context.userId),
+    ]);
+    const runs = allRuns.filter((run) => run.countryId === data.countryId);
+    const latestAttempt = runs.find((run) => run.pass === "workflow") ?? null;
+    const selected = target
+      ? {
+          runId: target.runId,
+          artifactSetId: target.artifactSetId,
+          bundleSha256: target.bundleSha256,
+          completedAt: target.completedAt.toISOString(),
+        }
+      : null;
+    const verifiedKeys = selected
+      ? new Set(await listPublishedWorkflowArtifactKeys(selected.runId, context.userId))
+      : new Set<string>();
+    const documentSet = documentsForExactWorkflowPackage(
+      selected,
+      verifiedKeys,
+      latestAttempt ? { runId: latestAttempt.id, status: latestAttempt.status } : null,
     );
 
-    const verifiedKeys = new Map<string, Set<string>>();
-    for (const run of runs.filter(
-      (candidate) => candidate.pass === "workflow" && candidate.status === "done",
-    )) {
-      verifiedKeys.set(
-        run.id,
-        new Set(await listPublishedWorkflowArtifactKeys(run.id, context.userId)),
-      );
-    }
-
-    const documents: DocumentState[] = DOCUMENT_SLOTS.map((slot) => {
-      const produced = runs.find(
-        (r) =>
-          r.pass === slot.pass &&
-          r.status === "done" &&
-          (r.pass !== "workflow" || verifiedKeys.get(r.id)?.has(slot.artifactKey)),
-      );
-      if (produced) {
-        return {
-          ...slot,
-          runId: produced.id,
-          producedAt: (produced.finishedAt ?? produced.startedAt)?.toISOString() ?? null,
-          href: `/api/runs/${produced.id}/artifact?key=${slot.artifactKey}`,
-          missingBecause: null,
-        };
-      }
-      const attempted = runs.find((r) => r.pass === slot.pass);
-      return {
-        ...slot,
-        runId: attempted?.id ?? null,
-        producedAt: null,
-        href: null,
-        missingBecause: attempted
-          ? attempted.status === "done"
-            ? "The workflow finished, but this artifact was not in its verified published set."
-            : `The ${slot.pass} run is ${attempted.status}.`
-          : `The ${slot.pass} workflow has not been run.`,
-      };
-    });
-
     return {
-      documents,
-      complete: documents.every((d) => d.href !== null),
+      ...documentSet,
       status:
-        "Pre-review draft. Review happens once, at the end, on the completed set — not " +
+        "Pre-review Draft. Human controls apply once, after Stage 8, to this exact " +
+        "immutable package — never to a mixture of files from different runs and never " +
         "on one document at a time.",
     };
   });

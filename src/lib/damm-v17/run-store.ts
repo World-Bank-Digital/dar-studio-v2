@@ -347,7 +347,10 @@ export async function savePendingWorkflowUpload(
       if (Number(totals[0]?.characters ?? 0) + characters > MAX_WORKFLOW_UPLOAD_CHARACTERS_TOTAL) {
         return { ok: false, reason: "characters" } as const;
       }
-      if (Number(totals[0]?.bytes ?? 0) + source.byteLength > MAX_WORKFLOW_UPLOAD_SOURCE_BYTES_TOTAL) {
+      if (
+        Number(totals[0]?.bytes ?? 0) + source.byteLength >
+        MAX_WORKFLOW_UPLOAD_SOURCE_BYTES_TOTAL
+      ) {
         return { ok: false, reason: "source_bytes" } as const;
       }
       const rows = await sql<{ uploaded_at: Date }>`
@@ -366,8 +369,7 @@ export async function savePendingWorkflowUpload(
 }
 
 export type DeletePendingWorkflowUploadResult =
-  | { ok: true }
-  | { ok: false; reason: "active" | "not_found" };
+  { ok: true } | { ok: false; reason: "active" | "not_found" };
 
 /** Delete a mutable pre-launch document, serialized against the immutable launch. */
 export async function deletePendingWorkflowUpload(
@@ -389,9 +391,7 @@ export async function deletePendingWorkflowUpload(
         delete from uploads
         where id = ${uploadId} and country_id = ${countryId} and user_id = ${userId}
         returning id`;
-      return rows.length
-        ? ({ ok: true } as const)
-        : ({ ok: false, reason: "not_found" } as const);
+      return rows.length ? ({ ok: true } as const) : ({ ok: false, reason: "not_found" } as const);
     },
     database,
   );
@@ -491,6 +491,10 @@ export interface WorkflowArtifactWrite {
 }
 
 export interface PublishedWorkflowArtifact {
+  runId: string;
+  artifactSetId: string;
+  completedAt: Date;
+  contentVerifiedAt: Date | null;
   key: string;
   relativePath: string;
   filename: string;
@@ -504,35 +508,27 @@ export interface PublishedWorkflowArtifact {
 /** Completed 0010 packages remain available, but are never represented as provenance-verified. */
 export type WorkflowMethodologyStatus = "canonical" | "legacy_unverified";
 
+interface LockedCanonicalWorkflowClaim {
+  id: string;
+  workflow_artifact_set_id: string | null;
+}
+
 /**
- * Stage one verified artifact under the worker's current claim token. A stale worker can
- * leave an incomplete set, but can never publish it: only the set selected on `runs` is
- * visible to web hosts.
+ * Serialize every application-owned artifact write through the parent run row.
+ *
+ * The lock order is deliberately run -> artifact. Publication and staging use the
+ * same order, as does approval-package materialization, so a worker can never hold
+ * an artifact row while waiting for the run row that a publisher already holds.
  */
-export async function saveWorkflowArtifact(
+async function lockCanonicalWorkflowClaim(
   runId: string,
   workerId: string,
   claimToken: string,
-  artifact: WorkflowArtifactWrite,
-  database?: Sql,
-): Promise<boolean> {
-  if (!/^[a-f0-9]{64}$/.test(artifact.assessmentInputSha256)) return false;
-  const sql = database ?? (await getSql());
-  const bytes = Buffer.from(artifact.content);
-  if (createHash("sha256").update(bytes).digest("hex") !== artifact.sha256) return false;
+  sql: Sql,
+): Promise<LockedCanonicalWorkflowClaim | null> {
   const canonicalMethodology = DAMM_WORKFLOW_METHODOLOGY;
-  const rows = await sql<{ artifact_key: string }>`
-    insert into workflow_run_artifacts
-      (run_id, artifact_set_id, artifact_key, relative_path, filename, content_type,
-       sha256, byte_size, workflow_id, workflow_version, workflow_contract_sha256,
-       damm_model_version, damm_model_revision, damm_model_sha256, damm_source_commit,
-       assessment_input_sha256, content_verified_at, content)
-    select run.id, ${claimToken}, ${artifact.key}, ${artifact.relativePath}, ${artifact.filename},
-           ${artifact.contentType}, ${artifact.sha256}, ${bytes.length},
-           ${DAR_WORKFLOW.workflow_id}, ${DAR_WORKFLOW.workflow_version},
-           ${DAR_WORKFLOW_SHA256}, methodology.model_version, methodology.model_revision,
-           methodology.app_model_sha256, methodology.source_commit,
-           ${artifact.assessmentInputSha256}, now(), ${bytes}
+  const rows = await sql<LockedCanonicalWorkflowClaim>`
+    select run.id, run.workflow_artifact_set_id
     from runs run
     join workflow_run_methodology methodology on methodology.run_id = run.id
     where run.id = ${runId} and run.pass = 'workflow' and run.status = 'running'
@@ -560,25 +556,81 @@ export async function saveWorkflowArtifact(
       and methodology.renderer_version = ${canonicalMethodology.rendererVersion}
       and methodology.renderer_path = ${canonicalMethodology.rendererPath}
       and methodology.renderer_sha256 = ${canonicalMethodology.rendererSha256}
-    on conflict (run_id, artifact_set_id, artifact_key) do update set
-      relative_path = excluded.relative_path,
-      filename = excluded.filename,
-      content_type = excluded.content_type,
-      sha256 = excluded.sha256,
-      byte_size = excluded.byte_size,
-      workflow_id = excluded.workflow_id,
-      workflow_version = excluded.workflow_version,
-      workflow_contract_sha256 = excluded.workflow_contract_sha256,
-      damm_model_version = excluded.damm_model_version,
-      damm_model_revision = excluded.damm_model_revision,
-      damm_model_sha256 = excluded.damm_model_sha256,
-      damm_source_commit = excluded.damm_source_commit,
-      assessment_input_sha256 = excluded.assessment_input_sha256,
-      content_verified_at = excluded.content_verified_at,
-      content = excluded.content,
-      created_at = now()
-    returning artifact_key`;
-  return rows.length === 1;
+    for update of run`;
+  return rows[0] ?? null;
+}
+
+/**
+ * Stage one verified artifact under the worker's current claim token. A stale worker can
+ * leave an incomplete set, but can never publish it: only the set selected on `runs` is
+ * visible to web hosts.
+ */
+export async function saveWorkflowArtifact(
+  runId: string,
+  workerId: string,
+  claimToken: string,
+  artifact: WorkflowArtifactWrite,
+  database?: Sql,
+): Promise<boolean> {
+  if (!/^[a-f0-9]{64}$/.test(artifact.assessmentInputSha256)) return false;
+  const sql = database ?? (await getSql());
+  const bytes = Buffer.from(artifact.content);
+  if (createHash("sha256").update(bytes).digest("hex") !== artifact.sha256) return false;
+  return sql.transaction(async (transaction) => {
+    const held = await lockCanonicalWorkflowClaim(runId, workerId, claimToken, transaction);
+    // Once this claim's set is selected, it is append-closed even while finishRun is pending.
+    // A recovered worker with a different claim may still stage its replacement set.
+    if (!held || held.workflow_artifact_set_id === claimToken) return false;
+    const rows = await transaction<{ artifact_key: string }>`
+      insert into workflow_run_artifacts
+        (run_id, artifact_set_id, artifact_key, relative_path, filename, content_type,
+         sha256, byte_size, workflow_id, workflow_version, workflow_contract_sha256,
+         damm_model_version, damm_model_revision, damm_model_sha256, damm_source_commit,
+         assessment_input_sha256, content_verified_at, content)
+      select run.id, ${claimToken}, ${artifact.key}, ${artifact.relativePath}, ${artifact.filename},
+             ${artifact.contentType}, ${artifact.sha256}, ${bytes.length},
+             ${DAR_WORKFLOW.workflow_id}, ${DAR_WORKFLOW.workflow_version},
+             ${DAR_WORKFLOW_SHA256}, methodology.model_version, methodology.model_revision,
+             methodology.app_model_sha256, methodology.source_commit,
+             ${artifact.assessmentInputSha256}, now(), ${bytes}
+      from runs run
+      join workflow_run_methodology methodology on methodology.run_id = run.id
+      where run.id = ${runId} and run.pass = 'workflow' and run.status = 'running'
+        and run.claimed_by = ${workerId} and run.claim_token = ${claimToken}
+        and run.workflow_artifact_set_id is distinct from ${claimToken}
+      on conflict (run_id, artifact_set_id, artifact_key) do update set
+        relative_path = excluded.relative_path,
+        filename = excluded.filename,
+        content_type = excluded.content_type,
+        sha256 = excluded.sha256,
+        byte_size = excluded.byte_size,
+        workflow_id = excluded.workflow_id,
+        workflow_version = excluded.workflow_version,
+        workflow_contract_sha256 = excluded.workflow_contract_sha256,
+        damm_model_version = excluded.damm_model_version,
+        damm_model_revision = excluded.damm_model_revision,
+        damm_model_sha256 = excluded.damm_model_sha256,
+        damm_source_commit = excluded.damm_source_commit,
+        assessment_input_sha256 = excluded.assessment_input_sha256,
+        content_verified_at = excluded.content_verified_at,
+        content = excluded.content,
+        created_at = now()
+      returning artifact_key`;
+    return rows.length === 1;
+  });
+}
+
+interface LockedWorkflowArtifactPublicationRow {
+  artifact_key: string;
+  workflow_id: string;
+  workflow_version: string;
+  workflow_contract_sha256: string;
+  damm_model_version: string | null;
+  damm_model_revision: number | null;
+  damm_model_sha256: string | null;
+  damm_source_commit: string | null;
+  assessment_input_sha256: string | null;
+  content_verified_at: Date | null;
 }
 
 /** Select a complete staged set while the claim is still held. */
@@ -592,87 +644,59 @@ export async function publishWorkflowArtifactSet(
   if (expectedKeys.length === 0 || new Set(expectedKeys).size !== expectedKeys.length) return false;
   const sql = database ?? (await getSql());
   const canonicalMethodology = DAMM_WORKFLOW_METHODOLOGY;
-  const rows = await sql<{ id: string }>`
-    with published as (
+  return sql.transaction(async (transaction) => {
+    const held = await lockCanonicalWorkflowClaim(runId, workerId, claimToken, transaction);
+    if (!held) return false;
+
+    // Lock the complete selected set in a stable order before validating it. Because
+    // staging first locks the same run row, this also closes the insert/phantom window:
+    // a save begun earlier commits before this read, and a later save observes the
+    // selected pointer and refuses to write.
+    const artifacts = await transaction.query<LockedWorkflowArtifactPublicationRow>(
+      `select artifact_key, workflow_id, workflow_version, workflow_contract_sha256,
+              damm_model_version, damm_model_revision, damm_model_sha256,
+              damm_source_commit, assessment_input_sha256, content_verified_at
+       from workflow_run_artifacts
+       where run_id = $1 and artifact_set_id = $2
+       order by artifact_key
+       for update`,
+      [runId, claimToken],
+    );
+    const expected = new Set(expectedKeys);
+    const assessmentInputs = new Set<string>();
+    const complete =
+      artifacts.length === expected.size &&
+      artifacts.every((artifact) => {
+        if (artifact.assessment_input_sha256) {
+          assessmentInputs.add(artifact.assessment_input_sha256);
+        }
+        return (
+          expected.has(artifact.artifact_key) &&
+          artifact.workflow_id === DAR_WORKFLOW.workflow_id &&
+          artifact.workflow_version === DAR_WORKFLOW.workflow_version &&
+          artifact.workflow_contract_sha256 === DAR_WORKFLOW_SHA256 &&
+          artifact.damm_model_version === canonicalMethodology.modelVersion &&
+          Number(artifact.damm_model_revision) === canonicalMethodology.modelRevision &&
+          artifact.damm_model_sha256 === canonicalMethodology.appModelSha256 &&
+          artifact.damm_source_commit === canonicalMethodology.sourceCommit &&
+          artifact.assessment_input_sha256 !== null &&
+          artifact.content_verified_at !== null
+        );
+      }) &&
+      assessmentInputs.size === 1;
+    if (!complete) return false;
+
+    const published = await transaction<{ id: string }>`
       update runs set workflow_artifact_set_id = ${claimToken}, updated_at = now()
       where id = ${runId} and pass = 'workflow' and status = 'running'
         and claimed_by = ${workerId} and claim_token = ${claimToken}
-        and exists (
-          select 1 from workflow_run_methodology methodology
-          where methodology.run_id = runs.id
-            and methodology.manifest_schema_version = ${canonicalMethodology.manifestSchemaVersion}
-            and methodology.model_id = ${canonicalMethodology.modelId}
-            and methodology.model_version = ${canonicalMethodology.modelVersion}
-            and methodology.model_revision = ${canonicalMethodology.modelRevision}
-            and methodology.model_status = ${canonicalMethodology.modelStatus}
-            and methodology.model_ratified = ${canonicalMethodology.modelRatified}
-            and methodology.app_model_sha256 = ${canonicalMethodology.appModelSha256}
-            and methodology.app_model_schema_sha256 = ${canonicalMethodology.appModelSchemaSha256}
-            and methodology.source_repository = ${canonicalMethodology.sourceRepository}
-            and methodology.source_commit = ${canonicalMethodology.sourceCommit}
-            and methodology.source_model_path = ${canonicalMethodology.sourceModelPath}
-            and methodology.source_model_sha256 = ${canonicalMethodology.sourceModelSha256}
-            and methodology.source_schema_path = ${canonicalMethodology.sourceSchemaPath}
-            and methodology.source_schema_sha256 = ${canonicalMethodology.sourceSchemaSha256}
-            and methodology.census_revision = ${canonicalMethodology.censusRevision}
-            and methodology.census_path = ${canonicalMethodology.censusPath}
-            and methodology.census_sha256 = ${canonicalMethodology.censusSha256}
-            and methodology.engine_version = ${canonicalMethodology.engineVersion}
-            and methodology.engine_path = ${canonicalMethodology.enginePath}
-            and methodology.engine_sha256 = ${canonicalMethodology.engineSha256}
-            and methodology.renderer_version = ${canonicalMethodology.rendererVersion}
-            and methodology.renderer_path = ${canonicalMethodology.rendererPath}
-            and methodology.renderer_sha256 = ${canonicalMethodology.rendererSha256}
-        )
-        and (
-          select count(*) from workflow_run_artifacts artifact
-          where artifact.run_id = runs.id
-            and artifact.artifact_set_id = ${claimToken}
-        ) = ${expectedKeys.length}
-        and (
-        select count(*) from workflow_run_artifacts artifact
-        where artifact.run_id = runs.id
-          and artifact.artifact_set_id = ${claimToken}
-          and artifact.artifact_key = any(${[...expectedKeys]}::text[])
-        ) = ${expectedKeys.length}
-        and not exists (
-          select 1 from unnest(${[...expectedKeys]}::text[]) required(artifact_key)
-          where not exists (
-            select 1 from workflow_run_artifacts artifact
-            where artifact.run_id = runs.id
-              and artifact.artifact_set_id = ${claimToken}
-              and artifact.artifact_key = required.artifact_key
-          )
-        )
-        and not exists (
-          select 1
-          from workflow_run_artifacts artifact
-          join workflow_run_methodology methodology on methodology.run_id = artifact.run_id
-          where artifact.run_id = runs.id
-            and artifact.artifact_set_id = ${claimToken}
-            and (
-              artifact.damm_model_version is distinct from methodology.model_version
-              or artifact.damm_model_revision is distinct from methodology.model_revision
-              or artifact.damm_model_sha256 is distinct from methodology.app_model_sha256
-              or artifact.damm_source_commit is distinct from methodology.source_commit
-              or artifact.assessment_input_sha256 is null
-              or artifact.content_verified_at is null
-            )
-        )
-        and (
-          select count(distinct artifact.assessment_input_sha256)
-          from workflow_run_artifacts artifact
-          where artifact.run_id = runs.id and artifact.artifact_set_id = ${claimToken}
-        ) = 1
-      returning id
-    ), cleaned as (
-      delete from workflow_run_artifacts artifact
-      using published
-      where artifact.run_id = published.id and artifact.artifact_set_id <> ${claimToken}
-      returning artifact.run_id
-    )
-    select id from published`;
-  return rows.length === 1;
+      returning id`;
+    if (published.length !== 1) return false;
+    await transaction`
+      delete from workflow_run_artifacts
+      where run_id = ${runId} and artifact_set_id <> ${claimToken}`;
+    return true;
+  });
 }
 
 function byteArray(value: unknown): Uint8Array | null {
@@ -697,13 +721,7 @@ interface PublishedWorkflowArtifactRow {
   methodology_status: WorkflowMethodologyStatus;
 }
 
-interface PublishedWorkflowArtifactMetadata
-  extends Omit<PublishedWorkflowArtifact, "content"> {
-  runId: string;
-  artifactSetId: string;
-  completedAt: Date;
-  contentVerifiedAt: Date | null;
-}
+type PublishedWorkflowArtifactMetadata = Omit<PublishedWorkflowArtifact, "content">;
 
 function publishedWorkflowArtifactMetadata(
   row: PublishedWorkflowArtifactRow,
