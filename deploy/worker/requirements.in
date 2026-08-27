@@ -1,0 +1,6 @@
+# Direct runtime dependencies imported by the pinned DAMM checkout.
+# Keep every direct requirement exact; requirements.lock freezes the full graph.
+anthropic==1.1.0
+google-genai==2.20.0
+openai==3.3.1
+openpyxl==3.1.5

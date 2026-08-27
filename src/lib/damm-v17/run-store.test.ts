@@ -16,6 +16,7 @@ import {
   listWorkflowReviews,
   publishWorkflowArtifactSet,
   recordWorkflowReview,
+  releaseClaim,
   savePendingWorkflowUpload,
   saveWorkflowArtifact,
   workflowMethodologySnapshot,
@@ -892,6 +893,90 @@ describe("claim-fenced shared workflow artifacts", () => {
         )[0].count,
         0,
         "the run and stale methodology must roll back together",
+      );
+    } finally {
+      await pg.close();
+    }
+  });
+});
+
+describe("worker claim release", () => {
+  it("requeues only the exact live claim and records one durable status event", async () => {
+    const { pg, sql } = await migratedDatabase();
+    try {
+      await insertCountry(sql, "country-release");
+      await sql.query(
+        `insert into runs
+          (id, user_id, country_id, country_name, iso3, pass, status, ceiling_usd,
+           out_basename, claimed_by, claim_token, heartbeat_at, started_at)
+         values ('release-run', 'user-1', 'country-release', 'Egypt', 'EGY', 'research',
+                 'running', 500, 'EGY_release', 'worker-current', 'claim-current', now(), now())`,
+      );
+
+      assert.equal(await releaseClaim("release-run", "worker-stale", "claim-current", sql), false);
+      assert.equal(await releaseClaim("release-run", "worker-current", "claim-stale", sql), false);
+      assert.deepEqual(
+        await sql.query<{ status: string; claimed_by: string; claim_token: string }>(
+          "select status, claimed_by, claim_token from runs where id = $1",
+          ["release-run"],
+        ),
+        [{ status: "running", claimed_by: "worker-current", claim_token: "claim-current" }],
+        "neither a different worker nor a replayed token may release the claim",
+      );
+
+      assert.equal(await releaseClaim("release-run", "worker-current", "claim-current", sql), true);
+      assert.deepEqual(
+        await sql.query<{
+          status: string;
+          claimed_by: string | null;
+          claim_token: string | null;
+          heartbeat_at: Date | null;
+          finished_at: Date | null;
+          stopped_reason: string | null;
+        }>(
+          `select status, claimed_by, claim_token, heartbeat_at, finished_at, stopped_reason
+           from runs where id = $1`,
+          ["release-run"],
+        ),
+        [
+          {
+            status: "queued",
+            claimed_by: null,
+            claim_token: null,
+            heartbeat_at: null,
+            finished_at: null,
+            stopped_reason: null,
+          },
+        ],
+      );
+      assert.deepEqual(
+        await sql.query<{ kind: string; message: string }>(
+          "select kind, message from run_events where run_id = $1 order by id",
+          ["release-run"],
+        ),
+        [
+          {
+            kind: "status",
+            message:
+              "Worker shutdown arrived during queue claim; returned to queue before execution.",
+          },
+        ],
+      );
+
+      assert.equal(
+        await releaseClaim("release-run", "worker-current", "claim-current", sql),
+        false,
+        "a consumed claim token cannot replay the release",
+      );
+      assert.equal(
+        (
+          await sql.query<{ count: number }>(
+            "select count(*)::int as count from run_events where run_id = $1",
+            ["release-run"],
+          )
+        )[0].count,
+        1,
+        "a rejected replay cannot append another audit event",
       );
     } finally {
       await pg.close();

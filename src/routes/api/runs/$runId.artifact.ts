@@ -14,7 +14,13 @@ import { createFileRoute } from "@tanstack/react-router";
 
 import { auth } from "@/lib/auth/server";
 import type { ApprovalArtifactAccess } from "@/lib/damm-v17/approval-store";
-import { getPublishedWorkflowArtifact, getRun } from "@/lib/damm-v17/run-store";
+import { ARTIFACT_DELIVERY_GRANT_MEDIA_TYPE } from "@/lib/damm-v17/artifact-delivery-contract";
+import { artifactDeliveryGrant } from "@/lib/damm-v17/artifact-delivery";
+import {
+  getPublishedWorkflowArtifactContent,
+  getPublishedWorkflowArtifactMetadata,
+  getRun,
+} from "@/lib/damm-v17/run-store";
 import { runPassName } from "@/lib/damm-v17/runs";
 import { artifactPath } from "@/lib/damm-v17/worker";
 import { artifactsFor } from "@/lib/damm-v17/worker-artifacts";
@@ -52,7 +58,7 @@ export const Route = createFileRoute("/api/runs/$runId/artifact")({
         if (run.pass === "workflow") {
           const advertised = artifactsFor("workflow").some((artifact) => artifact.key === key);
           const stored = advertised
-            ? await getPublishedWorkflowArtifact(run.id, key, artifactOwnerUserId)
+            ? await getPublishedWorkflowArtifactMetadata(run.id, key, artifactOwnerUserId)
             : null;
           if (!stored) {
             return new Response(
@@ -70,23 +76,66 @@ export const Route = createFileRoute("/api/runs/$runId/artifact")({
               stored.sha256 !== exactAccess.artifactSha256 ||
               (stored.key === "bundle" && stored.sha256 !== exactAccess.bundleSha256) ||
               (exactAccess.accessAs === "assigned_reviewer" &&
-                (!exactAccess.packageId || !exactAccess.targetIdentitySha256)))
+                (!exactAccess.packageId ||
+                  !exactAccess.reviewerAssignmentId ||
+                  !exactAccess.targetIdentitySha256)))
           ) {
             return new Response("The assigned package identity does not match this artifact.", {
-              status: 409,
-            });
-          }
-          const { createHash } = await import("node:crypto");
-          if (createHash("sha256").update(stored.content).digest("hex") !== stored.sha256) {
-            return new Response("The stored workflow artifact failed its integrity check.", {
               status: 409,
             });
           }
           const safeFilename = stored.filename.replace(/[^A-Za-z0-9._-]/g, "_");
           const legacy = stored.methodologyStatus === "legacy_unverified";
           const filename = legacy ? `LEGACY-UNVERIFIED_${safeFilename}` : safeFilename;
-          const body = new ArrayBuffer(stored.content.byteLength);
-          new Uint8Array(body).set(stored.content);
+          try {
+            const accessBinding =
+              exactAccess?.accessAs === "assigned_reviewer"
+                ? {
+                    subjectUserId: session.user.id,
+                    accessAs: "assigned_reviewer" as const,
+                    packageId: exactAccess.packageId!,
+                    assignmentId: exactAccess.reviewerAssignmentId!,
+                    targetIdentitySha256: exactAccess.targetIdentitySha256!,
+                    bundleSha256: exactAccess.bundleSha256,
+                  }
+                : {
+                    subjectUserId: session.user.id,
+                    accessAs: "country_owner" as const,
+                    packageId: null,
+                    assignmentId: null,
+                    targetIdentitySha256: null,
+                    bundleSha256: null,
+                  };
+            const grant = artifactDeliveryGrant({
+              runId: stored.runId,
+              artifactSetId: stored.artifactSetId,
+              key: stored.key,
+              sha256: stored.sha256,
+              ...accessBinding,
+            });
+            if (grant) {
+              return new Response(JSON.stringify(grant), {
+                status: 200,
+                headers: {
+                  "content-type": `${ARTIFACT_DELIVERY_GRANT_MEDIA_TYPE}; charset=utf-8`,
+                  "cache-control": "no-store",
+                  "referrer-policy": "no-referrer",
+                  "x-content-sha256": stored.sha256,
+                },
+              });
+            }
+          } catch {
+            return new Response("Artifact delivery is not configured safely.", { status: 503 });
+          }
+
+          const content = await getPublishedWorkflowArtifactContent(stored);
+          if (!content) {
+            return new Response("The stored workflow artifact failed its integrity check.", {
+              status: 409,
+            });
+          }
+          const body = new ArrayBuffer(content.byteLength);
+          new Uint8Array(body).set(content);
           return new Response(body, {
             headers: {
               "content-type": stored.contentType,

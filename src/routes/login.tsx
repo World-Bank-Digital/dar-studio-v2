@@ -5,19 +5,9 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card } from "@/components/ui/card";
 import { disclaimer } from "@/lib/damm-v17/model";
+import { brokerAvailable } from "@/lib/auth/broker-availability";
 
 export const Route = createFileRoute("/login")({ component: Login });
-
-/**
- * The Google/X buttons federate through the Grok auth broker, whose preview
- * client only accepts `*.grok-sandbox.com` redirect URIs — on localhost the
- * broker answers "Invalid redirect URI" (verified live). Deployed apps get
- * their own broker client, so the buttons stay everywhere except loopback.
- */
-function brokerAvailable(): boolean {
-  if (typeof window === "undefined") return true;
-  return !["localhost", "127.0.0.1", "[::1]"].includes(window.location.hostname);
-}
 
 function Login() {
   const nav = useNavigate();
@@ -28,6 +18,11 @@ function Login() {
   const [sent, setSent] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const socialAuthEnabled = import.meta.env.VITE_GROK_AUTH_ENABLED !== "false";
+  const socialAuthAvailable =
+    typeof window === "undefined"
+      ? socialAuthEnabled
+      : brokerAvailable(window.location.hostname, socialAuthEnabled);
 
   async function onPasskey() {
     setBusy(true);
@@ -93,15 +88,15 @@ function Login() {
         </p>
         {authEnabled ? (
           <div className="mt-6 space-y-2">
-            {brokerAvailable() ? GROK_PROVIDERS.map((p) => (
+            {socialAuthAvailable ? GROK_PROVIDERS.map((p) => (
               <Button key={p.providerId} variant="outline" className="w-full" onClick={() => signIn(p.providerId, { callbackURL: "/" })}>
                 Continue with {p.label}
               </Button>
             )) : (
               <p className="rounded-sm border border-border bg-moss/30 px-3 py-2 text-xs text-muted">
-                Google and X sign-in run through the Grok auth broker, which does not accept
-                localhost callbacks ("Invalid redirect URI"). When running locally, use email,
-                a password, or a passkey below.
+                {socialAuthEnabled
+                  ? "Google and X sign-in are unavailable on localhost. Use another sign-in method below."
+                  : "Google and X sign-in are not configured for this deployment. Use another sign-in method below."}
               </p>
             )}
             <Button variant="outline" className="w-full" disabled={busy} onClick={onPasskey}>

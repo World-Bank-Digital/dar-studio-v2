@@ -17,7 +17,11 @@ describe("the post-completion human-control surface", () => {
     assert.match(route, /stored\.artifactSetId !== exactAccess\.artifactSetId/);
     assert.match(route, /stored\.sha256 !== exactAccess\.artifactSha256/);
     assert.match(route, /stored\.sha256 !== exactAccess\.bundleSha256/);
-    assert.match(route, /!exactAccess\.packageId \|\| !exactAccess\.targetIdentitySha256/);
+    assert.match(route, /!exactAccess\.packageId/);
+    assert.match(route, /!exactAccess\.reviewerAssignmentId/);
+    assert.match(route, /!exactAccess\.targetIdentitySha256/);
+    assert.match(route, /artifactDeliveryGrant/);
+    assert.doesNotMatch(route, /status: 302|location: redirect/);
   });
 
   it("uses bearer-aware fetch downloads on every Draft artifact surface", async () => {

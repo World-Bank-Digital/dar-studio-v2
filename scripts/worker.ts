@@ -11,8 +11,9 @@
  * 25-minute Python process. A small always-on box, or a container with the pipeline baked
  * in, is what this expects.
  *
- * Vendor keys are not this process's business. The pipeline reads its own repo-root .env
- * and the values never enter the app.
+ * Vendor keys are inherited only by this worker process and its Python children. The
+ * pipeline still requires a repo-root .env file; deployment creates an empty one so the
+ * actual values remain platform secrets in the process environment and are never logged.
  *
  *   DATABASE_URL=…  DAMM_PIPELINE_DIR=~/DAR/Claude/DAMM  npm run worker
  */
@@ -55,7 +56,9 @@ for (const sig of ["SIGINT", "SIGTERM"] as const) {
       process.exit(130);
     }
     stopping = true;
-    console.log(`\n[worker] ${sig} — finishing the run in flight, then stopping. Signal again to exit now.`);
+    console.log(
+      `\n[worker] ${sig} — finishing the run in flight, then stopping. Signal again to exit now.`,
+    );
     loop.stop();
   });
 }

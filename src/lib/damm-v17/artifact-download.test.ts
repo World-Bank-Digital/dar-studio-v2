@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
+import { ARTIFACT_DELIVERY_GRANT_MEDIA_TYPE } from "./artifact-delivery-contract.ts";
 import { artifactFilename, fetchWorkflowArtifact } from "./artifact-download.ts";
 
 describe("authenticated workflow artifact downloads", () => {
@@ -32,9 +33,53 @@ describe("authenticated workflow artifact downloads", () => {
     assert.equal(requested, "/api/runs/run-1/artifact?key=bundle");
     assert.equal(requested.includes("preview-session-secret"), false);
     assert.equal(init?.credentials, "same-origin");
+    assert.equal(init?.redirect, "error");
     assert.equal(new Headers(init?.headers).get("authorization"), "Bearer preview-session-secret");
     assert.equal(result.filename, "TST_DAR.zip");
     assert.equal(await result.blob.text(), "zip bytes");
+  });
+
+  it("exchanges a same-origin grant for a fixed gateway bearer download without a capability URL", async () => {
+    const requests: Array<{ url: string; init: RequestInit | undefined }> = [];
+    const deliveryToken = "signed.delivery-capability";
+    const result = await fetchWorkflowArtifact("/api/runs/run-1/artifact?key=bundle", {
+      baseOrigin: "https://app.example.test",
+      bearerToken: null,
+      fetcher: async (input, init) => {
+        requests.push({ url: String(input), init });
+        if (requests.length === 1) {
+          return new Response(
+            JSON.stringify({
+              endpoint: "https://artifacts.example.test/v1/artifacts",
+              token: deliveryToken,
+              expiresInSeconds: 60,
+            }),
+            { headers: { "content-type": `${ARTIFACT_DELIVERY_GRANT_MEDIA_TYPE}; charset=utf-8` } },
+          );
+        }
+        return new Response("large bundle bytes", {
+          headers: { "content-disposition": 'attachment; filename="Draft_DAR.zip"' },
+        });
+      },
+    });
+
+    assert.deepEqual(
+      requests.map((request) => request.url),
+      ["/api/runs/run-1/artifact?key=bundle", "https://artifacts.example.test/v1/artifacts"],
+    );
+    assert.equal(
+      requests.some((request) => request.url.includes(deliveryToken)),
+      false,
+    );
+    assert.equal(
+      new Headers(requests[1].init?.headers).get("authorization"),
+      `Bearer ${deliveryToken}`,
+    );
+    assert.equal(requests[1].init?.credentials, "omit");
+    assert.equal(requests[1].init?.mode, "cors");
+    assert.equal(requests[1].init?.redirect, "error");
+    assert.equal(result.filename, "Draft_DAR.zip");
+    assert.equal(await result.blob.text(), "large bundle bytes");
   });
 
   it("uses cookie-only same-origin fetches when no preview bearer exists", async () => {
