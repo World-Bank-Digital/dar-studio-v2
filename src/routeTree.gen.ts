@@ -10,21 +10,18 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
-import { Route as GlossaryRouteImport } from './routes/glossary'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as MethodologyRouteImport } from './routes/methodology'
+import { Route as ResetPasswordRouteImport } from './routes/reset-password'
 import { Route as SettingsRouteImport } from './routes/settings'
 import { Route as CIdRouteImport } from './routes/c.$id'
+import { Route as ReviewAssignmentIdRouteImport } from './routes/review.$assignmentId'
 import { Route as ApiAuthSplatRouteImport } from './routes/api/auth/$'
+import { Route as ApiRunsRunIdArtifactRouteImport } from './routes/api/runs/$runId.artifact'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const GlossaryRoute = GlossaryRouteImport.update({
-  id: '/glossary',
-  path: '/glossary',
   getParentRoute: () => rootRouteImport,
 } as any)
 const LoginRoute = LoginRouteImport.update({
@@ -37,6 +34,11 @@ const MethodologyRoute = MethodologyRouteImport.update({
   path: '/methodology',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ResetPasswordRoute = ResetPasswordRouteImport.update({
+  id: '/reset-password',
+  path: '/reset-password',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const SettingsRoute = SettingsRouteImport.update({
   id: '/settings',
   path: '/settings',
@@ -47,78 +49,102 @@ const CIdRoute = CIdRouteImport.update({
   path: '/c/$id',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ReviewAssignmentIdRoute = ReviewAssignmentIdRouteImport.update({
+  id: '/review/$assignmentId',
+  path: '/review/$assignmentId',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiAuthSplatRoute = ApiAuthSplatRouteImport.update({
   id: '/api/auth/$',
   path: '/api/auth/$',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiRunsRunIdArtifactRoute = ApiRunsRunIdArtifactRouteImport.update({
+  id: '/api/runs/$runId/artifact',
+  path: '/api/runs/$runId/artifact',
+  getParentRoute: () => rootRouteImport,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
-  '/glossary': typeof GlossaryRoute
   '/login': typeof LoginRoute
   '/methodology': typeof MethodologyRoute
+  '/reset-password': typeof ResetPasswordRoute
   '/settings': typeof SettingsRoute
   '/c/$id': typeof CIdRoute
+  '/review/$assignmentId': typeof ReviewAssignmentIdRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
+  '/api/runs/$runId/artifact': typeof ApiRunsRunIdArtifactRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
-  '/glossary': typeof GlossaryRoute
   '/login': typeof LoginRoute
   '/methodology': typeof MethodologyRoute
+  '/reset-password': typeof ResetPasswordRoute
   '/settings': typeof SettingsRoute
   '/c/$id': typeof CIdRoute
+  '/review/$assignmentId': typeof ReviewAssignmentIdRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
+  '/api/runs/$runId/artifact': typeof ApiRunsRunIdArtifactRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
-  '/glossary': typeof GlossaryRoute
   '/login': typeof LoginRoute
   '/methodology': typeof MethodologyRoute
+  '/reset-password': typeof ResetPasswordRoute
   '/settings': typeof SettingsRoute
   '/c/$id': typeof CIdRoute
+  '/review/$assignmentId': typeof ReviewAssignmentIdRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
+  '/api/runs/$runId/artifact': typeof ApiRunsRunIdArtifactRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
     | '/'
-    | '/glossary'
     | '/login'
     | '/methodology'
+    | '/reset-password'
     | '/settings'
     | '/c/$id'
+    | '/review/$assignmentId'
     | '/api/auth/$'
+    | '/api/runs/$runId/artifact'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
-    | '/glossary'
     | '/login'
     | '/methodology'
+    | '/reset-password'
     | '/settings'
     | '/c/$id'
+    | '/review/$assignmentId'
     | '/api/auth/$'
+    | '/api/runs/$runId/artifact'
   id:
     | '__root__'
     | '/'
-    | '/glossary'
     | '/login'
     | '/methodology'
+    | '/reset-password'
     | '/settings'
     | '/c/$id'
+    | '/review/$assignmentId'
     | '/api/auth/$'
+    | '/api/runs/$runId/artifact'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
-  GlossaryRoute: typeof GlossaryRoute
   LoginRoute: typeof LoginRoute
   MethodologyRoute: typeof MethodologyRoute
+  ResetPasswordRoute: typeof ResetPasswordRoute
   SettingsRoute: typeof SettingsRoute
   CIdRoute: typeof CIdRoute
+  ReviewAssignmentIdRoute: typeof ReviewAssignmentIdRoute
   ApiAuthSplatRoute: typeof ApiAuthSplatRoute
+  ApiRunsRunIdArtifactRoute: typeof ApiRunsRunIdArtifactRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -128,13 +154,6 @@ declare module '@tanstack/react-router' {
       path: '/'
       fullPath: '/'
       preLoaderRoute: typeof IndexRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/glossary': {
-      id: '/glossary'
-      path: '/glossary'
-      fullPath: '/glossary'
-      preLoaderRoute: typeof GlossaryRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/login': {
@@ -151,6 +170,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof MethodologyRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/reset-password': {
+      id: '/reset-password'
+      path: '/reset-password'
+      fullPath: '/reset-password'
+      preLoaderRoute: typeof ResetPasswordRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/settings': {
       id: '/settings'
       path: '/settings'
@@ -165,6 +191,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof CIdRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/review/$assignmentId': {
+      id: '/review/$assignmentId'
+      path: '/review/$assignmentId'
+      fullPath: '/review/$assignmentId'
+      preLoaderRoute: typeof ReviewAssignmentIdRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/auth/$': {
       id: '/api/auth/$'
       path: '/api/auth/$'
@@ -172,17 +205,26 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiAuthSplatRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/runs/$runId/artifact': {
+      id: '/api/runs/$runId/artifact'
+      path: '/api/runs/$runId/artifact'
+      fullPath: '/api/runs/$runId/artifact'
+      preLoaderRoute: typeof ApiRunsRunIdArtifactRouteImport
+      parentRoute: typeof rootRouteImport
+    }
   }
 }
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
-  GlossaryRoute: GlossaryRoute,
   LoginRoute: LoginRoute,
   MethodologyRoute: MethodologyRoute,
+  ResetPasswordRoute: ResetPasswordRoute,
   SettingsRoute: SettingsRoute,
   CIdRoute: CIdRoute,
+  ReviewAssignmentIdRoute: ReviewAssignmentIdRoute,
   ApiAuthSplatRoute: ApiAuthSplatRoute,
+  ApiRunsRunIdArtifactRoute: ApiRunsRunIdArtifactRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

@@ -6,8 +6,21 @@ import { tanstackStart } from "@tanstack/react-start/plugin/vite";
 import viteReact from "@vitejs/plugin-react";
 import tailwindcss from "@tailwindcss/vite";
 import { nitro } from "nitro/vite";
+// @ts-expect-error JS integrity gate alongside the TS vite config
+import { verifyDammMethodologyAssets } from "./scripts/damm-methodology-integrity.mjs";
 // @ts-expect-error JS plugin alongside the TS vite config
 import { grokPwaPlugin } from "./scripts/grok-pwa-plugin.mjs";
+
+/** Fail every app build if its canonical model-derived assets have drifted. */
+function dammMethodologyIntegrityPlugin(): Plugin {
+  return {
+    name: "damm:methodology-integrity",
+    apply: "build",
+    buildStart() {
+      verifyDammMethodologyAssets(process.cwd());
+    },
+  };
+}
 
 /**
  * Finish PGLite bootstrap during dev-server setup (before traffic). Vite awaits
@@ -29,6 +42,36 @@ function pgliteBootstrapPlugin(): Plugin {
       } catch (err) {
         console.error("[app-builder] DB bootstrap failed:", err);
         throw err;
+      }
+    },
+  };
+}
+
+/**
+ * Run the DAMM pipeline worker inside the dev server.
+ *
+ * It has to live in this process rather than a separate one: on the PGLite fallback the
+ * database is in memory here, so a standalone worker would poll a different, empty queue
+ * and every run would sit at "queued" forever. It starts after the DB bootstrap, and
+ * `DAMM_WORKER=off` skips it for anyone who wants the app without the pipeline.
+ */
+function dammWorkerPlugin(): Plugin {
+  return {
+    name: "app-builder:damm-worker",
+    apply: "serve",
+    async configureServer(server) {
+      if (process.env.DAMM_WORKER === "off") return;
+      try {
+        const mod = (await server.ssrLoadModule("/src/lib/damm-v17/worker-loop.ts")) as {
+          startWorkerOnce?: () => unknown;
+        };
+        if (mod.startWorkerOnce?.()) {
+          console.log("[damm-worker] watching the run queue");
+        }
+      } catch (err) {
+        // A worker that will not start must not stop the app: the rest of the studio is
+        // usable without it, and a dev server that refuses to boot says less about why.
+        console.error("[damm-worker] did not start:", err);
       }
     },
   };
@@ -153,7 +196,9 @@ export default defineConfig(({ command }) => ({
   },
   resolve: { tsconfigPaths: true },
   plugins: [
+    dammMethodologyIntegrityPlugin(),
     pgliteBootstrapPlugin(),
+    dammWorkerPlugin(),
     pgliteAssetsPlugin(),
     // Before tanstackStart so /auth/popup never falls through to the SPA.
     authPopupPlugin(),

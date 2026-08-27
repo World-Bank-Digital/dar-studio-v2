@@ -1,1434 +1,881 @@
-import { useEffect, useMemo, useState } from "react";
-import { Link } from "@tanstack/react-router";
-import {
-  Bar,
-  BarChart,
-  CartesianGrid,
-  ResponsiveContainer,
-  Tooltip,
-  XAxis,
-  YAxis,
-} from "recharts";
-import { Button } from "@/components/ui/button";
+/**
+ * The country workspace, on the DAMM v1.7 instrument.
+ *
+ * The screen works the way the scoring workbook works. An assessor edits the
+ * entry columns — value, source, source URL, tier, year, assessor level — plus
+ * the ratification hold and notes. Everything else on the page is derived:
+ * the evidence class from the value, the level from the cut-points, pillar
+ * bands from the levels actually recorded, prerequisite statuses from
+ * presence, and the readiness matrix from the prerequisites and the bearing
+ * indicators. A mean never appears without its own denominator, and a value
+ * awaiting ratification says so wherever it is shown.
+ */
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Badge } from "@/components/ui/badge";
+import { RunsTab } from "@/components/damm/RunsTab";
+import { DocumentsTab } from "@/components/damm/DocumentsTab";
+import { DarReviewTab } from "@/components/damm/DarReviewTab";
+import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
+import { cn } from "@/lib/utils";
+import { useSessionRole } from "@/lib/session";
+import { model, indicatorById, pillarIds, useCaseIds } from "@/lib/damm-v17/model";
 import {
-  generateDraft,
-  generateMemo,
   getWorkspace,
-  ingestTick,
-  launchDiagnostic,
   listAudit,
-  recordDecision,
-  refreshPublicEvidence,
-  runDossierSearch,
   updateEvidence,
   type Workspace,
-} from "@/lib/damm/actions";
-import { model } from "@/lib/damm/model";
-import { finalLevel, formatObserved, formatPct, formatScore, isStale, suggestedLevel } from "@/lib/damm/scoring";
-import { nextAction } from "@/lib/damm/ladder";
-import { chainSuggestions } from "@/lib/damm/chains";
-import { importedCredibilitySummary, rowCredibility, type Credibility } from "@/lib/damm/credibility";
-import { useSessionRole } from "@/lib/session";
-import type { Confidence } from "@/lib/damm/types";
-import type { DraftDocument as DraftDoc } from "@/lib/damm/draft";
-import { escapeHtml } from "@/lib/utils";
+  type WorkspaceRow,
+} from "@/lib/damm-v17/actions";
+import type { Assessment, IndicatorDef, PillarId } from "@/lib/damm-v17/types";
+import { AlertTriangle, CircleHelp, Loader2 } from "lucide-react";
 
-const TABS = [
-  "overview",
-  "gauntlet",
-  "dossier",
-  "steps",
-  "outline",
-  "evidence",
-  "visuals",
-  "gates",
-  "memo",
-  "audit",
-  "exports",
-] as const;
+type Tab =
+  | "overview"
+  | "readiness"
+  | "evidence"
+  | "research"
+  | "documents"
+  | "review"
+  | "questions"
+  | "audit";
 
-type Tab = (typeof TABS)[number];
+const TABS: Array<{ id: Tab; label: string }> = [
+  { id: "overview", label: "Overview" },
+  { id: "readiness", label: "Readiness" },
+  { id: "evidence", label: "Editable evidence workspace" },
+  { id: "research", label: "DAR workflow" },
+  { id: "documents", label: "Draft downloads" },
+  { id: "review", label: "Human controls" },
+  { id: "questions", label: "Manual open questions" },
+  { id: "audit", label: "Audit" },
+];
 
-export function WorkspaceView({ id }: { id: string }) {
-  const { role, actorName } = useSessionRole();
-  const [ws, setWs] = useState<Workspace | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [tab, setTab] = useState<Tab>("overview");
-  const [launching, setLaunching] = useState(false);
-  const [refreshing, setRefreshing] = useState(false);
+/* ---------- small vocabulary widgets ---------- */
 
-  async function refresh() {
-    const res = await getWorkspace({ data: { id } });
-    if (!res.ok) {
-      setError(res.error);
-      return;
-    }
-    setWs(res.workspace);
-    setError(null);
-  }
+const CLS_STYLE: Record<string, string> = {
+  Measured: "bg-ink text-paper",
+  Documented: "bg-sage/80 text-paper",
+  Judged: "bg-moss text-ink",
+  Gap: "bg-transparent border border-ink/30 text-muted",
+};
 
-  useEffect(() => {
-    refresh().catch((e) => setError(e instanceof Error ? e.message : "Failed to load"));
-  }, [id]);
-
-  useEffect(() => {
-    if (!ws || ws.ingestStatus !== "running") return;
-    let stop = false;
-    const tick = async () => {
-      if (stop) return;
-      await ingestTick({ data: { countryId: id, role, actorName } });
-      if (stop) return;
-      await refresh();
-    };
-    const t = setInterval(tick, 1600);
-    tick();
-    return () => {
-      stop = true;
-      clearInterval(t);
-    };
-  }, [id, ws?.ingestStatus]);
-
-  async function onLaunch() {
-    setLaunching(true);
-    setError(null);
-    try {
-      const res = await launchDiagnostic({ data: { countryId: id, role, actorName } });
-      if (!res.ok) setError(res.error);
-      await refresh();
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Could not launch diagnostic");
-    } finally {
-      setLaunching(false);
-    }
-  }
-
-  async function onRefresh() {
-    setRefreshing(true);
-    setError(null);
-    try {
-      const res = await refreshPublicEvidence({ data: { countryId: id, role, actorName } });
-      if (!res.ok) setError(res.error);
-      await refresh();
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Could not refresh public series");
-    } finally {
-      setRefreshing(false);
-    }
-  }
-
-  if (error && !ws) {
-    return (
-      <Card>
-        <p className="text-danger">{error}</p>
-        <Link to="/" className="mt-3 inline-block text-sm text-sage">
-          Back to portfolio
-        </Link>
-      </Card>
-    );
-  }
-  if (!ws) return <div className="h-48 animate-pulse rounded-xl bg-moss/40" />;
-
+function ClsChip({ cls }: { cls: string }) {
+  if (!cls) return <span className="text-xs text-subtle">—</span>;
   return (
-    <div>
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
-        <div>
-          <p className="text-xs font-medium uppercase tracking-widest text-sage">
-            {ws.iso3} · Step {ws.openStep} of 8
-          </p>
-          <h1 className="font-display text-3xl font-semibold">{ws.name}</h1>
-          <p className="mt-1 text-sm text-muted">{ws.claim.display}</p>
-        </div>
-        {ws.ingestStatus === "running" ? (
-          <Badge tone="warn">
-            Collecting {ws.ingestProgress}/{ws.ingestTotal}
-          </Badge>
-        ) : ws.ingestStatus === "idle" ? (
-          <Button onClick={onLaunch} disabled={launching}>
-            {launching ? "Launching…" : "Launch Step 1 diagnostic"}
-          </Button>
-        ) : ws.ingestStatus === "error" ? (
-          <Button onClick={onLaunch} disabled={launching} variant="outline">
-            Retry diagnostic
-          </Button>
-        ) : (
-          <Button onClick={onRefresh} disabled={refreshing} variant="outline">
-            {refreshing ? "Refreshing…" : "Refresh public evidence"}
-          </Button>
-        )}
-      </div>
-      {error ? <p className="mt-2 text-sm text-danger">{error}</p> : null}
-      {ws.ingestMessage ? <p className="mt-2 text-xs text-subtle">{ws.ingestMessage}</p> : null}
-
-      <div className="mt-4 flex gap-1 overflow-x-auto pb-1">
-        {TABS.map((t) => (
-          <button
-            key={t}
-            type="button"
-            onClick={() => setTab(t)}
-            className={`min-h-11 shrink-0 rounded-sm px-3 text-sm capitalize ${tab === t ? "bg-forest text-forest-fg" : "text-muted hover:bg-moss"}`}
-          >
-            {t}
-          </button>
-        ))}
-      </div>
-
-      <div className="mt-5">
-        {tab === "overview" ? <Overview ws={ws} onLaunch={onLaunch} launching={launching} /> : null}
-        {tab === "gauntlet" ? <GauntletTab ws={ws} /> : null}
-        {tab === "dossier" ? <DossierTab ws={ws} onChange={refresh} /> : null}
-        {tab === "steps" ? <Steps ws={ws} onChange={refresh} /> : null}
-        {tab === "outline" ? <Outline ws={ws} /> : null}
-        {tab === "evidence" ? <EvidenceTab ws={ws} onChange={refresh} /> : null}
-        {tab === "visuals" ? <Visuals ws={ws} /> : null}
-        {tab === "gates" ? <Gates ws={ws} /> : null}
-        {tab === "memo" ? <MemoTab ws={ws} /> : null}
-        {tab === "audit" ? <AuditTab id={ws.id} /> : null}
-        {tab === "exports" ? <Exports ws={ws} /> : null}
-      </div>
-    </div>
-  );
-}
-
-function Overview({
-  ws,
-  onLaunch,
-  launching,
-}: {
-  ws: Workspace;
-  onLaunch: () => Promise<void>;
-  launching: boolean;
-}) {
-  const s = ws.scorecard;
-  const next = nextAction(model, ws.decisions, ws.step1Done);
-  return (
-    <div>
-      {ws.ingestStatus === "idle" || ws.ingestStatus === "error" ? (
-        <Card className="mb-4">
-          <p className="text-xs font-medium uppercase tracking-widest text-sage">Step 1 · TTL action</p>
-          <h2 className="mt-1 font-display text-xl">Launch the automated diagnostic</h2>
-          <p className="mt-2 text-sm text-muted">
-            Official statistical APIs run first (World Bank WDI, ITU, UN EGDI, Findex, UNESCO via Data360). Remaining
-            quantitative gaps are then searched on national statistics offices and official publications. A figure
-            enters the table only with a public source URL. Rubric items stay named gaps for the panel. Credibility
-            is shown beside every source and never weights a DAMM score.
-          </p>
-          {ws.ingestStatus === "error" ? <p className="mt-2 text-sm text-danger">{ws.ingestMessage}</p> : null}
-          <Button className="mt-4" onClick={onLaunch} disabled={launching}>
-            {launching ? "Launching…" : "Launch Step 1 diagnostic"}
-          </Button>
-        </Card>
-      ) : null}
-      {ws.ingestStatus === "running" ? (
-        <Card className="mb-4">
-          <p className="text-xs font-medium uppercase tracking-widest text-sage">Step 1 · collecting verified series</p>
-          <h2 className="mt-1 font-display text-xl">
-            {ws.ingestProgress} of {ws.ingestTotal} public series
-          </h2>
-          <p className="mt-2 text-sm text-muted">{ws.ingestMessage ?? "Fetching official public observations…"}</p>
-          <div className="mt-3 h-2 overflow-hidden rounded-full bg-moss">
-            <div
-              className="h-full bg-forest transition-all"
-              style={{ width: `${ws.ingestTotal ? Math.min(100, (ws.ingestProgress / ws.ingestTotal) * 100) : 0}%` }}
-            />
-          </div>
-        </Card>
-      ) : null}
-      <div className="grid gap-3 sm:grid-cols-3">
-        <ScoreTile title="CMS" name="Capability" score={s.cms.score} coverage={s.cms.coverage} band={s.cms.band} reason={s.cms.suppressedReason} />
-        <ScoreTile title="EMS" name="Ecosystem" score={s.ems.score} coverage={s.ems.coverage} band={s.ems.band} reason={s.ems.suppressedReason} />
-        <ScoreTile title="OES" name="Outcomes" score={s.oes.score} coverage={s.oes.coverage} band={s.oes.band} reason={s.oes.suppressedReason} />
-      </div>
-      <Card className="mt-4">
-        <p className="text-xs font-medium uppercase tracking-widest text-sage">Stage</p>
-        <p className="mt-1 font-display text-2xl">{ws.claim.display}</p>
-        <p className="mt-2 text-sm text-muted">{ws.claim.explanation}</p>
-        <p className="mt-2 text-xs text-subtle">Engine cascade (not claimable on its own): {s.stage.label}</p>
-      </Card>
-      <div className="mt-4 grid gap-3 sm:grid-cols-4">
-        <Stat label="Levelled" value={s.levelledCount} />
-        <Stat label="Named gaps" value={s.namedGapCount} />
-        <Stat label="Validated" value={s.validatedCount} />
-        <Stat label="Stale" value={s.staleCount} />
-      </div>
-      <CredibilityOverview evidence={ws.evidence} />
-      <GauntletStrip gauntlet={ws.gauntlet} />
-      <DossierStrip dossier={ws.dossier} />
-      <Card className="mt-4">
-        <p className="text-xs font-medium uppercase tracking-widest text-sage">Suggested next action</p>
-        <p className="mt-1 text-sm">{next.text}</p>
-        <p className="mt-2 text-xs text-subtle">Advisory only — the ladder never auto-advances.</p>
-      </Card>
-    </div>
-  );
-}
-
-function ScoreTile({
-  title,
-  name,
-  score,
-  coverage,
-  band,
-  reason,
-}: {
-  title: string;
-  name: string;
-  score: number | null;
-  coverage: number;
-  band: string | null;
-  reason: string | null;
-}) {
-  return (
-    <Card>
-      <p className="text-xs font-medium uppercase tracking-widest text-sage">{title}</p>
-      <p className="font-display text-3xl tabular-nums">{formatScore(score)}</p>
-      <p className="text-sm text-muted">{name}</p>
-      <p className="mt-2 text-xs text-subtle">
-        {band ?? "Not rated"} · coverage {formatPct(coverage)}
-      </p>
-      {reason ? <p className="mt-1 text-xs text-warn">{reason}</p> : null}
-    </Card>
-  );
-}
-
-function Stat({ label, value }: { label: string; value: number }) {
-  return (
-    <Card className="p-4">
-      <p className="text-xs text-subtle">{label}</p>
-      <p className="font-display text-2xl tabular-nums">{value}</p>
-    </Card>
-  );
-}
-
-function credibilityTone(tier: Credibility["tier"]): "ok" | "forest" | "warn" | "neutral" {
-  if (tier === "A") return "ok";
-  if (tier === "B" || tier === "C") return "forest";
-  if (tier === "D") return "warn";
-  return "neutral";
-}
-
-function CredibilityBadge({ cred, compact = false }: { cred: Credibility; compact?: boolean }) {
-  return (
-    <span className="inline-flex items-center gap-1" title={`${cred.label}. ${cred.note}`}>
-      <Badge tone={credibilityTone(cred.tier)}>
-        {cred.tier} {cred.score}
-      </Badge>
-      {compact ? null : <span className="text-xs text-subtle">{cred.label.replace(/^[A-E] — /, "")}</span>}
+    <span
+      title={cls}
+      className={cn(
+        "inline-flex size-5 items-center justify-center rounded-sm text-[10px] font-bold",
+        CLS_STYLE[cls] ?? "bg-moss",
+      )}
+    >
+      {cls[0]}
     </span>
   );
 }
 
-function CredibilityOverview({ evidence }: { evidence: Workspace["evidence"] }) {
-  const summary = importedCredibilitySummary(evidence);
+const STATUS_STYLE: Record<string, string> = {
+  Ready: "bg-forest/10 text-forest border-forest/30",
+  Partial: "bg-amber-500/10 text-amber-700 border-amber-500/30",
+  Blocked: "bg-red-500/10 text-red-700 border-red-500/30",
+  Unverified: "bg-moss text-muted border-ink/20",
+  Present: "bg-forest/10 text-forest border-forest/30",
+  "Present (narrow)": "bg-amber-500/10 text-amber-700 border-amber-500/30",
+  Absent: "bg-red-500/10 text-red-700 border-red-500/30",
+};
+
+function StatusChip({ s }: { s: string }) {
   return (
-    <Card className="mt-4">
-      <p className="text-xs font-medium uppercase tracking-widest text-sage">Source credibility</p>
-      <p className="mt-1 font-display text-2xl tabular-nums">
-        {summary.mean === null ? "—" : summary.mean}
-        <span className="ml-2 text-base font-sans font-normal text-muted">
-          mean of {summary.count} imported reading{summary.count === 1 ? "" : "s"}
-        </span>
-      </p>
-      <p className="mt-2 text-xs text-subtle">
-        Official series first (A/B), then specialized official indices (C), then research (D). Credibility never
-        weights CMS, EMS, OES or stage.
-      </p>
-      <div className="mt-3 flex flex-wrap gap-2 text-xs">
-        {(["A", "B", "C", "D", "E"] as const).map((tier) => (
-          <span key={tier} className="rounded-full bg-moss/60 px-2.5 py-1">
-            {tier} · {summary.byTier[tier]}
-          </span>
-        ))}
-      </div>
-    </Card>
-  );
-}
-
-function GauntletStrip({ gauntlet }: { gauntlet: Workspace["gauntlet"] }) {
-  return (
-    <Card className="mt-4">
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <p className="text-xs font-medium uppercase tracking-widest text-sage">Evidence gauntlet · 13 core gates</p>
-          <p className="mt-1 font-display text-2xl">{gauntlet.passed ? "Cleared" : "Locked"}</p>
-          <p className="mt-2 max-w-2xl text-sm text-muted">{gauntlet.summary}</p>
-        </div>
-        <Badge tone={gauntlet.passed ? "ok" : "warn"}>{gauntlet.passed ? "Policy chapters open" : "Engagement pack only"}</Badge>
-      </div>
-      <div className="mt-4 grid gap-3 sm:grid-cols-3">
-        <Stat label="Populated" value={gauntlet.populated} />
-        <Stat label="Need (80%)" value={gauntlet.populatedNeeded} />
-        <Stat label="A/B readings" value={gauntlet.gradeAB} />
-      </div>
-    </Card>
-  );
-}
-
-function GauntletTab({ ws }: { ws: Workspace }) {
-  const g = ws.gauntlet;
-  return (
-    <div className="space-y-4">
-      <Card>
-        <p className="text-xs font-medium uppercase tracking-widest text-sage">Readiness gate</p>
-        <h2 className="mt-1 font-display text-2xl">{g.passed ? "Cleared — policy chapters may assemble" : "Not cleared — roadmap stays locked"}</h2>
-        <p className="mt-2 text-sm text-muted">{g.summary}</p>
-        <p className="mt-2 text-xs text-subtle">
-          Mandatory set is the 13 core gates, not the 97-indicator census. National exact series beat international
-          official when definition, year and disaggregation match. Rubrics need a human level or an explicit data gap.
-          Specialist desks challenge readings; they cannot write an assessor level.
-        </p>
-        <div className="mt-4 grid gap-3 sm:grid-cols-4">
-          <Stat label="Accounted" value={g.accounted} />
-          <Stat label="Populated" value={g.populated} />
-          <Stat label="A or B" value={g.gradeAB} />
-          <Stat label="Research tasks" value={g.tasks.length} />
-        </div>
-      </Card>
-
-      <div className="overflow-x-auto rounded-lg bg-surface shadow-[var(--shadow-border)]">
-        <table className="w-full min-w-[860px] text-left text-sm">
-          <thead className="border-b border-border text-xs uppercase text-subtle">
-            <tr>
-              <th className="px-3 py-2">Gate</th>
-              <th className="px-3 py-2">Type</th>
-              <th className="px-3 py-2">Reading</th>
-              <th className="px-3 py-2">Status</th>
-              <th className="px-3 py-2">Evidence</th>
-              <th className="px-3 py-2">Year</th>
-              <th className="px-3 py-2">Source</th>
-              <th className="px-3 py-2">Why it fails</th>
-            </tr>
-          </thead>
-          <tbody>
-            {g.lines.map((line) => (
-              <tr key={line.indicatorId} className="border-b border-border/70 align-top">
-                <td className="px-3 py-3">
-                  <p className="font-mono text-xs text-subtle">{line.indicatorId}</p>
-                  <p className="font-medium">{line.name}</p>
-                  <p className="text-xs text-subtle">{line.specialist}</p>
-                </td>
-                <td className="px-3 py-3">
-                  <Badge tone={line.kind === "rubric" ? "neutral" : "forest"}>
-                    {line.kind === "rubric" ? "Documentary" : "Series"}
-                  </Badge>
-                </td>
-                <td className="px-3 py-3 text-sm">{line.reading}</td>
-                <td className="px-3 py-3">
-                  <Badge tone={line.status === "missing" ? "warn" : line.status === "human-gap" ? "neutral" : "ok"}>
-                    {line.status.replace("-", " ")}
-                  </Badge>
-                </td>
-                <td className="px-3 py-3">
-                  {line.status === "missing" ? (
-                    <span className="text-subtle">—</span>
-                  ) : (
-                    <span className="tabular-nums">
-                      {line.grade}
-                      {line.populated ? ` · ${line.score}` : ""}
-                    </span>
-                  )}
-                </td>
-                <td className="px-3 py-3 tabular-nums">{line.year ?? "—"}</td>
-                <td className="px-3 py-3">
-                  {line.sourceUrl ? (
-                    <a className="text-sage underline" href={line.sourceUrl} target="_blank" rel="noreferrer">
-                      {line.sourceName ?? line.sourceUrl}
-                    </a>
-                  ) : (
-                    <span className="text-subtle">{line.sourceName ?? "—"}</span>
-                  )}
-                </td>
-                <td className="px-3 py-3 text-xs text-muted">{line.failReason ?? "—"}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-
-      {g.challenges.length ? (
-        <Card>
-          <h3 className="font-display text-lg">Specialist challenge pass</h3>
-          <p className="mt-1 text-xs text-subtle">Desks may downgrade or demand a human. They never set a level.</p>
-          <ul className="mt-3 space-y-2 text-sm text-muted">
-            {g.challenges.map((c) => (
-              <li key={`${c.desk}-${c.indicatorId}`}>
-                <span className="font-medium text-ink">{c.indicatorId} · {c.desk}.</span> {c.finding}
-              </li>
-            ))}
-          </ul>
-        </Card>
-      ) : null}
-
-      <Card>
-        <h3 className="font-display text-lg">Gap list and research tasks</h3>
-        {g.tasks.length === 0 ? (
-          <p className="mt-2 text-sm text-muted">No outstanding core-gate research tasks.</p>
-        ) : (
-          <ol className="mt-3 space-y-3">
-            {g.tasks.map((t) => (
-              <li key={t.indicatorId} className="rounded-md bg-moss/40 px-3 py-3">
-                <div className="flex flex-wrap items-center justify-between gap-2">
-                  <p className="font-medium">
-                    {t.indicatorId} {t.name}
-                  </p>
-                  <Badge tone={t.priority === "blocking" ? "warn" : "neutral"}>{t.priority}</Badge>
-                </div>
-                <p className="mt-1 text-sm text-muted">{t.why}</p>
-                <p className="mt-1 text-xs text-subtle">Steward: {t.steward} · {t.specialist} desk</p>
-                <p className="mt-2 font-mono text-xs text-ink">{t.query}</p>
-              </li>
-            ))}
-          </ol>
-        )}
-      </Card>
-    </div>
-  );
-}
-
-function DossierStrip({ dossier }: { dossier: Workspace["dossier"] }) {
-  if (!dossier.length) return null;
-  return (
-    <Card className="mt-4">
-      <p className="text-xs font-medium uppercase tracking-widest text-sage">Country dossier · not scored</p>
-      <p className="mt-1 font-display text-xl">{dossier.length} cited items</p>
-      <p className="mt-2 text-sm text-muted">
-        Context for Chapters 1–2 and research tasks. Dossier rows cannot write an indicator value or open the gauntlet.
-      </p>
-    </Card>
-  );
-}
-
-function DossierTab({ ws, onChange }: { ws: Workspace; onChange: () => Promise<void> }) {
-  const { role, actorName } = useSessionRole();
-  const [busy, setBusy] = useState(false);
-  const [err, setErr] = useState<string | null>(null);
-  const job = ws.dossierJob ?? { status: "idle" as const, message: "", added: 0, total: 0 };
-  const running = job.status === "running" || busy;
-
-  useEffect(() => {
-    if (job.status !== "running") return;
-    const t = setInterval(() => {
-      onChange().catch(() => undefined);
-    }, 1600);
-    return () => clearInterval(t);
-  }, [job.status, onChange]);
-
-  async function run() {
-    setBusy(true);
-    setErr(null);
-    try {
-      const res = await runDossierSearch({ data: { countryId: ws.id, role, actorName } });
-      if (!res.ok) setErr(res.error);
-      await onChange();
-    } catch (e) {
-      setErr(e instanceof Error ? e.message : "Dossier search failed");
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  const byUse = {
-    "chapter-1": ws.dossier.filter((d) => d.informs === "chapter-1"),
-    "chapter-2": ws.dossier.filter((d) => d.informs === "chapter-2"),
-    "named-lead": ws.dossier.filter((d) => d.informs === "named-lead"),
-    "research-task": ws.dossier.filter((d) => d.informs === "research-task"),
-  };
-
-  return (
-    <div className="space-y-4">
-      <Card>
-        <p className="text-xs font-medium uppercase tracking-widest text-sage">Opportunistic country file</p>
-        <h2 className="mt-1 font-display text-2xl">Country dossier</h2>
-        <p className="mt-2 max-w-3xl text-sm text-muted">
-          Search national, international and donor sources for material a TTL would actually read — strategies, laws,
-          programmes, value-chain notes — including items that sit outside the 97 indicators. Hits are graded. They never
-          write the evidence table and they cannot clear the 13-gate lock.
-        </p>
-        <div className="mt-4 flex flex-wrap items-center gap-2">
-          <Button onClick={run} disabled={running}>
-            {running
-              ? job.message || "Searching public sources…"
-              : ws.dossier.length
-                ? "Refresh dossier"
-                : "Build country dossier"}
-          </Button>
-          <Badge tone="neutral">{ws.dossier.length} items</Badge>
-        </div>
-        {err ? <p className="mt-3 text-sm text-danger">{err}</p> : null}
-        {job.message && !running ? <p className="mt-3 text-sm text-muted">{job.message}</p> : null}
-      </Card>
-
-      <div className="grid gap-3 sm:grid-cols-4">
-        <Stat label="Chapter 1" value={byUse["chapter-1"].length} />
-        <Stat label="Chapter 2" value={byUse["chapter-2"].length} />
-        <Stat label="Named leads" value={byUse["named-lead"].length} />
-        <Stat label="Research tasks" value={byUse["research-task"].length} />
-      </div>
-
-      {ws.dossier.length === 0 ? (
-        <Card>
-          <p className="text-sm text-muted">
-            No dossier yet. Run the search after Step 1. Official indicator series stay on the Evidence tab.
-          </p>
-        </Card>
-      ) : (
-        <div className="overflow-x-auto rounded-lg bg-surface shadow-[var(--shadow-border)]">
-          <table className="w-full min-w-[860px] text-left text-sm">
-            <thead className="border-b border-border text-xs uppercase text-subtle">
-              <tr>
-                <th className="px-3 py-2">Item</th>
-                <th className="px-3 py-2">Use</th>
-                <th className="px-3 py-2">Grade</th>
-                <th className="px-3 py-2">Year</th>
-                <th className="px-3 py-2">Source</th>
-              </tr>
-            </thead>
-            <tbody>
-              {ws.dossier.map((d) => (
-                <tr key={d.id} className="border-b border-border/70 align-top">
-                  <td className="px-3 py-3">
-                    <p className="font-medium">{d.title}</p>
-                    <p className="mt-1 text-xs text-muted">{d.summary}</p>
-                    {d.relatedIndicator ? (
-                      <p className="mt-1 text-xs text-subtle">Lead only · {d.relatedIndicator} stays unmeasured until a matching series exists.</p>
-                    ) : null}
-                  </td>
-                  <td className="px-3 py-3">
-                    <Badge tone="neutral">{d.informs.replace("-", " ")}</Badge>
-                    <p className="mt-1 text-xs capitalize text-subtle">{d.sourceClass}</p>
-                  </td>
-                  <td className="px-3 py-3 tabular-nums">
-                    {d.score}/100 · {d.grade}
-                  </td>
-                  <td className="px-3 py-3 tabular-nums">{d.year ?? "—"}</td>
-                  <td className="px-3 py-3">
-                    <a className="text-sage underline" href={d.sourceUrl} target="_blank" rel="noreferrer">
-                      {d.sourceName}
-                    </a>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+    <span
+      className={cn(
+        "inline-block rounded-sm border px-1.5 py-0.5 text-xs font-medium",
+        STATUS_STYLE[s] ?? "bg-moss",
       )}
-    </div>
+    >
+      {s}
+    </span>
   );
 }
 
-function Steps({ ws, onChange }: { ws: Workspace; onChange: () => Promise<void> }) {
-  const { role, actorName } = useSessionRole();
-  const open = ws.openStep;
-  const rung = model.ladder.find((r) => r.step === open);
-  const [option, setOption] = useState(
-    rung?.options?.[0]?.name ?? rung?.decision ?? rung?.name ?? "Record",
+function TierBadge({ tier }: { tier: string | null }) {
+  if (!tier) return null;
+  return (
+    <span
+      title={model.source_tiers[tier as keyof typeof model.source_tiers] ?? ""}
+      className="inline-block rounded-sm border border-ink/20 px-1 text-[10px] font-semibold text-muted"
+    >
+      {tier}
+    </span>
   );
-  const [decider, setDecider] = useState(actorName);
-  const [notes, setNotes] = useState("");
-  const [rejected, setRejected] = useState("");
-  const [chains, setChains] = useState("");
-  const [rejChains, setRejChains] = useState("");
-  const [msg, setMsg] = useState<string | null>(null);
-  const suggestions = chainSuggestions(ws.iso3);
+}
+
+function StaleTag() {
+  return (
+    <span className="inline-block rounded-sm bg-amber-500/15 px-1 text-[10px] font-semibold text-amber-700">
+      stale
+    </span>
+  );
+}
+
+function HoldTag() {
+  return (
+    <span
+      title="Level withheld pending ratification: the evidence measures a different construct from what the indicator names. The row is outside every mean."
+      className="inline-block rounded-sm bg-moss px-1 text-[10px] font-semibold text-muted"
+    >
+      hold
+    </span>
+  );
+}
+
+const fmt = (x: number | null | undefined) => (x === null || x === undefined ? "—" : x.toFixed(2));
+
+/* ---------- the view ---------- */
+
+export function WorkspaceView({ id }: { id: string }) {
+  const [ws, setWs] = useState<Workspace | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [tab, setTab] = useState<Tab>("research");
+
+  const refresh = useCallback(async () => {
+    const res = await getWorkspace({ data: { countryId: id } });
+    if (res.ok) {
+      setWs(res.workspace);
+      setError(null);
+    } else {
+      setError(res.error);
+    }
+  }, [id]);
 
   useEffect(() => {
-    setOption(rung?.options?.[0]?.name ?? rung?.decision ?? rung?.name ?? "Record");
-    setDecider(actorName);
-  }, [open, rung?.name, actorName]);
+    refresh().catch((e) =>
+      setError(e instanceof Error ? e.message : "Could not load the workspace"),
+    );
+  }, [refresh]);
 
-  return (
-    <div className="grid gap-4 lg:grid-cols-[1fr_1.1fr]">
-      <div className="space-y-2">
-        {model.ladder.map((r) => {
-          const rec = ws.decisions.find((d) => d.step === r.step);
-          const state = r.step === 1 && ws.step1Done ? "done" : rec ? "done" : r.step === open ? "open" : "locked";
-          return (
-            <div key={r.rung} className={`rounded-lg px-4 py-3 ${state === "open" ? "bg-moss" : "bg-surface"} shadow-[var(--shadow-border)]`}>
-              <div className="flex items-center justify-between gap-2">
-                <p className="text-xs text-subtle">
-                  Step {r.step} · {r.rung} · {r.decider}
-                </p>
-                <Badge tone={state === "done" ? "ok" : state === "open" ? "forest" : "neutral"}>{state}</Badge>
-              </div>
-              <p className="font-medium">{r.name}</p>
-              {rec ? (
-                <p className="mt-1 text-xs text-muted">
-                  {rec.optionName} — {rec.deciderName} ({rec.role})
-                </p>
-              ) : null}
-            </div>
-          );
-        })}
-      </div>
-      <Card>
-        <h2 className="font-display text-xl">{rung?.name ?? "Closed"}</h2>
-        <p className="mt-2 text-sm text-muted">{rung?.guidance}</p>
-        {open === 1 && !ws.step1Done ? (
-          <p className="mt-4 text-sm">The machine is still collecting public evidence. It will hand over when the first pass finishes.</p>
-        ) : open === 1 ? (
-          <p className="mt-4 text-sm">Step 1 is complete. Record Step 2 to continue.</p>
-        ) : ws.decisions.some((d) => d.step === 8) ? (
-          <p className="mt-4 text-sm">The record is adopted. Export the draft and archive the workbook.</p>
-        ) : (
-          <form
-            className="mt-4 space-y-3"
-            onSubmit={async (e) => {
-              e.preventDefault();
-              const payload =
-                open === 3
-                  ? {
-                      chains: chains.split(",").map((s) => s.trim()).filter(Boolean),
-                      rejected: rejChains.split(",").map((s) => s.trim()).filter(Boolean),
-                    }
-                  : undefined;
-              const res = await recordDecision({
-                data: {
-                  countryId: ws.id,
-                  step: open,
-                  optionName: option,
-                  deciderName: decider,
-                  role,
-                  actorName,
-                  notes,
-                  rejected,
-                  payload,
-                },
-              });
-              if (!res.ok) {
-                setMsg(res.error);
-                return;
-              }
-              setNotes("");
-              setRejected("");
-              setMsg("Decision recorded.");
-              await onChange();
-            }}
-          >
-            {rung?.options?.length ? (
-              <label className="block text-sm">
-                Option
-                <select className="mt-1 h-11 w-full rounded-sm border border-border bg-surface px-3" value={option} onChange={(e) => setOption(e.target.value)}>
-                  {rung.options.map((o) => (
-                    <option key={o.name}>{o.name}</option>
-                  ))}
-                </select>
-              </label>
-            ) : (
-              <label className="block text-sm">
-                Decision
-                <Input className="mt-1" value={option} onChange={(e) => setOption(e.target.value)} />
-              </label>
-            )}
-            {rung?.options?.map((o) =>
-              o.name === option ? (
-                <p key={o.name} className="text-xs text-muted">
-                  {o.means} {o.cost} {o.suits}
-                </p>
-              ) : null,
-            )}
-            <label className="block text-sm">
-              Decider name
-              <Input className="mt-1" value={decider} onChange={(e) => setDecider(e.target.value)} required />
-            </label>
-            {open === 3 ? (
-              <>
-                <label className="block text-sm">
-                  Value-chain shortlist (comma-separated)
-                  <Input className="mt-1" value={chains} onChange={(e) => setChains(e.target.value)} />
-                </label>
-                {suggestions.length ? (
-                  <div>
-                    <p className="text-xs text-subtle">
-                      Suggested for {ws.name} from published crop notes. Click to add. These are targeting
-                      hypotheses, not scored evidence.
-                    </p>
-                    <div className="mt-2 flex flex-wrap gap-2">
-                      {suggestions.map((s) => {
-                        const selected = chains
-                          .split(",")
-                          .map((x) => x.trim())
-                          .includes(s.name);
-                        return (
-                          <button
-                            key={s.name}
-                            type="button"
-                            className={`min-h-11 rounded-sm px-3 text-left text-sm ${selected ? "bg-forest text-forest-fg" : "bg-moss text-ink"}`}
-                            onClick={() => {
-                              const cur = chains
-                                .split(",")
-                                .map((x) => x.trim())
-                                .filter(Boolean);
-                              setChains(
-                                selected ? cur.filter((c) => c !== s.name).join(", ") : [...cur, s.name].join(", "),
-                              );
-                            }}
-                            title={`${s.why} Source: ${s.sourceName}`}
-                          >
-                            {s.name}
-                          </button>
-                        );
-                      })}
-                    </div>
-                    <ul className="mt-2 space-y-1 text-xs text-muted">
-                      {suggestions.map((s) => (
-                        <li key={`${s.name}-src`}>
-                          <span className="font-medium text-ink">{s.name}.</span> {s.why}{" "}
-                          <a className="text-sage underline" href={s.sourceUrl} target="_blank" rel="noreferrer">
-                            {s.sourceName}
-                          </a>
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
-                ) : null}
-                <label className="block text-sm">
-                  Rejected chains
-                  <Input className="mt-1" value={rejChains} onChange={(e) => setRejChains(e.target.value)} />
-                </label>
-              </>
-            ) : null}
-            <label className="block text-sm">
-              Notes, including rejected alternatives
-              <Textarea className="mt-1" value={notes} onChange={(e) => setNotes(e.target.value)} />
-            </label>
-            <label className="block text-sm">
-              Explicitly rejected options
-              <Input className="mt-1" value={rejected} onChange={(e) => setRejected(e.target.value)} />
-            </label>
-            <Button type="submit">Record decision</Button>
-            {msg ? <p className="text-sm">{msg}</p> : null}
-          </form>
-        )}
-      </Card>
-    </div>
-  );
-}
+  if (error) return <p className="text-sm text-red-700">{error}</p>;
+  if (!ws)
+    return (
+      <p className="flex items-center gap-2 text-sm text-muted">
+        <Loader2 className="size-4 animate-spin" /> Opening the workspace…
+      </p>
+    );
 
-function Outline({ ws }: { ws: Workspace }) {
-  return (
-    <div className="grid gap-3">
-      {ws.chapters.map((ch) => (
-        <Card key={ch.n}>
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <h2 className="font-display text-lg">
-              {ch.n}. {ch.title}
-            </h2>
-            <Badge tone={ch.status === "inputs_ready" ? "ok" : ch.status === "inputs_forming" ? "warn" : "neutral"}>
-              {ch.status.replace("_", " ")}
-            </Badge>
-          </div>
-          <p className="mt-1 text-xs text-subtle">
-            Produced by {ch.producedBy} · ready at Step {ch.readyAt}
-          </p>
-          {ch.blockers.length ? (
-            <ul className="mt-2 list-disc pl-5 text-sm text-muted">
-              {ch.blockers.map((b) => (
-                <li key={b}>{b}</li>
-              ))}
-            </ul>
-          ) : (
-            <p className="mt-2 text-sm text-ok">Inputs ready for assembly.</p>
-          )}
-        </Card>
-      ))}
-    </div>
-  );
-}
-
-function EvidenceTab({ ws, onChange }: { ws: Workspace; onChange: () => Promise<void> }) {
-  const { role, actorName } = useSessionRole();
-  const [q, setQ] = useState("");
-  const [pillar, setPillar] = useState("all");
-  const [onlyGates, setOnlyGates] = useState(false);
-  const [onlyCited, setOnlyCited] = useState(false);
-  const [open, setOpen] = useState<string | null>(null);
-
-  const rows = useMemo(() => {
-    return model.indicators.filter((i) => {
-      if (pillar !== "all" && i.pillar !== pillar) return false;
-      if (onlyGates && !i.gate) return false;
-      if (onlyCited) {
-        const e = ws.evidence.find((r) => r.indicatorId === i.id);
-        if (!e || e.value === null || e.value === undefined) return false;
-      }
-      if (q && !`${i.id} ${i.name}`.toLowerCase().includes(q.toLowerCase())) return false;
-      return true;
-    });
-  }, [q, pillar, onlyGates, onlyCited, ws.evidence]);
+  const questionCount =
+    model.open_decisions.length + model.indicators.filter((i) => i.ratification).length;
 
   return (
     <div>
-      <p className="mb-3 text-sm text-muted">
-        Official statistical systems first, then documented official proxies, then specialized official indices.
-        Credibility sits beside the source and is never a score weight.
-      </p>
-      <div className="flex flex-col gap-2 sm:flex-row">
-        <Input placeholder="Search indicators" value={q} onChange={(e) => setQ(e.target.value)} />
-        <select className="h-11 rounded-sm border border-border bg-surface px-3 text-sm" value={pillar} onChange={(e) => setPillar(e.target.value)}>
-          <option value="all">All pillars</option>
-          {Object.keys(model.pillars).map((p) => (
-            <option key={p} value={p}>
-              {p}
-            </option>
-          ))}
-        </select>
-        <label className="flex min-h-11 items-center gap-2 text-sm">
-          <input type="checkbox" checked={onlyGates} onChange={(e) => setOnlyGates(e.target.checked)} />
-          Core gates
-        </label>
-        <label className="flex min-h-11 items-center gap-2 text-sm">
-          <input type="checkbox" checked={onlyCited} onChange={(e) => setOnlyCited(e.target.checked)} />
-          Has a cited value
-        </label>
+      <Banner ws={ws} />
+      <nav
+        className="mt-6 flex flex-wrap gap-1 border-b border-ink/10"
+        aria-label="Workspace sections"
+      >
+        {TABS.map((t) => (
+          <button
+            key={t.id}
+            onClick={() => setTab(t.id)}
+            className={cn(
+              "rounded-t-sm px-3 py-2 text-sm",
+              tab === t.id
+                ? "border-b-2 border-sage font-semibold text-ink"
+                : "text-muted hover:text-ink",
+            )}
+          >
+            {t.label}
+            {t.id === "questions" && (
+              <span className="ml-1 text-xs text-subtle">{questionCount}</span>
+            )}
+          </button>
+        ))}
+      </nav>
+      <div className="mt-6">
+        {tab === "overview" && <OverviewTab a={ws.assessment} />}
+        {tab === "readiness" && <ReadinessTab a={ws.assessment} />}
+        {tab === "evidence" && <EvidenceTab ws={ws} onChange={refresh} />}
+        {tab === "research" && <RunsTab countryId={ws.id} />}
+        {tab === "documents" && <DocumentsTab countryId={ws.id} />}
+        {tab === "review" && <DarReviewTab countryId={ws.id} />}
+        {tab === "questions" && <QuestionsTab ws={ws} />}
+        {tab === "audit" && <AuditTab id={ws.id} />}
       </div>
-      <div className="mt-3 overflow-x-auto rounded-lg bg-surface shadow-[var(--shadow-border)]">
-        <table className="w-full min-w-[720px] text-left text-sm">
-          <thead className="border-b border-border text-xs uppercase tracking-wide text-subtle">
-            <tr>
-              <th className="px-3 py-2">Id</th>
-              <th className="px-3 py-2">Indicator</th>
-              <th className="px-3 py-2">Value</th>
-              <th className="px-3 py-2">Year</th>
-              <th className="px-3 py-2">Source</th>
-              <th className="px-3 py-2">Credibility</th>
-              <th className="px-3 py-2">Suggested</th>
-              <th className="px-3 py-2">Assessor</th>
-              <th className="px-3 py-2">Final</th>
-              <th className="px-3 py-2">Flags</th>
+    </div>
+  );
+}
+
+function Banner({ ws }: { ws: Workspace }) {
+  const a = ws.assessment;
+  const vb = a.counts.Measured + a.counts.Documented;
+  return (
+    <header>
+      <p className="text-xs font-medium uppercase tracking-widest text-sage">
+        DAMM {ws.modelVersion} · {model.ratified ? "ratified" : "draft for review — decisions open"}
+      </p>
+      <h1 className="mt-1 font-display text-3xl font-semibold">{ws.name}</h1>
+      <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-2 text-sm text-muted">
+        <span>
+          {vb}/{model.indicators.length} value-backed (M+D)
+        </span>
+        <span>{a.rated} levelled</span>
+        <span>{a.counts.Gap} recorded gaps</span>
+        <span>{a.held} levels withheld</span>
+        <span>{pillarIds.reduce((n, p) => n + a.pillars[p].stale, 0)} stale</span>
+        <span className="flex items-center gap-1">
+          {useCaseIds.map((uc) => (
+            <span key={uc} title={`${model.use_cases[uc]}: ${a.matrix[uc].status}`}>
+              <StatusChip s={a.matrix[uc].status} />
+            </span>
+          ))}
+        </span>
+      </div>
+    </header>
+  );
+}
+
+/* ---------- overview ---------- */
+
+function OverviewTab({ a }: { a: Assessment }) {
+  return (
+    <div className="space-y-6">
+      <Card className="overflow-x-auto p-4">
+        <h2 className="text-sm font-semibold">Pillar profile</h2>
+        <p className="mt-1 text-xs text-muted">
+          A pillar mean averages only the rows that produced a level; Rated is that denominator, and
+          Held counts levels withheld pending ratification. A band in (parentheses) rests more on
+          judgment, gaps and withheld levels than on levelled evidence.
+        </p>
+        <table className="mt-3 w-full min-w-[640px] text-sm">
+          <thead>
+            <tr className="text-left text-xs uppercase tracking-wide text-subtle">
+              <th className="py-1 pr-2">Pillar</th>
+              <th className="py-1 pr-2">n</th>
+              <th className="py-1 pr-2">Rated</th>
+              <th className="py-1 pr-2">Mean</th>
+              <th className="py-1 pr-2">Band</th>
+              <th className="py-1 pr-2">M / D / J / G</th>
+              <th className="py-1 pr-2">Held</th>
+              <th className="py-1">Stale</th>
             </tr>
           </thead>
           <tbody>
-            {rows.map((ind) => {
-              const e = ws.evidence.find((r) => r.indicatorId === ind.id);
-              const suggested = e?.suggestedLevel ?? suggestedLevel(ind, e?.value ?? null);
-              const final = e
-                ? finalLevel({ dataGap: e.dataGap, assessorLevel: e.assessorLevel, suggestedLevel: suggested })
-                : null;
-              const stale = e ? isStale(ind, e, model.assessment_year, final) : false;
+            {pillarIds.map((p) => {
+              const d = a.pillars[p];
+              const def = model.pillars[p];
               return (
-                <tr
-                  key={ind.id}
-                  className="cursor-pointer border-b border-border/70 hover:bg-moss/40"
-                  onClick={() => setOpen(ind.id)}
-                >
-                  <td className="px-3 py-2 font-mono text-xs">{ind.id}</td>
-                  <td className="px-3 py-2">
-                    {ind.name}
-                    {ind.gate ? <Badge className="ml-2">Gate</Badge> : null}
-                  </td>
-                  <td className="px-3 py-2 tabular-nums">{e?.value == null ? "—" : formatObserved(e.value)}</td>
-                  <td className="px-3 py-2 tabular-nums">{e?.observationYear ?? "—"}</td>
-                  <td className="px-3 py-2 text-xs">
-                    {e?.sourceUrl ? (
-                      <a
-                        className="text-sage underline"
-                        href={e.sourceUrl}
-                        target="_blank"
-                        rel="noreferrer"
-                        onClick={(ev) => ev.stopPropagation()}
-                      >
-                        {e.sourceName ?? "source"}
-                      </a>
-                    ) : (
-                      (e?.sourceName ?? "—")
+                <tr key={p} className="border-t border-ink/10">
+                  <td className="py-2 pr-2">
+                    <span className="font-semibold">{p}</span>{" "}
+                    <span className="text-muted">{def.name}</span>
+                    {def.reading === "need" && (
+                      <span className="ml-1 text-xs text-subtle" title={def.note}>
+                        (need — a low reading is a large opportunity)
+                      </span>
                     )}
                   </td>
-                  <td className="px-3 py-2">
-                    {e ? <CredibilityBadge cred={rowCredibility(e)} compact /> : "—"}
+                  <td className="py-2 pr-2 tabular-nums">{d.n}</td>
+                  <td
+                    className={cn(
+                      "py-2 pr-2 tabular-nums",
+                      d.rated < d.n && "font-semibold text-amber-700",
+                    )}
+                  >
+                    {d.rated}
                   </td>
-                  <td className="px-3 py-2 tabular-nums">{suggested ?? "—"}</td>
-                  <td className="px-3 py-2 tabular-nums">{e?.assessorLevel ?? "—"}</td>
-                  <td className="px-3 py-2 tabular-nums font-medium">{final ?? "—"}</td>
-                  <td className="px-3 py-2 text-xs">
-                    {e?.provenance === "named-gap" ? "gap " : ""}
-                    {e?.isProxy ? "proxy " : ""}
-                    {stale ? "stale " : ""}
-                    {e?.dataGap ? "data-gap" : ""}
+                  <td className="py-2 pr-2 tabular-nums">{fmt(d.mean)}</td>
+                  <td className="py-2 pr-2">{d.weak ? `(${d.band})` : d.band}</td>
+                  <td className="py-2 pr-2 tabular-nums">
+                    {d.comp.Measured} / {d.comp.Documented} / {d.comp.Judged} / {d.comp.Gap}
                   </td>
+                  <td className="py-2 pr-2 tabular-nums">{d.held || "—"}</td>
+                  <td className="py-2 tabular-nums">{d.stale || "—"}</td>
                 </tr>
               );
             })}
           </tbody>
         </table>
-      </div>
-      {open ? (
-        <EvidenceEditor
-          ws={ws}
-          indicatorId={open}
-          onClose={() => setOpen(null)}
-          onSave={async (patch) => {
-            const res = await updateEvidence({
-              data: { countryId: ws.id, indicatorId: open, role, actorName, ...patch },
-            });
-            if (!res.ok) throw new Error(res.error);
-            await onChange();
-          }}
-        />
-      ) : null}
-    </div>
-  );
-}
+      </Card>
 
-function EvidenceEditor({
-  ws,
-  indicatorId,
-  onClose,
-  onSave,
-}: {
-  ws: Workspace;
-  indicatorId: string;
-  onClose: () => void;
-  onSave: (patch: {
-    assessorLevel?: number | null;
-    dataGap?: boolean;
-    value?: number | null;
-    observationYear?: number | null;
-    confidence?: Confidence | null;
-    notes?: string | null;
-    sourceName?: string | null;
-    sourceUrl?: string | null;
-  }) => Promise<void>;
-}) {
-  const ind = model.indicators.find((i) => i.id === indicatorId)!;
-  const e = ws.evidence.find((r) => r.indicatorId === indicatorId);
-  const [assessor, setAssessor] = useState(e?.assessorLevel?.toString() ?? "");
-  const [value, setValue] = useState(e?.value == null ? "" : formatObserved(e.value));
-  const [year, setYear] = useState(e?.observationYear?.toString() ?? "");
-  const [gap, setGap] = useState(Boolean(e?.dataGap));
-  const [conf, setConf] = useState<Confidence>(e?.confidence ?? "Medium");
-  const [notes, setNotes] = useState(e?.notes ?? "");
-  const [sourceName, setSourceName] = useState(e?.sourceName ?? "");
-  const [sourceUrl, setSourceUrl] = useState(e?.sourceUrl ?? "");
-  const [busy, setBusy] = useState(false);
-  const [err, setErr] = useState<string | null>(null);
-
-  return (
-    <div className="fixed inset-0 z-40 grid place-items-end bg-ink/40 p-0 sm:place-items-center sm:p-4">
-      <Card className="max-h-[92dvh] w-full max-w-lg overflow-y-auto rounded-t-2xl p-6 sm:rounded-2xl">
-        <p className="font-mono text-xs text-sage">{ind.id} · {ind.pillar} · {ind.method}</p>
-        <h2 className="font-display text-xl">{ind.name}</h2>
-        <p className="mt-2 text-xs text-muted">{ind.calibration_note}</p>
-        <div className="mt-3 space-y-1 text-xs text-muted">
-          {(["L1", "L2", "L3", "L4", "L5"] as const).map((k) => (
-            <p key={k}>
-              <span className="font-medium text-ink">{k}.</span> {ind.anchors[k]}
-            </p>
+      <Card className="p-4">
+        <h2 className="text-sm font-semibold">Layers</h2>
+        <div className="mt-3 grid gap-3 sm:grid-cols-4">
+          {model.layers.map((L) => (
+            <div key={L}>
+              <p className="text-xs uppercase tracking-wide text-subtle">{L}</p>
+              <p className="mt-1 text-xl tabular-nums">{fmt(a.layers[L])}</p>
+            </div>
           ))}
         </div>
-        {e?.provenance === "named-gap" ? (
-          <p className="mt-3 text-sm">
-            Named gap → {e.gapSteward}. {e.gapSource}
-          </p>
-        ) : null}
-        {e?.isProxy ? <p className="mt-2 text-sm text-warn">Proxy: {e.proxyNote}</p> : null}
-        {e?.sourceUrl ? (
-          <p className="mt-2 text-xs">
-            Stored source:{" "}
-            <a className="text-sage underline" href={e.sourceUrl} target="_blank" rel="noreferrer">
-              {e.sourceName ?? e.sourceUrl}
-            </a>
-          </p>
-        ) : null}
-        {e ? (
-          <div className="mt-3 rounded-md bg-moss/50 px-3 py-2">
-            <p className="text-xs font-medium uppercase tracking-widest text-sage">Source credibility</p>
-            <div className="mt-1">
-              <CredibilityBadge cred={rowCredibility({ ...e, sourceName, sourceUrl })} />
-            </div>
-            <p className="mt-1 text-xs text-muted">{rowCredibility({ ...e, sourceName, sourceUrl }).note}</p>
-          </div>
-        ) : null}
-        <label className="mt-4 block text-sm">
-          Observed value
-          <Input className="mt-1" value={value} onChange={(ev) => setValue(ev.target.value)} />
-        </label>
-        <label className="mt-3 block text-sm">
-          Observation year
-          <Input className="mt-1" value={year} onChange={(ev) => setYear(ev.target.value)} />
-        </label>
-        <label className="mt-3 block text-sm">
-          Source name (verified publisher)
-          <Input className="mt-1" value={sourceName} onChange={(ev) => setSourceName(ev.target.value)} placeholder="World Bank WDI" />
-        </label>
-        <label className="mt-3 block text-sm">
-          Source URL
-          <Input className="mt-1" value={sourceUrl} onChange={(ev) => setSourceUrl(ev.target.value)} placeholder="https://" />
-        </label>
-        <p className="mt-1 text-xs text-subtle">
-          A value or assessor level is stored only with a public http(s) source URL. Silence beats a guess.
+        <p className="mt-3 text-sm text-muted">
+          Leapfrog gap (Foundation − Transformation):{" "}
+          <b className="tabular-nums">{fmt(a.leapfrog.gap)}</b>
+          {a.leapfrog.gap !== null && Math.abs(a.leapfrog.gap) > model.config.leapfrog_threshold
+            ? " — structural flag raised."
+            : " — within the structural threshold."}
         </p>
-        <label className="mt-3 block text-sm">
-          Assessor level (wins over the machine)
-          <select className="mt-1 h-11 w-full rounded-sm border border-border bg-surface px-3" value={assessor} onChange={(ev) => setAssessor(ev.target.value)}>
-            <option value="">No assessor level</option>
-            {[1, 2, 3, 4, 5].map((n) => (
-              <option key={n} value={n}>
-                {n}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label className="mt-3 block text-sm">
-          Confidence
-          <select className="mt-1 h-11 w-full rounded-sm border border-border bg-surface px-3" value={conf} onChange={(ev) => setConf(ev.target.value as Confidence)}>
-            <option>High</option>
-            <option>Medium</option>
-            <option>Low/Estimated</option>
-          </select>
-        </label>
-        <label className="mt-3 flex items-center gap-2 text-sm">
-          <input type="checkbox" checked={gap} onChange={(ev) => setGap(ev.target.checked)} />
-          Mark as explicit data gap (contributes nothing)
-        </label>
-        <label className="mt-3 block text-sm">
-          Notes
-          <Textarea className="mt-1" value={notes} onChange={(ev) => setNotes(ev.target.value)} />
-        </label>
-        <div className="mt-4 flex flex-wrap gap-2">
-          <Button
-            disabled={busy}
-            onClick={async () => {
-              setBusy(true);
-              setErr(null);
-              try {
-                await onSave({
-                  assessorLevel: assessor === "" ? null : Number(assessor),
-                  dataGap: gap,
-                  value: value === "" ? null : Number(value),
-                  observationYear: year === "" ? null : Number(year),
-                  confidence: conf,
-                  notes,
-                  sourceName: sourceName.trim() || null,
-                  sourceUrl: sourceUrl.trim() || null,
-                });
-                onClose();
-              } catch (e) {
-                setErr(e instanceof Error ? e.message : "Could not save");
-              } finally {
-                setBusy(false);
-              }
-            }}
-          >
-            Save and recompute
-          </Button>
-          <Button variant="ghost" onClick={onClose}>
-            Close
-          </Button>
+      </Card>
+
+      <p className="text-xs text-subtle">{model.prohibitions.join(" ")}</p>
+    </div>
+  );
+}
+
+/* ---------- readiness ---------- */
+
+function ReadinessTab({ a }: { a: Assessment }) {
+  const groups: Array<{ title: string; note: string; ids: string[] }> = [
+    {
+      title: "Universal",
+      note: "Absence blocks every column; narrow presence caps every column at Partial; unverified leaves every column Unverified.",
+      ids: Object.keys(a.prereq).filter((i) => a.prereq[i].kind === "UNIVERSAL"),
+    },
+    {
+      title: "Per use case",
+      note: "Absence blocks the named columns only.",
+      ids: Object.keys(a.prereq).filter((i) => a.prereq[i].kind.startsWith("UC:")),
+    },
+    {
+      title: "Delivery-risk flags",
+      note: "Reported on the cover; they block nothing.",
+      ids: Object.keys(a.prereq).filter((i) => a.prereq[i].kind === "DELIVERY"),
+    },
+  ];
+  const meanDriven = useCaseIds.filter(
+    (uc) => a.matrix[uc].status === "Partial" && a.matrix[uc].why === "thin enablers",
+  );
+  return (
+    <div className="space-y-6">
+      <Card className="p-4">
+        <h2 className="text-sm font-semibold">
+          Prerequisites — presence only, a fact, never an opinion
+        </h2>
+        <div className="mt-3 grid gap-4 lg:grid-cols-3">
+          {groups.map((g) => (
+            <div key={g.title}>
+              <p className="text-xs uppercase tracking-wide text-subtle">{g.title}</p>
+              <p className="mt-0.5 text-xs text-muted">{g.note}</p>
+              <ul className="mt-2 space-y-1.5">
+                {g.ids.map((i) => (
+                  <li key={i} className="flex items-center justify-between gap-2 text-sm">
+                    <span>
+                      <span className="font-mono text-xs text-subtle">{i}</span>{" "}
+                      {indicatorById(i)?.name}
+                      {a.prereq[i].kind.startsWith("UC:") && (
+                        <span className="ml-1 text-xs text-subtle">
+                          ({a.prereq[i].kind.slice(3)})
+                        </span>
+                      )}
+                    </span>
+                    <StatusChip s={a.prereq[i].status} />
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ))}
         </div>
-        {err ? <p className="mt-3 text-sm text-danger">{err}</p> : null}
+      </Card>
+
+      <Card className="overflow-x-auto p-4">
+        <h2 className="text-sm font-semibold">Use-case readiness matrix</h2>
+        <table className="mt-3 w-full min-w-[720px] text-sm">
+          <thead>
+            <tr className="text-left text-xs uppercase tracking-wide text-subtle">
+              <th className="py-1 pr-2" />
+              {useCaseIds.map((uc) => (
+                <th key={uc} className="py-1 pr-2">
+                  <div className="font-semibold text-ink">{uc}</div>
+                  <div className="font-normal normal-case">{model.use_cases[uc]}</div>
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            <tr className="border-t border-ink/10">
+              <td className="py-2 pr-2 font-medium">Status</td>
+              {useCaseIds.map((uc) => (
+                <td key={uc} className="py-2 pr-2">
+                  <StatusChip s={a.matrix[uc].status} />
+                </td>
+              ))}
+            </tr>
+            <tr className="border-t border-ink/10">
+              <td className="py-2 pr-2 font-medium">Named blocker / reason</td>
+              {useCaseIds.map((uc) => (
+                <td key={uc} className="py-2 pr-2 text-xs text-muted">
+                  {a.matrix[uc].why || "—"}
+                </td>
+              ))}
+            </tr>
+            {/*
+              Ruling 13.12: readiness is the enabling mean and is the only one that decides
+              a column. Need and outcome are shown beside it, never averaged into it.
+            */}
+            <tr className="border-t border-ink/10">
+              <td className="py-2 pr-2 font-medium">Readiness — enabling indicators</td>
+              {useCaseIds.map((uc) => (
+                <td key={uc} className="py-2 pr-2 tabular-nums">
+                  {fmt(a.matrix[uc].mean_readiness)}{" "}
+                  <span className="text-xs text-subtle">of {a.matrix[uc].n_bearing}</span>
+                </td>
+              ))}
+            </tr>
+            <tr className="border-t border-ink/10">
+              <td className="py-2 pr-2 font-medium">Need — severity of the problem</td>
+              {useCaseIds.map((uc) => (
+                <td key={uc} className="py-2 pr-2 tabular-nums">
+                  {fmt(a.matrix[uc].mean_need)}
+                </td>
+              ))}
+            </tr>
+            <tr className="border-t border-ink/10">
+              <td className="py-2 pr-2 font-medium">Outcomes already achieved</td>
+              {useCaseIds.map((uc) => (
+                <td key={uc} className="py-2 pr-2 tabular-nums">
+                  {fmt(a.matrix[uc].mean_outcome)}
+                </td>
+              ))}
+            </tr>
+          </tbody>
+        </table>
+        <p className="mt-3 text-xs text-muted">
+          The bearing set for a column includes agricultural-need and outcome indicators as well as
+          enabling ones, so both means are shown. Whether need and outcome rows belong in a
+          readiness mean is an open design decision (13.12).
+          {meanDriven.length > 0 && (
+            <>
+              {" "}
+              {meanDriven.map((uc) => model.use_cases[uc]).join(", ")} currently turns on the mean
+              rather than on a prerequisite — the case that decision will settle.
+            </>
+          )}
+        </p>
       </Card>
     </div>
   );
 }
 
-function Visuals({ ws }: { ws: Workspace }) {
-  const data = ws.scorecard.pillars.map((p) => ({
-    name: p.id,
-    score: p.score,
-    display: p.score === null ? null : p.score,
-    coverage: Math.round(p.coverage * 100),
-  }));
-  return (
-    <div className="grid gap-4">
-      <Card>
-        <h2 className="font-display text-xl">Pillar profile</h2>
-        <p className="text-xs text-subtle">Suppressed pillars are omitted — they are not plotted as zero.</p>
-        <div className="mt-4 h-72">
-          <ResponsiveContainer width="100%" height="100%">
-            <BarChart data={data.filter((d) => d.display !== null)}>
-              <CartesianGrid stroke="#d8d2c4" vertical={false} />
-              <XAxis dataKey="name" />
-              <YAxis domain={[1, 5]} ticks={[1, 1.8, 2.6, 3.4, 4.2, 5]} />
-              <Tooltip />
-              <Bar dataKey="display" fill="var(--color-forest)" radius={[4, 4, 0, 0]} />
-            </BarChart>
-          </ResponsiveContainer>
-        </div>
-        <ul className="mt-3 text-sm text-muted">
-          {ws.scorecard.pillars
-            .filter((p) => p.score === null)
-            .map((p) => (
-              <li key={p.id}>
-                {p.id} {p.name}: not rated (coverage {formatPct(p.coverage)})
-              </li>
-            ))}
-        </ul>
-      </Card>
-      <Card>
-        <h2 className="font-display text-xl">Coverage by pillar</h2>
-        <div className="mt-4 h-64">
-          <ResponsiveContainer width="100%" height="100%">
-            <BarChart data={data}>
-              <CartesianGrid stroke="#d8d2c4" vertical={false} />
-              <XAxis dataKey="name" />
-              <YAxis domain={[0, 100]} />
-              <Tooltip />
-              <Bar dataKey="coverage" fill="var(--color-sage)" radius={[4, 4, 0, 0]} />
-            </BarChart>
-          </ResponsiveContainer>
-        </div>
-      </Card>
-    </div>
-  );
-}
+/* ---------- evidence ---------- */
 
-function Gates({ ws }: { ws: Workspace }) {
+function EvidenceTab({ ws, onChange }: { ws: Workspace; onChange: () => Promise<void> }) {
+  const [openId, setOpenId] = useState<string | null>(null);
+  const byPillar = useMemo(() => {
+    const m = new Map<PillarId, WorkspaceRow[]>();
+    for (const p of pillarIds) m.set(p, []);
+    for (const r of ws.evidence) {
+      const def = indicatorById(r.indicatorId);
+      if (def) m.get(def.pillar)?.push(r);
+    }
+    return m;
+  }, [ws.evidence]);
+
   return (
-    <div className="grid gap-3">
-      {ws.scorecard.gates.map((g) => (
-        <Card key={g.id} className="p-4">
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <p className="font-medium">
-              <span className="font-mono text-xs text-subtle">{g.id}</span> {g.name}
-            </p>
-            {g.unmeasured ? <Badge tone="warn">Unmeasured</Badge> : g.failed ? <Badge tone="danger">Level 1 — failing</Badge> : <Badge tone="ok">Level {g.finalLevel}</Badge>}
-          </div>
-          {g.stale ? <p className="mt-1 text-xs text-warn">Stale evidence</p> : null}
+    <div className="space-y-6">
+      <p className="rounded-sm border border-amber-500/30 bg-amber-500/10 p-3 text-sm text-amber-900">
+        <b>This editable workspace is not G1.</b> G1 reviews every machine-filled row in one
+        immutable Stage 8 Draft package. Changes made here become inputs to a new workflow run and
+        never alter or approve an existing Draft package.
+      </p>
+      <p className="text-sm text-muted">
+        Enter what the instrument takes: a value (a number scores a threshold row; prose with a
+        source reads Documented; a search trail beginning “DATA GAP” records a gap), the source and
+        its tier, the year, and — where the row does not score itself — an assessor level. The class
+        and level columns are derived, never chosen.
+      </p>
+      {pillarIds.map((p) => (
+        <Card key={p} className="overflow-x-auto p-4">
+          <h2 className="text-sm font-semibold">
+            {p} · {model.pillars[p].name}
+          </h2>
+          <table className="mt-2 w-full min-w-[760px] text-sm">
+            <thead>
+              <tr className="text-left text-xs uppercase tracking-wide text-subtle">
+                <th className="py-1 pr-2">ID</th>
+                <th className="py-1 pr-2">Indicator</th>
+                <th className="py-1 pr-2">Class</th>
+                <th className="py-1 pr-2">Level</th>
+                <th className="py-1 pr-2">Value</th>
+                <th className="py-1 pr-2">Year</th>
+                <th className="py-1 pr-2">Source</th>
+                <th className="py-1" />
+              </tr>
+            </thead>
+            <tbody>
+              {(byPillar.get(p) ?? []).map((r) => {
+                const def = indicatorById(r.indicatorId);
+                if (!def) return null;
+                return (
+                  <RowAndEditor
+                    key={r.indicatorId}
+                    ws={ws}
+                    row={r}
+                    def={def}
+                    open={openId === r.indicatorId}
+                    onOpen={() => setOpenId(openId === r.indicatorId ? null : r.indicatorId)}
+                    onChange={onChange}
+                  />
+                );
+              })}
+            </tbody>
+          </table>
         </Card>
       ))}
     </div>
   );
 }
 
-function MemoTab({ ws }: { ws: Workspace }) {
-  const [text, setText] = useState<string>("");
-  const [busy, setBusy] = useState(false);
-  const [err, setErr] = useState<string | null>(null);
+function RowAndEditor({
+  ws,
+  row,
+  def,
+  open,
+  onOpen,
+  onChange,
+}: {
+  ws: Workspace;
+  row: WorkspaceRow;
+  def: IndicatorDef;
+  open: boolean;
+  onOpen: () => void;
+  onChange: () => Promise<void>;
+}) {
   return (
-    <Card>
-      <h2 className="font-display text-xl">Decision memo — Step {ws.openStep}</h2>
-      <p className="mt-1 text-sm text-muted">Assembled from engine facts. It does not recommend an option.</p>
-      <Button
-        className="mt-4"
-        disabled={busy}
-        onClick={async () => {
-          setBusy(true);
-          setErr(null);
-          const res = await generateMemo({ data: { countryId: ws.id, step: ws.openStep } });
-          if (!res.ok && !res.text) setErr(res.error);
-          setText(res.text);
-          setBusy(false);
-        }}
-      >
-        {busy ? "Assembling…" : "Assemble memo"}
-      </Button>
-      {err ? <p className="mt-2 text-sm text-danger">{err}</p> : null}
-      {text ? <pre className="mt-4 whitespace-pre-wrap font-sans text-sm leading-relaxed">{text}</pre> : null}
-    </Card>
+    <>
+      <tr className="border-t border-ink/10 align-top">
+        <td className="py-2 pr-2 font-mono text-xs text-subtle">{row.indicatorId}</td>
+        <td className="py-2 pr-2">
+          {def.name}
+          {def.prerequisite && (
+            <span className="ml-1 text-sage" title={`Prerequisite (${def.prerequisite})`}>
+              ✱
+            </span>
+          )}
+          {def.ratification && (
+            <span
+              className="ml-1 inline-block align-middle text-amber-700"
+              title={`Open definition question (13.5): ${def.ratification.open_question}`}
+            >
+              <CircleHelp className="inline size-3.5" />
+            </span>
+          )}
+        </td>
+        <td className="py-2 pr-2">
+          <ClsChip cls={row.cls} /> {row.stale && <StaleTag />}{" "}
+          {row.ratificationHold && <HoldTag />}
+        </td>
+        <td className="py-2 pr-2 tabular-nums">{row.level !== null ? `L${row.level}` : "—"}</td>
+        <td className="max-w-[240px] py-2 pr-2 text-xs text-muted">
+          <span className="line-clamp-2">{row.valueRaw ?? "—"}</span>
+        </td>
+        <td className="py-2 pr-2 tabular-nums">{row.observationYear ?? "—"}</td>
+        <td className="max-w-[200px] py-2 pr-2 text-xs text-muted">
+          <span className="line-clamp-1">
+            {row.sourceUrl ? (
+              <a
+                href={row.sourceUrl}
+                target="_blank"
+                rel="noreferrer noopener"
+                className="underline"
+              >
+                {row.sourceName ?? row.sourceUrl}
+              </a>
+            ) : (
+              (row.sourceName ?? "—")
+            )}
+          </span>{" "}
+          <TierBadge tier={row.sourceTier} />
+        </td>
+        <td className="py-2 text-right">
+          <Button size="sm" variant="outline" onClick={onOpen}>
+            {open ? "Close" : "Edit"}
+          </Button>
+        </td>
+      </tr>
+      {open && (
+        <tr className="border-t border-ink/5 bg-moss/40">
+          <td colSpan={8} className="p-3">
+            <Editor ws={ws} row={row} def={def} onDone={onChange} />
+          </td>
+        </tr>
+      )}
+    </>
   );
 }
 
-function AuditTab({ id }: { id: string }) {
-  const [rows, setRows] = useState<Array<{ id: string; at: string; role: string; actor_name: string; action: string; detail: string }>>([]);
-  useEffect(() => {
-    listAudit({ data: { countryId: id } }).then(setRows).catch(() => setRows([]));
-  }, [id]);
+function Editor({
+  ws,
+  row,
+  def,
+  onDone,
+}: {
+  ws: Workspace;
+  row: WorkspaceRow;
+  def: IndicatorDef;
+  onDone: () => Promise<void>;
+}) {
+  const { role, actorName } = useSessionRole();
+  const [valueRaw, setValueRaw] = useState(row.valueRaw ?? "");
+  const [year, setYear] = useState(row.observationYear?.toString() ?? "");
+  const [sourceName, setSourceName] = useState(row.sourceName ?? "");
+  const [sourceUrl, setSourceUrl] = useState(row.sourceUrl ?? "");
+  const [tier, setTier] = useState(row.sourceTier ?? "");
+  const [level, setLevel] = useState(row.assessorLevel?.toString() ?? "");
+  const [hold, setHold] = useState(row.ratificationHold);
+  const [notes, setNotes] = useState(row.notes ?? "");
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+
+  const numeric = valueRaw.trim() !== "" && Number.isFinite(Number(valueRaw.trim()));
+  const selfScoring = numeric && def.thresholds !== null;
+
+  async function save() {
+    setBusy(true);
+    setErr(null);
+    try {
+      const res = await updateEvidence({
+        data: {
+          countryId: ws.id,
+          indicatorId: row.indicatorId,
+          role,
+          actorName,
+          valueRaw: valueRaw.trim() === "" ? null : valueRaw,
+          observationYear: year.trim() === "" ? null : Number(year),
+          sourceName: sourceName.trim() === "" ? null : sourceName,
+          sourceUrl: sourceUrl.trim() === "" ? null : sourceUrl,
+          sourceTier: tier === "" ? null : tier,
+          assessorLevel: level === "" ? null : Number(level),
+          ratificationHold: hold,
+          notes: notes.trim() === "" ? null : notes,
+        },
+      });
+      if (!res.ok) {
+        setErr(res.error);
+        return;
+      }
+      await onDone();
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : "Could not save");
+    } finally {
+      setBusy(false);
+    }
+  }
+
   return (
-    <div className="overflow-x-auto rounded-lg bg-surface shadow-[var(--shadow-border)]">
-      <table className="w-full min-w-[640px] text-left text-sm">
-        <thead className="border-b border-border text-xs uppercase text-subtle">
-          <tr>
-            <th className="px-3 py-2">When</th>
-            <th className="px-3 py-2">Role</th>
-            <th className="px-3 py-2">Actor</th>
-            <th className="px-3 py-2">Action</th>
-            <th className="px-3 py-2">Detail</th>
+    <div className="space-y-3">
+      {def.ratification && (
+        <p className="flex items-start gap-2 rounded-sm border border-amber-500/30 bg-amber-500/10 p-2 text-xs text-amber-800">
+          <AlertTriangle className="mt-0.5 size-3.5 shrink-0" />
+          <span>
+            <b>Open definition question (13.5):</b> {def.ratification.open_question}
+          </span>
+        </p>
+      )}
+      <div className="grid gap-3 lg:grid-cols-2">
+        <label className="block text-xs">
+          <span className="text-subtle">
+            Value — number, citation prose, or “DATA GAP — searched …”
+          </span>
+          <Textarea
+            value={valueRaw}
+            onChange={(e) => setValueRaw(e.target.value)}
+            rows={3}
+            className="mt-1"
+          />
+        </label>
+        <div className="grid grid-cols-2 gap-3">
+          <label className="block text-xs">
+            <span className="text-subtle">Year</span>
+            <Input
+              value={year}
+              onChange={(e) => setYear(e.target.value)}
+              inputMode="numeric"
+              className="mt-1"
+            />
+          </label>
+          <label className="block text-xs">
+            <span className="text-subtle">Tier</span>
+            <select
+              value={tier}
+              onChange={(e) => setTier(e.target.value)}
+              className="mt-1 h-9 w-full rounded-sm border border-ink/20 bg-paper px-2 text-sm"
+            >
+              <option value="">—</option>
+              {(["T1", "T2", "T3", "T4", "T5"] as const).map((t) => (
+                <option key={t} value={t}>
+                  {t} · {model.source_tiers[t]}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="col-span-2 block text-xs">
+            <span className="text-subtle">Source</span>
+            <Input
+              value={sourceName}
+              onChange={(e) => setSourceName(e.target.value)}
+              className="mt-1"
+            />
+          </label>
+          <label className="col-span-2 block text-xs">
+            <span className="text-subtle">Source URL</span>
+            <Input
+              value={sourceUrl}
+              onChange={(e) => setSourceUrl(e.target.value)}
+              className="mt-1"
+            />
+          </label>
+        </div>
+      </div>
+      <div className="flex flex-wrap items-end gap-4">
+        <label className="block text-xs">
+          <span className="text-subtle">
+            Assessor level{selfScoring && " (a numeric threshold row scores itself)"}
+          </span>
+          <select
+            value={level}
+            onChange={(e) => setLevel(e.target.value)}
+            disabled={selfScoring}
+            className="mt-1 h-9 w-28 rounded-sm border border-ink/20 bg-paper px-2 text-sm disabled:opacity-50"
+          >
+            <option value="">—</option>
+            {[1, 2, 3, 4, 5].map((l) => (
+              <option key={l} value={l}>
+                L{l}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label className="flex items-center gap-2 pb-2 text-xs">
+          <input type="checkbox" checked={hold} onChange={(e) => setHold(e.target.checked)} />
+          <span>
+            Ratification hold — withhold the level; the evidence measures a different construct from
+            what the indicator names
+          </span>
+        </label>
+      </div>
+      <label className="block text-xs">
+        <span className="text-subtle">Notes</span>
+        <Textarea
+          value={notes}
+          onChange={(e) => setNotes(e.target.value)}
+          rows={2}
+          className="mt-1"
+        />
+      </label>
+      {err && <p className="text-xs text-red-700">{err}</p>}
+      <div>
+        <Button size="sm" onClick={save} disabled={busy}>
+          {busy ? "Saving…" : "Save row"}
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+/* ---------- open questions ---------- */
+
+function QuestionsTab({ ws }: { ws: Workspace }) {
+  const sevOrder = ["asserts-falsehood", "construct-drift", "unit-ambiguity"] as const;
+  const sevLabel: Record<string, string> = {
+    "asserts-falsehood": "The name asserts what the evidence does not measure",
+    "construct-drift": "A defensible but measurably different proxy",
+    "unit-ambiguity": "A unit or denominator left unfixed",
+  };
+  const rows = model.indicators.filter((i) => i.ratification);
+  return (
+    <div className="space-y-6">
+      <Card className="p-4">
+        <h2 className="text-sm font-semibold">Design decisions open for ratification</h2>
+        <p className="mt-1 text-xs text-muted">
+          This is a manual model-governance surface outside the active DAR workflow. These questions
+          are not launch inputs and never pause Draft generation. Every value these rulings can
+          change is data in the model file (version {ws.modelVersion}
+          ); a ruling updates the model, and nothing here presents an unratified value as settled.
+        </p>
+        <ul className="mt-3 space-y-2">
+          {model.open_decisions.map((d) => (
+            <li key={d.id} className="text-sm">
+              <span className="font-mono text-xs text-subtle">{d.id}</span> {d.title}
+              {d.scope && <span className="ml-1 text-xs text-subtle">({d.scope})</span>}
+            </li>
+          ))}
+        </ul>
+      </Card>
+      <Card className="p-4">
+        <h2 className="text-sm font-semibold">
+          Indicator definitions with an open question{" "}
+          <span className="text-subtle">
+            ({rows.length} of {model.indicators.length})
+          </span>
+        </h2>
+        {sevOrder.map((sev) => {
+          const group = rows.filter((i) => i.ratification?.severity === sev);
+          if (!group.length) return null;
+          return (
+            <div key={sev} className="mt-4">
+              <p className="text-xs uppercase tracking-wide text-subtle">
+                {sevLabel[sev]} · {group.length}
+              </p>
+              <ul className="mt-2 space-y-2">
+                {group.map((i) => (
+                  <li key={i.id} className="text-sm">
+                    <span className="font-mono text-xs text-subtle">{i.id}</span> <b>{i.name}</b>
+                    {i.prerequisite && <Badge className="ml-1">prerequisite</Badge>}
+                    <p className="mt-0.5 text-xs text-muted">{i.ratification?.open_question}</p>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          );
+        })}
+      </Card>
+    </div>
+  );
+}
+
+/* ---------- audit ---------- */
+
+function AuditTab({ id }: { id: string }) {
+  const [rows, setRows] = useState<Array<{
+    at: string;
+    role: string;
+    actorName: string;
+    action: string;
+    detail: string | null;
+  }> | null>(null);
+  useEffect(() => {
+    listAudit({ data: { countryId: id } })
+      .then(setRows)
+      .catch(() => setRows([]));
+  }, [id]);
+  if (!rows) return <p className="text-sm text-muted">Loading the audit trail…</p>;
+  return (
+    <Card className="overflow-x-auto p-4">
+      <h2 className="text-sm font-semibold">Audit trail</h2>
+      <table className="mt-2 w-full min-w-[560px] text-sm">
+        <thead>
+          <tr className="text-left text-xs uppercase tracking-wide text-subtle">
+            <th className="py-1 pr-2">When</th>
+            <th className="py-1 pr-2">Who</th>
+            <th className="py-1 pr-2">Action</th>
+            <th className="py-1">Detail</th>
           </tr>
         </thead>
         <tbody>
-          {rows.map((r) => (
-            <tr key={r.id} className="border-b border-border/70">
-              <td className="px-3 py-2 text-xs tabular-nums">{new Date(r.at).toLocaleString()}</td>
-              <td className="px-3 py-2">{r.role}</td>
-              <td className="px-3 py-2">{r.actor_name}</td>
-              <td className="px-3 py-2 font-mono text-xs">{r.action}</td>
-              <td className="px-3 py-2">{r.detail}</td>
+          {rows.map((r, k) => (
+            <tr key={k} className="border-t border-ink/10 align-top">
+              <td className="whitespace-nowrap py-2 pr-2 text-xs text-muted">
+                {new Date(r.at).toLocaleString()}
+              </td>
+              <td className="py-2 pr-2 text-xs">
+                {r.actorName} <span className="text-subtle">({r.role})</span>
+              </td>
+              <td className="py-2 pr-2 text-xs font-medium">{r.action}</td>
+              <td className="py-2 text-xs text-muted">{r.detail}</td>
             </tr>
           ))}
         </tbody>
       </table>
-    </div>
-  );
-}
-
-function Exports({ ws }: { ws: Workspace }) {
-  const { role, actorName } = useSessionRole();
-  const [doc, setDoc] = useState<DraftDoc | null>(null);
-  const [busy, setBusy] = useState(false);
-  const [err, setErr] = useState<string | null>(null);
-
-  function download(name: string, content: string, type: string) {
-    const blob = new Blob([content], { type });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = name;
-    a.click();
-    URL.revokeObjectURL(url);
-  }
-
-  function evidenceCsv() {
-    const header = [
-      "id",
-      "name",
-      "pillar",
-      "value",
-      "year",
-      "source",
-      "source_url",
-      "credibility_tier",
-      "credibility_score",
-      "confidence",
-      "provenance",
-      "suggested",
-      "assessor",
-      "proxy",
-      "gap",
-    ];
-    const lines = [header.join(",")];
-    for (const ind of model.indicators) {
-      const e = ws.evidence.find((r) => r.indicatorId === ind.id);
-      const cred = e ? rowCredibility(e) : null;
-      const cells = [
-        ind.id,
-        `"${ind.name.replaceAll('"', '""')}"`,
-        ind.pillar,
-        e?.value == null ? "" : formatObserved(e.value),
-        e?.observationYear ?? "",
-        `"${(e?.sourceName ?? "").replaceAll('"', '""')}"`,
-        `"${(e?.sourceUrl ?? "").replaceAll('"', '""')}"`,
-        cred?.tier ?? "",
-        cred?.score ?? "",
-        e?.confidence ?? "",
-        e?.provenance ?? "",
-        e?.suggestedLevel ?? "",
-        e?.assessorLevel ?? "",
-        e?.isProxy ? "yes" : "",
-        e?.dataGap ? "yes" : "",
-      ];
-      lines.push(cells.join(","));
-    }
-    download(`${ws.iso3}-evidence.csv`, lines.join("\n"), "text/csv");
-  }
-
-  return (
-    <div className="grid gap-4">
-      <Card>
-        <h2 className="font-display text-xl">Workbooks</h2>
-        <div className="mt-3 flex flex-wrap gap-2">
-          <Button variant="outline" onClick={evidenceCsv}>
-            Evidence CSV
-          </Button>
-          <Button
-            variant="outline"
-            onClick={() => {
-              const header = [
-                "title",
-                "year",
-                "source",
-                "url",
-                "class",
-                "informs",
-                "related_indicator",
-                "grade",
-                "score",
-                "summary",
-              ];
-              const lines = [header.join(",")];
-              for (const d of ws.dossier) {
-                lines.push(
-                  [
-                    `"${d.title.replaceAll('"', '""')}"`,
-                    d.year ?? "",
-                    `"${d.sourceName.replaceAll('"', '""')}"`,
-                    d.sourceUrl,
-                    d.sourceClass,
-                    d.informs,
-                    d.relatedIndicator ?? "",
-                    d.grade,
-                    d.score,
-                    `"${d.summary.replaceAll('"', '""')}"`,
-                  ].join(","),
-                );
-              }
-              download(`${ws.iso3}-dossier.csv`, lines.join("\n"), "text/csv");
-            }}
-          >
-            Dossier CSV
-          </Button>
-          <Button
-            variant="outline"
-            onClick={() => download(`${ws.iso3}-model.json`, JSON.stringify(model, null, 2), "application/json")}
-          >
-            Model configuration
-          </Button>
-        </div>
-      </Card>
-      <Card>
-        <h2 className="font-display text-xl">DAR first draft</h2>
-        <p className="mt-1 text-sm text-muted">
-          Assembly, not free generation. Unready chapters become gap notes. Investment, cost and policy chapters stay
-          locked until the evidence gauntlet on the 13 core gates clears.
-        </p>
-        {ws.gauntlet.passed ? null : (
-          <p className="mt-3 rounded-md bg-moss/50 px-3 py-2 text-sm text-muted">{ws.gauntlet.summary}</p>
-        )}
-        <Button
-          className="mt-4"
-          disabled={busy}
-          onClick={async () => {
-            setBusy(true);
-            setErr(null);
-            const res = await generateDraft({ data: { countryId: ws.id, role, actorName } });
-            if (!res.ok) {
-              setErr(res.error);
-              setBusy(false);
-              return;
-            }
-            setDoc(res.doc);
-            setBusy(false);
-          }}
-        >
-          {busy ? "Assembling…" : "Assemble draft"}
-        </Button>
-        {err ? <p className="mt-2 text-sm text-danger">{err}</p> : null}
-        {doc ? (
-          <div className="mt-6 space-y-6">
-            <p className="text-xs text-subtle">
-              Machine-drafted by {doc.modelName} on {doc.generatedAt}. For human rewriting. {doc.disclaimer}
-            </p>
-            <Button
-              variant="outline"
-              onClick={() => {
-                const html = `<!doctype html><html><head><meta charset="utf-8"><title>${escapeHtml(doc.title)}</title>
-                  <style>body{font-family:Georgia,serif;max-width:720px;margin:40px auto;color:#1c1f1a;line-height:1.5}
-                  h1,h2{font-weight:600} .disc{font-size:12px;border:1px solid #ccc;padding:8px}</style></head>
-                  <body><p class="disc">${escapeHtml(doc.disclaimer)}</p><h1>${escapeHtml(doc.title)}</h1>
-                  ${doc.chapters.map((c) => `<h2>${escapeHtml(c.n)}. ${escapeHtml(c.title)}</h2><p><em>Machine-drafted by ${escapeHtml(c.modelName)} on ${escapeHtml(c.draftedAt)}. Draft for human rewriting.</em></p><pre style="white-space:pre-wrap;font-family:Georgia">${escapeHtml(c.body)}</pre>`).join("")}
-                  </body></html>`;
-                download(`${ws.iso3}-dar-draft.html`, html, "text/html");
-              }}
-            >
-              Download HTML
-            </Button>
-            {doc.chapters.map((c) => (
-              <article key={c.n}>
-                <h3 className="font-display text-lg">
-                  {c.n}. {c.title}
-                </h3>
-                <p className="text-xs text-subtle">
-                  Machine-drafted by {c.modelName} on {c.draftedAt}. Draft for human rewriting.
-                  {c.ready ? "" : " Inputs not ready."}
-                </p>
-                <pre className="mt-2 whitespace-pre-wrap font-sans text-sm leading-relaxed">{c.body}</pre>
-              </article>
-            ))}
-          </div>
-        ) : null}
-      </Card>
-    </div>
+    </Card>
   );
 }

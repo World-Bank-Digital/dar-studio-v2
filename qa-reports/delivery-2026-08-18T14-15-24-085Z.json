@@ -1,0 +1,146 @@
+{
+  "startedAt": "2026-08-18T14:15:24.085Z",
+  "base": "http://127.0.0.1:8080",
+  "phases": {
+    "signin": {
+      "at": "2026-08-18T14:15:25.505Z",
+      "email": "dbcheck@example.com"
+    },
+    "country": {
+      "at": "2026-08-18T14:15:26.406Z",
+      "countryUrl": "http://127.0.0.1:8080/c/118fd701-6a9c-4873-83e1-4db265f0104a"
+    },
+    "ingest": {
+      "at": "2026-08-18T15:06:40.323Z",
+      "minutes": 51.2
+    },
+    "sweeps": {
+      "at": "2026-08-18T15:06:43.064Z",
+      "findingCards": 75,
+      "practiceSection": true
+    },
+    "foresight": {
+      "at": "2026-08-18T15:06:44.072Z",
+      "uploaded": true
+    },
+    "draftFirst": {
+      "chapters": 17,
+      "annexes": 11,
+      "health": true,
+      "modelPage": true,
+      "undrafted": 0,
+      "noClaim": true,
+      "conditional": true,
+      "citesForesight": true
+    },
+    "draftFirstAssembled": {
+      "at": "2026-08-18T15:24:44.866Z",
+      "chapters": 17,
+      "annexes": 11,
+      "health": true,
+      "modelPage": true,
+      "undrafted": 0,
+      "noClaim": true,
+      "conditional": true,
+      "citesForesight": true
+    },
+    "gatesBefore": {
+      "failing": 9,
+      "ids": [
+        "3.3",
+        "3.11",
+        "4.1",
+        "4.5",
+        "4.9",
+        "5.5",
+        "5.7",
+        "7.9",
+        "7.12"
+      ]
+    },
+    "gauntletCleared": {
+      "at": "2026-08-18T15:24:59.471Z",
+      "humanCleared": 9
+    },
+    "ladder": {
+      "at": "2026-08-18T15:25:03.473Z",
+      "steps": "2-8 recorded"
+    },
+    "draft": {
+      "chapters": 17,
+      "annexes": 11,
+      "notDrafted": 0,
+      "gauntletBlocked": false,
+      "chaptersWithModelProse": 10,
+      "fidelityRejected": 7
+    },
+    "draftAssembled": {
+      "at": "2026-08-18T15:44:27.945Z",
+      "chapters": 17,
+      "annexes": 11,
+      "notDrafted": 0,
+      "gauntletBlocked": false,
+      "chaptersWithModelProse": 10,
+      "fidelityRejected": 7
+    },
+    "redTeam": {
+      "at": "2026-08-18T16:02:03.922Z",
+      "reviewed": 17,
+      "findings": 56,
+      "summary": "Red team reviewed 17 chapters: 56 findings (11 high) — 16 deterministic, 40 adversarial; errors: 1: The model spent the whole token budget on reasoning (24000 tokens) and returned no visible text. Rai"
+    },
+    "deck": {
+      "at": "2026-08-18T16:02:05.018Z",
+      "filename": "DAR-EGY-roadmap-deck.pptx",
+      "bytes": 590443
+    },
+    "persistence": {
+      "at": "2026-08-18T16:02:07.044Z",
+      "csv": true,
+      "reload": true
+    }
+  },
+  "ok": true,
+  "consoleErrors": [],
+  "finishedAt": "2026-08-18T16:02:07.044Z",
+  "log": [
+    "14:15:24 1. sign in as the key-holding account",
+    "14:15:25 ✔ signin {\"email\":\"dbcheck@example.com\"}",
+    "14:15:25 2. create a fresh Egypt workspace",
+    "14:15:26 ✔ country {\"countryUrl\":\"http://127.0.0.1:8080/c/118fd701-6a9c-4873-83e1-4db265f0104a\"}",
+    "14:15:26 3. launch the Step 1 diagnostic (official cascade + verified web search)",
+    "15:06:40 ✔ ingest {\"minutes\":51.2}",
+    "15:06:40 3b. the wide sweeps must have produced cited findings (a silent zero is a broken pass)",
+    "15:06:42    sweeps: 75 findings visible; practice section=true",
+    "15:06:43 ✔ sweeps {\"findingCards\":75,\"practiceSection\":true}",
+    "15:06:43 3c. upload strategic-foresight material; the draft must cite it",
+    "15:06:44 ✔ foresight {\"uploaded\":true}",
+    "15:06:44 4. draft-first: assemble the full DAR immediately, before any human step",
+    "15:24:42    draft-first: chapters=17 annexes=11 health=true model=true undrafted=0 noClaim=true conditional=true foresight=true",
+    "15:24:44 ✔ draftFirstAssembled {\"chapters\":17,\"annexes\":11,\"health\":true,\"modelPage\":true,\"undrafted\":0,\"noClaim\":true,\"conditional\":true,\"citesForesight\":true}",
+    "15:24:44 5. gauntlet: read the failing gates, then clear them as the human",
+    "15:24:45    clearing 3.3 — Unmeasured — machine named gap is not an accounted reading.",
+    "15:24:47    clearing 3.11 — Grade C (55/100) is below A/B and is not a human-marked gap.",
+    "15:24:48    clearing 4.1 — Grade C (55/100) is below A/B and is not a human-marked gap.",
+    "15:24:50    clearing 4.5 — Unmeasured — machine named gap is not an accounted reading.",
+    "15:24:51    clearing 4.9 — Unmeasured — machine named gap is not an accounted reading.",
+    "15:24:52    clearing 5.5 — Unmeasured — machine named gap is not an accounted reading.",
+    "15:24:54    clearing 5.7 — Grade C (55/100) is below A/B and is not a human-marked gap.",
+    "15:24:55    clearing 7.9 — Unmeasured — machine named gap is not an accounted reading.",
+    "15:24:57    clearing 7.12 — Unmeasured — machine named gap is not an accounted reading.",
+    "15:24:59 ✔ gauntletCleared {\"humanCleared\":9}",
+    "15:24:59 6. record steps 2–8",
+    "15:25:03 ✔ ladder {\"steps\":\"2-8 recorded\"}",
+    "15:25:03 7. re-assemble with the validated evidence (live model prose + fidelity gate)",
+    "15:44:27    chapters=17 annexes=11 notDrafted=0 prose=10 fidelityRejected=7",
+    "15:44:27 ✔ draftAssembled {\"chapters\":17,\"annexes\":11,\"notDrafted\":0,\"gauntletBlocked\":false,\"chaptersWithModelProse\":10,\"fidelityRejected\":7}",
+    "15:44:27 7b. red-team the final draft (deterministic + adversarial)",
+    "16:02:03    red team: Red team reviewed 17 chapters: 56 findings (11 high) — 16 deterministic, 40 adversarial; errors: 1: The model spent the whole token budget o",
+    "16:02:03 ✔ redTeam {\"reviewed\":17,\"findings\":56,\"summary\":\"Red team reviewed 17 chapters: 56 findings (11 high) — 16 deterministic, 40 adversarial; errors: 1: ",
+    "16:02:03 7c. export the consulting deck",
+    "16:02:05    deck: DAR-EGY-roadmap-deck.pptx (577 KB)",
+    "16:02:05 ✔ deck {\"filename\":\"DAR-EGY-roadmap-deck.pptx\",\"bytes\":590443}",
+    "16:02:05 8. exports and persistence",
+    "16:02:07 ✔ persistence {\"csv\":true,\"reload\":true}"
+  ]
+}

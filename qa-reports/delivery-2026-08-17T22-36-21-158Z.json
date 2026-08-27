@@ -1,0 +1,129 @@
+{
+  "startedAt": "2026-08-17T22:36:21.158Z",
+  "base": "http://127.0.0.1:8080",
+  "phases": {
+    "signin": {
+      "at": "2026-08-17T22:36:23.223Z",
+      "email": "dbcheck@example.com"
+    },
+    "country": {
+      "at": "2026-08-17T22:36:24.158Z",
+      "countryUrl": "http://127.0.0.1:8080/c/a2c3f2a1-dd11-4641-bd2d-cc5b15cec7d1"
+    },
+    "ingest": {
+      "at": "2026-08-17T23:11:20.621Z",
+      "minutes": 34.9
+    },
+    "sweeps": {
+      "at": "2026-08-17T23:11:23.334Z",
+      "findingCards": 70,
+      "practiceSection": true
+    },
+    "foresight": {
+      "at": "2026-08-17T23:11:24.299Z",
+      "uploaded": true
+    },
+    "draftFirst": {
+      "chapters": 17,
+      "annexes": 11,
+      "health": true,
+      "modelPage": true,
+      "undrafted": 0,
+      "noClaim": true,
+      "conditional": true,
+      "citesForesight": true
+    },
+    "draftFirstAssembled": {
+      "at": "2026-08-17T23:21:50.336Z",
+      "chapters": 17,
+      "annexes": 11,
+      "health": true,
+      "modelPage": true,
+      "undrafted": 0,
+      "noClaim": true,
+      "conditional": true,
+      "citesForesight": true
+    },
+    "gatesBefore": {
+      "failing": 9,
+      "ids": [
+        "3.3",
+        "3.11",
+        "4.1",
+        "4.5",
+        "4.9",
+        "5.5",
+        "5.7",
+        "7.9",
+        "7.12"
+      ]
+    },
+    "gauntletCleared": {
+      "at": "2026-08-17T23:22:04.914Z",
+      "humanCleared": 9
+    },
+    "ladder": {
+      "at": "2026-08-17T23:22:08.926Z",
+      "steps": "2-8 recorded"
+    },
+    "draft": {
+      "chapters": 17,
+      "annexes": 11,
+      "notDrafted": 0,
+      "gauntletBlocked": false,
+      "chaptersWithModelProse": 13,
+      "fidelityRejected": 3
+    },
+    "draftAssembled": {
+      "at": "2026-08-17T23:33:25.182Z",
+      "chapters": 17,
+      "annexes": 11,
+      "notDrafted": 0,
+      "gauntletBlocked": false,
+      "chaptersWithModelProse": 13,
+      "fidelityRejected": 3
+    },
+    "persistence": {
+      "at": "2026-08-17T23:33:26.851Z",
+      "csv": true,
+      "reload": true
+    }
+  },
+  "ok": true,
+  "consoleErrors": [],
+  "finishedAt": "2026-08-17T23:33:26.851Z",
+  "log": [
+    "22:36:21 1. sign in as the key-holding account",
+    "22:36:23 ✔ signin {\"email\":\"dbcheck@example.com\"}",
+    "22:36:23 2. create a fresh Egypt workspace",
+    "22:36:24 ✔ country {\"countryUrl\":\"http://127.0.0.1:8080/c/a2c3f2a1-dd11-4641-bd2d-cc5b15cec7d1\"}",
+    "22:36:24 3. launch the Step 1 diagnostic (official cascade + verified web search)",
+    "23:11:20 ✔ ingest {\"minutes\":34.9}",
+    "23:11:20 3b. the wide sweeps must have produced cited findings (a silent zero is a broken pass)",
+    "23:11:23    sweeps: 70 findings visible; practice section=true",
+    "23:11:23 ✔ sweeps {\"findingCards\":70,\"practiceSection\":true}",
+    "23:11:23 3c. upload strategic-foresight material; the draft must cite it",
+    "23:11:24 ✔ foresight {\"uploaded\":true}",
+    "23:11:24 4. draft-first: assemble the full DAR immediately, before any human step",
+    "23:21:47    draft-first: chapters=17 annexes=11 health=true model=true undrafted=0 noClaim=true conditional=true foresight=true",
+    "23:21:50 ✔ draftFirstAssembled {\"chapters\":17,\"annexes\":11,\"health\":true,\"modelPage\":true,\"undrafted\":0,\"noClaim\":true,\"conditional\":true,\"citesForesight\":true}",
+    "23:21:50 5. gauntlet: read the failing gates, then clear them as the human",
+    "23:21:51    clearing 3.3 — Unmeasured — machine named gap is not an accounted reading.",
+    "23:21:52    clearing 3.11 — Unmeasured — machine named gap is not an accounted reading.",
+    "23:21:54    clearing 4.1 — Grade C (55/100) is below A/B and is not a human-marked gap.",
+    "23:21:55    clearing 4.5 — Unmeasured — machine named gap is not an accounted reading.",
+    "23:21:57    clearing 4.9 — Grade C (55/100) is below A/B and is not a human-marked gap.",
+    "23:21:58    clearing 5.5 — Unmeasured — machine named gap is not an accounted reading.",
+    "23:21:59    clearing 5.7 — Grade C (55/100) is below A/B and is not a human-marked gap.",
+    "23:22:01    clearing 7.9 — Unmeasured — machine named gap is not an accounted reading.",
+    "23:22:02    clearing 7.12 — Unmeasured — machine named gap is not an accounted reading.",
+    "23:22:04 ✔ gauntletCleared {\"humanCleared\":9}",
+    "23:22:04 6. record steps 2–8",
+    "23:22:08 ✔ ladder {\"steps\":\"2-8 recorded\"}",
+    "23:22:08 7. re-assemble with the validated evidence (live model prose + fidelity gate)",
+    "23:33:25    chapters=17 annexes=11 notDrafted=0 prose=13 fidelityRejected=3",
+    "23:33:25 ✔ draftAssembled {\"chapters\":17,\"annexes\":11,\"notDrafted\":0,\"gauntletBlocked\":false,\"chaptersWithModelProse\":13,\"fidelityRejected\":3}",
+    "23:33:25 8. exports and persistence",
+    "23:33:26 ✔ persistence {\"csv\":true,\"reload\":true}"
+  ]
+}

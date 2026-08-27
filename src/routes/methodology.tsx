@@ -1,95 +1,124 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { AppShell } from "@/components/AppShell";
 import { Card } from "@/components/ui/card";
-import { model, disclaimer } from "@/lib/damm/model";
+import { model, disclaimer, pillarIds } from "@/lib/damm-v17/model";
 
 export const Route = createFileRoute("/methodology")({ component: Methodology });
 
+/**
+ * The method page renders from the model file itself — evidence classes,
+ * source tiers, bands, binding rules, invariants and the open decisions all
+ * come from the same canonical document the scorer reads, so this page cannot
+ * drift from what the instrument actually does.
+ */
 function Methodology() {
-  const m = model.methodology;
   return (
     <AppShell>
-      <p className="text-xs font-medium uppercase tracking-widest text-sage">{model.model} {model.version}</p>
-      <h1 className="mt-1 font-display text-3xl font-semibold">Methodology</h1>
-      <p className="mt-3 max-w-3xl text-muted">{m.purpose}</p>
-      <p className="mt-3 max-w-3xl text-sm text-muted">{m.not}</p>
+      <p className="text-xs font-medium uppercase tracking-widest text-sage">
+        {model.model} v{model.version} rev{model.revision} · {model.status}
+      </p>
+      <h1 className="mt-1 font-display text-3xl font-semibold">{model.title}</h1>
+      <p className="mt-3 max-w-3xl text-muted">
+        {model.indicators.length} indicators across {pillarIds.length} pillars, each scored from a recorded value with its source,
+        tier and year. Evidence classes, levels, bands, prerequisites and the use-case readiness matrix are derived from
+        what was recorded — never chosen, never weighted by opinion.
+      </p>
       <p className="mt-3 max-w-3xl text-xs text-subtle">{disclaimer()}</p>
 
-      <section className="mt-8 grid gap-4 md:grid-cols-2">
-        {m.rules.map((r) => (
-          <Card key={r.title}>
-            <h2 className="font-display text-xl">{r.title}</h2>
-            <p className="mt-2 text-sm text-muted">{r.text}</p>
-          </Card>
-        ))}
-      </section>
-
-      <section className="mt-10">
-        <h2 className="font-display text-2xl">How a score is built</h2>
-        <ol className="mt-4 grid gap-3">
-          {m.chain.map((c) => (
-            <li key={c.step} className="rounded-lg bg-surface px-4 py-3 shadow-[var(--shadow-border)]">
-              <p className="text-xs font-medium uppercase tracking-widest text-sage">{c.step}</p>
-              <p className="mt-1 text-sm">{c.text}</p>
-            </li>
-          ))}
-        </ol>
-      </section>
-
-      <section className="mt-10">
-        <h2 className="font-display text-2xl">Weights and gates</h2>
-        <div className="mt-4 grid gap-3 sm:grid-cols-2">
-          {Object.entries(model.pillars).map(([id, p]) => (
-            <Card key={id} className="p-4">
-              <p className="font-mono text-xs text-subtle">{id}</p>
-              <p className="font-medium">{p.name}</p>
-              <p className="text-sm text-muted">
-                {p.aggregated === false ? "Context — never aggregated" : `Weight ${p.weight ?? "—"} · ${p.role}`}
+      <section className="mt-8">
+        <h2 className="font-display text-2xl">Evidence classes</h2>
+        <p className="mt-1 text-sm text-muted">The class is derived from the recorded value, never chosen.</p>
+        <div className="mt-4 grid gap-4 md:grid-cols-2">
+          {model.evidence_classes.map((c) => (
+            <Card key={c.id} className="p-4">
+              <h3 className="font-display text-xl">{c.id}</h3>
+              <p className="mt-2 text-sm text-muted">
+                Derived when {c.derived_from}. Levels: {c.levels}.
               </p>
             </Card>
           ))}
         </div>
-        <Card className="mt-4">
-          <p className="text-sm">
-            Coverage gates from configuration: pillar minimum {model.coverage_gates.pillar_min}, CMS minimum {model.coverage_gates.cms_min}, EMS minimum {model.coverage_gates.ems_min}.
-          </p>
-          <p className="mt-2 text-sm">
-            Stage thresholds: Stage 2 CMS {model.stage_thresholds.stage2_cms}; Stage 3 CMS {model.stage_thresholds.stage3_cms} / EMS {model.stage_thresholds.stage3_ems}; Stage 4 CMS {model.stage_thresholds.stage4_cms} / EMS {model.stage_thresholds.stage4_ems} / OES {model.stage_thresholds.stage4_oes}.
-          </p>
-          <p className="mt-2 text-sm">
-            Assessment year {model.assessment_year}. {model.indicators.length} indicators. {model.core_gates.length} core gates: {model.core_gates.join(", ")}.
-          </p>
-        </Card>
       </section>
 
       <section className="mt-10">
-        <h2 className="font-display text-2xl">Prohibitions</h2>
-        <ul className="mt-3 list-disc space-y-1 pl-5 text-sm">
-          {model.prohibitions.map((p) => (
-            <li key={p}>{p}</li>
+        <h2 className="font-display text-2xl">Source tiers</h2>
+        <p className="mt-1 text-sm text-muted">{model.tier_note}</p>
+        <ul className="mt-4 space-y-2">
+          {Object.entries(model.source_tiers).map(([t, text]) => (
+            <li key={t} className="text-sm">
+              <span className="font-mono font-semibold">{t}</span> <span className="text-muted">{text}</span>
+            </li>
           ))}
         </ul>
       </section>
 
       <section className="mt-10">
-        <h2 className="font-display text-2xl">Eight steps</h2>
-        <ol className="mt-4 grid gap-3">
-          {model.ladder.map((r) => (
-            <li key={r.rung} className="rounded-lg bg-surface px-4 py-3 shadow-[var(--shadow-border)]">
-              <p className="text-xs text-subtle">
-                Step {r.step} · {r.rung} · {r.decider}
+        <h2 className="font-display text-2xl">Levels and bands</h2>
+        <p className="mt-1 text-sm text-muted">
+          A pillar band is the mean of the levels actually recorded — rated rows only, with the denominator always
+          disclosed. Bands are half-open, and their edges are an open calibration decision (13.1).
+        </p>
+        <div className="mt-4 flex flex-wrap gap-3">
+          {model.bands.map((b) => (
+            <Card key={b.name} className="p-3 text-sm">
+              <b>{b.name}</b> <span className="tabular-nums text-muted">{b.lo} – &lt;{b.hi > 5 ? 5.0 : b.hi}</span>
+            </Card>
+          ))}
+        </div>
+      </section>
+
+      <section className="mt-10">
+        <h2 className="font-display text-2xl">Binding rules</h2>
+        <p className="mt-1 text-sm text-muted">
+          Prerequisites bind on presence only. Each rule below is in force and marked with its ratification standing —
+          none is presented as settled while its decision is open.
+        </p>
+        <div className="mt-4 grid gap-3">
+          {model.binding_rules.map((r) => (
+            <Card key={r.id} className="p-4">
+              <p className="text-sm">{r.rule}</p>
+              <p className="mt-1 text-xs text-subtle">
+                {r.ratified ? "Ratified." : `Pending ratification${r.decision ? ` (decision ${r.decision})` : ""}.`}
+                {r.note ? ` ${r.note}` : ""}
               </p>
-              <p className="font-medium">{r.name}</p>
-              <p className="mt-1 text-sm text-muted">{r.guidance}</p>
+            </Card>
+          ))}
+        </div>
+      </section>
+
+      <section className="mt-10">
+        <h2 className="font-display text-2xl">Invariants</h2>
+        <ul className="mt-4 grid gap-2">
+          {model.invariants.map((t) => (
+            <li key={t} className="text-sm text-muted">
+              — {t}
+            </li>
+          ))}
+        </ul>
+      </section>
+
+      <section className="mt-10">
+        <h2 className="font-display text-2xl">Open design decisions</h2>
+        <p className="mt-1 text-sm text-muted">{model.ratification_note}</p>
+        <ol className="mt-4 grid gap-2">
+          {model.open_decisions.map((d) => (
+            <li key={d.id} className="text-sm">
+              <span className="font-mono text-xs text-subtle">{d.id}</span> {d.title}
+              {d.scope ? <span className="ml-1 text-xs text-subtle">({d.scope})</span> : null}
             </li>
           ))}
         </ol>
       </section>
 
       <section className="mt-10 mb-8">
-        <h2 className="font-display text-2xl">Provenance</h2>
-        <p className="mt-2 max-w-3xl text-sm text-muted">{m.provenance}</p>
-        <p className="mt-2 text-xs text-subtle">Status: {model.status}. Extracted from {model.extracted_from}.</p>
+        <h2 className="font-display text-2xl">The four prohibitions</h2>
+        <ul className="mt-4 grid gap-2">
+          {model.prohibitions.map((p) => (
+            <li key={p} className="text-sm text-muted">
+              — {p}
+            </li>
+          ))}
+        </ul>
       </section>
     </AppShell>
   );

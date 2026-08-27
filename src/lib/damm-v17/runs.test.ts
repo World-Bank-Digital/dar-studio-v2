@@ -1,0 +1,418 @@
+import { describe, it } from "node:test";
+import assert from "node:assert/strict";
+
+import { artifactsFor, DOCUMENT_SLOTS } from "./worker-artifacts.ts";
+import { artifactsFor as workerArtifacts } from "./worker.ts";
+
+import {
+  CLAIM_LEASE_MS,
+  DEFAULT_CEILING_USD,
+  allocationExhaustsCeiling,
+  canResume,
+  canTransition,
+  isClaimable,
+  isResumable,
+  isTerminal,
+  passCap,
+  progressOf,
+  remaining,
+  stoppedSummary,
+  type Run,
+  type RunStatus,
+  basenameFor,
+  canRunAutomatedChallenge,
+  defaultVendorFor,
+  VENDOR_CHOICES,
+  projectToFinish,
+  producesEvidence,
+  isRunnable,
+  isPublicRunPass,
+  PUBLIC_RUN_PASSES,
+  RUNNABLE_PASSES,
+  callsAVendor,
+} from "./runs.ts";
+
+function run(over: Partial<Run> = {}): Run {
+  return {
+    id: "r1",
+    userId: "u1",
+    countryId: "c1",
+    countryName: "Egypt",
+    iso3: "EGY",
+    pass: "research",
+    status: "running",
+    ceilingUsd: DEFAULT_CEILING_USD,
+    spentUsd: 0,
+    rowsTotal: 57,
+    rowsDone: 0,
+    vendor: "anthropic/claude-opus-5",
+    outBasename: "EGY_run1",
+    claimedBy: "w1",
+    heartbeatAt: new Date(),
+    startedAt: new Date(),
+    finishedAt: null,
+    stoppedReason: null,
+    ...over,
+  };
+}
+
+describe("the budget, which is exported rather than restated", () => {
+  it("per-pass caps exhaust the country ceiling", () => {
+    // If they summed to less, a country could not spend its ceiling; if more, it could
+    // spend past it by running every pass to its own limit.
+    assert.ok(allocationExhaustsCeiling(), "the per-pass allocation must sum to the whole ceiling");
+  });
+
+  it("apportions each pass against the ceiling", () => {
+    assert.equal(passCap("research", 500), 175);
+    assert.equal(passCap("g2", 500), 50);
+    assert.equal(passCap("generation", 500), 75);
+    assert.equal(passCap("workflow", 500), 500, "the coordinator owns the full ceiling");
+  });
+
+  it("refuses a pass it has no allocation for, rather than assuming one", () => {
+    // Silently defaulting to the whole ceiling is how a new pass spends a country's
+    // entire budget on its first run.
+    assert.throws(
+      () => passCap("nonsense" as never, 500),
+      /no budget allocation/,
+      "an unallocated pass must fail loudly",
+    );
+  });
+
+  it("reports what is left of the pass, not of the ceiling", () => {
+    assert.equal(remaining(run({ pass: "g2", spentUsd: 6.35 })), 43.65);
+  });
+});
+
+describe("legacy-pass exhaustion is not failure", () => {
+  it("keeps the two states apart", () => {
+    assert.ok(isTerminal("failed"));
+    assert.ok(!isTerminal("exhausted"), "an exhausted run is unfinished, not broken");
+    assert.ok(isResumable("exhausted"));
+    assert.ok(!isResumable("failed"));
+  });
+
+  it("tells an operator what it has, and that the rest is absent rather than gaps", () => {
+    const s = stoppedSummary(run({ status: "exhausted", rowsDone: 41, spentUsd: 200 }));
+    assert.match(s, /41 of 57/);
+    assert.match(s, /absent, not recorded as gaps/);
+    assert.match(s, /Add budget/);
+  });
+
+  it("will not resume an exhausted run at a ceiling it has already spent", () => {
+    // Re-queueing at the same ceiling stops again immediately, which reads to an
+    // operator as the button not working.
+    const r = run({ status: "exhausted", pass: "research", spentUsd: 200 });
+    const same = canResume(r);
+    assert.equal(same.ok, false);
+    assert.match(same.reason, /Raise the ceiling/);
+    assert.equal(canResume(r, 1000).ok, true, "a higher ceiling gives it room");
+  });
+
+  it("resumes a paused run without asking for anything", () => {
+    assert.equal(canResume(run({ status: "paused", spentUsd: 199 })).ok, true);
+  });
+
+  it("never asks a canonical workflow for a resume or budget top-up", () => {
+    const exhausted = run({ pass: "workflow", status: "exhausted", spentUsd: 500 });
+    const decision = canResume(exhausted, 1_000);
+    assert.equal(decision.ok, false);
+    assert.match(decision.reason, /never waits for an operator/);
+    assert.doesNotMatch(stoppedSummary(exhausted), /Add budget/);
+  });
+
+  it("refuses to resume a finished run", () => {
+    for (const s of ["done", "failed", "cancelled"] as RunStatus[]) {
+      const t = canResume(run({ status: s }));
+      assert.equal(t.ok, false, `${s} must not resume`);
+      assert.match(t.reason, /finished/);
+    }
+  });
+});
+
+describe("transitions are a closed set", () => {
+  it("allows the moves a run actually makes", () => {
+    assert.ok(canTransition("queued", "running").ok);
+    assert.ok(canTransition("running", "done").ok);
+    assert.ok(canTransition("running", "exhausted").ok);
+    assert.ok(canTransition("exhausted", "queued").ok, "topped up and queued again");
+    assert.ok(canTransition("running", "queued").ok, "a lost claim returns it to the queue");
+  });
+
+  it("refuses everything else, with a reason a surface can print", () => {
+    const t = canTransition("done", "running");
+    assert.equal(t.ok, false);
+    assert.match(t.reason, /finished/);
+    assert.equal(canTransition("queued", "done").ok, false, "no run finishes unstarted");
+    assert.equal(canTransition("failed", "queued").ok, false, "a failure is not retried blindly");
+    assert.equal(canTransition("running", "running").ok, false);
+  });
+});
+
+describe("a dead worker does not strand a run", () => {
+  const now = new Date("2026-08-25T12:00:00Z");
+
+  it("a queued run is free", () => {
+    assert.ok(isClaimable(run({ status: "queued", heartbeatAt: null }), now));
+  });
+
+  it("a run whose worker is alive is held", () => {
+    const beat = new Date(now.getTime() - CLAIM_LEASE_MS / 2);
+    assert.ok(!isClaimable(run({ status: "running", heartbeatAt: beat }), now));
+  });
+
+  it("a run whose worker stopped saying so is free again", () => {
+    // The pipeline checkpoints per row, so retaking this claim resumes rather than
+    // restarts: a failure at indicator 50 of 57 does not go back to zero.
+    const stale = new Date(now.getTime() - CLAIM_LEASE_MS - 1000);
+    assert.ok(isClaimable(run({ status: "running", heartbeatAt: stale }), now));
+  });
+
+  it("a slow run is not stolen mid-row", () => {
+    // A single indicator can take three minutes of retrieval. Two workers on one run
+    // would spend the same budget twice.
+    const beat = new Date(now.getTime() - 3 * 60 * 1000);
+    assert.ok(!isClaimable(run({ status: "running", heartbeatAt: beat }), now));
+  });
+
+  it("a finished or stopped run is never claimable", () => {
+    for (const s of ["done", "failed", "cancelled", "paused", "exhausted"] as RunStatus[]) {
+      assert.ok(!isClaimable(run({ status: s, heartbeatAt: null }), now), `${s}`);
+    }
+  });
+});
+
+describe("progress never fabricates what it does not know", () => {
+  it("reports no fraction until the total is known", () => {
+    const p = progressOf(run({ rowsTotal: null, rowsDone: 3 }));
+    assert.equal(p.fraction, null, "an unknown total must not render as 0% or 100%");
+    assert.equal(p.rowsDone, 3);
+  });
+
+  it("reports spend against the pass allocation, not the ceiling", () => {
+    const p = progressOf(run({ pass: "g2", spentUsd: 25 }));
+    assert.equal(p.capUsd, 50);
+    assert.equal(p.spentFraction, 0.5);
+    assert.equal(p.atCap, false);
+  });
+
+  it("flags the cap before the last cent", () => {
+    assert.equal(progressOf(run({ spentUsd: 199.995 })).atCap, true);
+  });
+
+  it("never runs past the end of the bar", () => {
+    const p = progressOf(run({ rowsDone: 60, rowsTotal: 57, spentUsd: 400 }));
+    assert.equal(p.fraction, 1);
+    assert.equal(p.spentFraction, 1);
+  });
+});
+
+describe("which name a pass writes under", () => {
+  const at = new Date("2026-08-25T14:07:00Z");
+
+  it("mints a stamped name for a research pass", () => {
+    assert.equal(basenameFor("research", "egy", at, null, "a1b2c3"), "EGY_202608251407_a1b2c3");
+  });
+
+  it("mints an isolated stamped name for the whole workflow", () => {
+    assert.equal(basenameFor("workflow", "egy", at, null, "f1e2d3"), "EGY_202608251407_f1e2d3");
+  });
+
+  it("makes a later pass inherit the research name rather than mint its own", () => {
+    // The upstream automated_challenge.py entry point takes --run and reads an existing
+    // pass's files. A compatibility record under a fresh name would inspect nothing and
+    // report a false clean machine-QC result.
+    assert.equal(
+      basenameFor("g2", "EGY", at, "EGY_202608251407_a1b2c3", "zzz"),
+      "EGY_202608251407_a1b2c3",
+    );
+  });
+
+  it("mints a different name for each run, even in the same minute", () => {
+    // The basename is what the pipeline checkpoints under, and every invocation passes
+    // --resume. Two runs sharing a name means the second resumes the first's completed
+    // state: it finishes at once, reports every row done, and claims a spend it never made.
+    assert.notEqual(
+      basenameFor("research", "EGY", at, null, "a1b2c3"),
+      basenameFor("research", "EGY", at, null, "d4e5f6"),
+    );
+  });
+
+  it("returns nothing when there is no research pass to inherit from", () => {
+    assert.equal(basenameFor("g2", "EGY", at, null, "a1b2c3"), null);
+    assert.equal(basenameFor("generation", "EGY", at, null, "a1b2c3"), null);
+  });
+});
+
+describe("which vendor may run the automated challenge", () => {
+  it("allows an automated challenger from another vendor family", () => {
+    assert.ok(canRunAutomatedChallenge("anthropic/claude-opus-5", "openai/gpt-5.6-terra").ok);
+  });
+
+  it("refuses same-family machine self-checking", () => {
+    const t = canRunAutomatedChallenge("anthropic/claude-opus-5", "anthropic/claude-sonnet-5");
+    assert.equal(t.ok, false);
+    assert.match(t.reason, /same-family machine self-checking/);
+    assert.match(t.reason, /never counts as G1 or G2 human review/);
+  });
+
+  it("catches an omitted challenge-vendor default", () => {
+    // Research on openai, challenge vendor left at its default — which is also openai.
+    // This is the case a null-vs-value comparison misses.
+    const t = canRunAutomatedChallenge("openai/gpt-5.6-terra", null);
+    assert.equal(t.ok, false);
+  });
+
+  it("allows the two defaults, which is the arrangement the pipeline shipped with", () => {
+    assert.ok(canRunAutomatedChallenge(null, null).ok);
+  });
+
+  it("offers only vendor/model pairs the pipeline can resolve", () => {
+    assert.ok(VENDOR_CHOICES.includes("anthropic/claude-opus-5"));
+    assert.ok(VENDOR_CHOICES.includes("gemini/gemini-3.1-pro-preview"));
+    assert.ok(VENDOR_CHOICES.every((v) => v.includes("/")));
+  });
+
+  it("reads the pass defaults from the pipeline rather than restating them", () => {
+    assert.equal(defaultVendorFor("research"), "anthropic/claude-opus-5");
+    assert.equal(defaultVendorFor("g2"), "openai/gpt-5.6-terra");
+  });
+});
+
+describe("how much budget finishing would need", () => {
+  const stopped = {
+    pass: "research" as const,
+    ceilingUsd: 20,
+    spentUsd: 8,
+    rowsDone: 20,
+    rowsTotal: 59,
+  };
+
+  it("projects from the rate the run actually ran at", () => {
+    const p = projectToFinish(stopped)!;
+    assert.equal(p.rowsRemaining, 39);
+    assert.ok(Math.abs(p.costPerRow - 0.4) < 1e-9);
+    assert.ok(Math.abs(p.projectedPassCost - 23.6) < 1e-9);
+  });
+
+  it("suggests a ceiling that gives the pass that much, with the stated allowance", () => {
+    // $23.60 projected, plus 20%, is $28.32 — which at research's 35% share needs a
+    // ceiling just over $80.91, rounded up to $90.
+    assert.equal(projectToFinish(stopped)!.suggestedCeilingUsd, 90);
+  });
+
+  it("projects a legacy challenge run against the canonical automated-challenge share", () => {
+    assert.equal(
+      projectToFinish({ ...stopped, pass: "g2", ceilingUsd: 20 })!.suggestedCeilingUsd,
+      290,
+    );
+  });
+
+  it("never suggests less than the ceiling already set", () => {
+    assert.equal(projectToFinish({ ...stopped, ceilingUsd: 500 })!.suggestedCeilingUsd, 500);
+  });
+
+  it("gives nothing when there is no basis, rather than a number derived from nothing", () => {
+    assert.equal(projectToFinish({ ...stopped, rowsTotal: null }), null);
+    assert.equal(projectToFinish({ ...stopped, rowsDone: 0 }), null);
+    assert.equal(projectToFinish({ ...stopped, rowsDone: 59, rowsTotal: 59 }), null);
+  });
+});
+
+describe("which passes produce evidence", () => {
+  it("research and the automated vendor challenge produce machine evidence", () => {
+    assert.ok(producesEvidence("research"));
+    assert.ok(producesEvidence("g2"));
+  });
+
+  it("the scans, foresight and generation do not", () => {
+    // They gather what the instrument does not measure, produce milestones, and produce a
+    // document. Offering to import one into the evidence base would suggest they score
+    // something.
+    for (const p of ["workflow", "scans", "foresight", "generation", "diagnostic"] as const) {
+      assert.equal(producesEvidence(p), false, `${p} should not produce evidence`);
+    }
+  });
+
+  it("a pass is runnable exactly when a script implements it", () => {
+    // Every pass in the allocation now has a script.
+    for (const p of [
+      "workflow",
+      "research",
+      "g2",
+      "scans",
+      "foresight",
+      "generation",
+      "diagnostic",
+    ] as const) {
+      assert.ok(isRunnable(p), `${p} should be runnable`);
+    }
+    assert.equal(RUNNABLE_PASSES.length, 7);
+  });
+
+  it("exposes only the canonical workflow as a normal product launch", () => {
+    assert.deepEqual(PUBLIC_RUN_PASSES, ["workflow"]);
+    assert.ok(isPublicRunPass("workflow"));
+    assert.equal(isPublicRunPass("research"), false);
+  });
+});
+
+describe("what each pass produces", () => {
+  it("offers the roadmap for a generation run", () => {
+    const keys = artifactsFor("generation").map((a) => a.key);
+    assert.ok(keys.includes("dar"));
+  });
+
+  it("offers a manifest, complete bundle, and all Draft DAR narrative formats", () => {
+    const keys = artifactsFor("workflow").map((artifact) => artifact.key);
+    for (const key of ["manifest", "bundle", "draft-md", "draft-docx", "draft-pdf", "draft-html"]) {
+      assert.ok(keys.includes(key), key);
+    }
+  });
+
+  it("names an artifact for every pass, so no run finishes with nothing to open", () => {
+    for (const p of RUNNABLE_PASSES) {
+      assert.ok(artifactsFor(p).length > 0, `${p} should produce something readable`);
+    }
+  });
+
+  it("keeps the two lists in step, so a link cannot point at a key the server refuses", () => {
+    // The labels live beside the router and the paths live in worker.ts, which reaches
+    // the filesystem. Drift between them is a link that 404s.
+    const fromWorker = workerArtifacts;
+    for (const p of RUNNABLE_PASSES) {
+      assert.deepEqual(
+        artifactsFor(p).map((a) => a.key),
+        fromWorker(p).map((a) => a.key),
+        `${p} artifact keys differ between the two lists`,
+      );
+    }
+  });
+
+  it("makes the completed document set come from one canonical run", () => {
+    assert.ok(DOCUMENT_SLOTS.length > 0);
+    assert.ok(DOCUMENT_SLOTS.every((slot) => slot.pass === "workflow"));
+    const keys = new Set(artifactsFor("workflow").map((artifact) => artifact.key));
+    assert.ok(DOCUMENT_SLOTS.every((slot) => keys.has(slot.artifactKey)));
+  });
+});
+
+describe("a pass that costs nothing", () => {
+  it("the diagnostic calls no vendor", () => {
+    // It renders an assessment the research pass already paid for.
+    assert.equal(callsAVendor("diagnostic"), false);
+    assert.equal(passCap("diagnostic", 500), 0);
+  });
+
+  it("every other pass does", () => {
+    for (const p of ["workflow", "research", "g2", "scans", "foresight", "generation"] as const) {
+      assert.ok(callsAVendor(p), `${p} should call a vendor`);
+    }
+  });
+
+  it("binds the canonical run to the coordinator's primary default vendor", () => {
+    assert.equal(defaultVendorFor("diagnostic"), null);
+    assert.equal(defaultVendorFor("workflow"), "anthropic/claude-opus-5");
+  });
+});

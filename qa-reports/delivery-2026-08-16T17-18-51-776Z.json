@@ -1,0 +1,91 @@
+{
+  "startedAt": "2026-08-16T17:18:51.776Z",
+  "base": "http://127.0.0.1:8080",
+  "phases": {
+    "signin": {
+      "at": "2026-08-16T17:18:55.779Z",
+      "email": "dbcheck@example.com"
+    },
+    "country": {
+      "at": "2026-08-16T17:18:58.315Z",
+      "countryUrl": "http://127.0.0.1:8080/c/69aaa004-2764-46ac-a765-c4f3bc041f22"
+    },
+    "ingest": {
+      "at": "2026-08-16T17:33:11.933Z",
+      "minutes": 14.2
+    },
+    "gatesBefore": {
+      "failing": 9,
+      "ids": [
+        "3.3",
+        "3.11",
+        "4.1",
+        "4.5",
+        "4.9",
+        "5.5",
+        "5.7",
+        "7.9",
+        "7.12"
+      ]
+    },
+    "gauntletCleared": {
+      "at": "2026-08-16T17:33:22.818Z",
+      "humanCleared": 9
+    },
+    "ladder": {
+      "at": "2026-08-16T17:33:26.542Z",
+      "steps": "2-8 recorded"
+    },
+    "draft": {
+      "chapters": 17,
+      "annexes": 11,
+      "notDrafted": 0,
+      "gauntletBlocked": false,
+      "chaptersWithModelProse": 1,
+      "fidelityRejected": 0
+    },
+    "draftAssembled": {
+      "at": "2026-08-16T17:38:23.894Z",
+      "chapters": 17,
+      "annexes": 11,
+      "notDrafted": 0,
+      "gauntletBlocked": false,
+      "chaptersWithModelProse": 1,
+      "fidelityRejected": 0
+    },
+    "persistence": {
+      "at": "2026-08-16T17:38:25.209Z",
+      "csv": true,
+      "reload": true
+    }
+  },
+  "ok": true,
+  "consoleErrors": [],
+  "finishedAt": "2026-08-16T17:38:25.209Z",
+  "log": [
+    "17:18:52 1. sign in as the key-holding account",
+    "17:18:55 ✔ signin {\"email\":\"dbcheck@example.com\"}",
+    "17:18:55 2. create a fresh Egypt workspace",
+    "17:18:58 ✔ country {\"countryUrl\":\"http://127.0.0.1:8080/c/69aaa004-2764-46ac-a765-c4f3bc041f22\"}",
+    "17:18:58 3. launch the Step 1 diagnostic (official cascade + verified web search)",
+    "17:33:11 ✔ ingest {\"minutes\":14.2}",
+    "17:33:11 4. gauntlet: read the failing gates, then clear them as the human",
+    "17:33:12    clearing 3.3 — Unmeasured — machine named gap is not an accounted reading.",
+    "17:33:13    clearing 3.11 — Unmeasured — machine named gap is not an accounted reading.",
+    "17:33:14    clearing 4.1 — Unmeasured — machine named gap is not an accounted reading.",
+    "17:33:15    clearing 4.5 — Unmeasured — machine named gap is not an accounted reading.",
+    "17:33:16    clearing 4.9 — Unmeasured — machine named gap is not an accounted reading.",
+    "17:33:17    clearing 5.5 — Unmeasured — machine named gap is not an accounted reading.",
+    "17:33:19    clearing 5.7 — Unmeasured — machine named gap is not an accounted reading.",
+    "17:33:20    clearing 7.9 — Unmeasured — machine named gap is not an accounted reading.",
+    "17:33:21    clearing 7.12 — Unmeasured — machine named gap is not an accounted reading.",
+    "17:33:22 ✔ gauntletCleared {\"humanCleared\":9}",
+    "17:33:22 5. record steps 2–8",
+    "17:33:26 ✔ ladder {\"steps\":\"2-8 recorded\"}",
+    "17:33:26 6. assemble the 17-chapter draft (live model prose + fidelity gate)",
+    "17:38:23    chapters=17 annexes=11 notDrafted=0 prose=1 fidelityRejected=0",
+    "17:38:23 ✔ draftAssembled {\"chapters\":17,\"annexes\":11,\"notDrafted\":0,\"gauntletBlocked\":false,\"chaptersWithModelProse\":1,\"fidelityRejected\":0}",
+    "17:38:23 7. exports and persistence",
+    "17:38:25 ✔ persistence {\"csv\":true,\"reload\":true}"
+  ]
+}

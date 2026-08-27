@@ -1,0 +1,42 @@
+{
+  "artifacts": [
+    { "key": "damm_observations", "media_type": "application/json", "path": "stages/01-damm_diagnostic/damm_observations.json", "sha256": "4d6a3a76e80787858913931b64da09ba92eed9e08c31e90bc22e77137872f99b" },
+    { "key": "automated_challenge", "media_type": "application/json", "path": "stages/01-damm_diagnostic/automated_challenge.json", "sha256": "47ea12465d58f2f5fdb61159bde2aa6863df7f7314ca3cefc40814b134b08a47" },
+    { "key": "scored_assessment", "media_type": "application/json", "path": "stages/01-damm_diagnostic/scored_assessment.json", "sha256": "8fcded57778cf6d03293b4a4b2d877fd18b115f092ffc82b0f1c26250302df06" },
+    { "key": "diagnostic_report", "media_type": "application/json", "path": "stages/01-damm_diagnostic/diagnostic_report.json", "sha256": "dad3a653221f08a4cba42e640a0d1fd586efcad6e9bfb69d7974a1a7fcfaf558" },
+    { "key": "source_inventory", "media_type": "application/json", "path": "stages/01-damm_diagnostic/source_inventory.json", "sha256": "8c20416857aba028fd0f176d077c020949c2a7a76d2d6b453a6099843e9ca92e" },
+    { "key": "engine_input", "media_type": "application/json", "path": "stages/01-damm_diagnostic/engine_input.json", "sha256": "91eded1e570634d0fc498c77ecd51d6d265980ff1b185e521797f5edd4f4fb38" }
+  ],
+  "attempt": 1,
+  "execution_mode": "handler",
+  "input_hashes": {
+    "checkpoint_binding": null,
+    "input_snapshot": "d40b07f50a9b749816b13f71c50eb04b911b18a3abef632da884768abfb07754",
+    "upstream_stage_manifests": {}
+  },
+  "input_snapshot": { "path": "inputs/input-snapshot.json", "sha256": "d40b07f50a9b749816b13f71c50eb04b911b18a3abef632da884768abfb07754" },
+  "ordinal": 1,
+  "output_hashes": {
+    "automated_challenge": "47ea12465d58f2f5fdb61159bde2aa6863df7f7314ca3cefc40814b134b08a47",
+    "damm_observations": "4d6a3a76e80787858913931b64da09ba92eed9e08c31e90bc22e77137872f99b",
+    "diagnostic_report": "dad3a653221f08a4cba42e640a0d1fd586efcad6e9bfb69d7974a1a7fcfaf558",
+    "engine_input": "91eded1e570634d0fc498c77ecd51d6d265980ff1b185e521797f5edd4f4fb38",
+    "scored_assessment": "8fcded57778cf6d03293b4a4b2d877fd18b115f092ffc82b0f1c26250302df06",
+    "source_inventory": "8c20416857aba028fd0f176d077c020949c2a7a76d2d6b453a6099843e9ca92e"
+  },
+  "quality_checks": [
+    { "id": "required_artifacts_present", "ok": true },
+    { "id": "artifact_sha256_bound", "ok": true },
+    { "id": "no_human_action_required", "ok": true }
+  ],
+  "run_id": "app-integration-fixture",
+  "schema_version": "damm.workflow-stage/v1",
+  "source_inventory": [
+    { "artifact_key": "source_inventory", "sha256": "8c20416857aba028fd0f176d077c020949c2a7a76d2d6b453a6099843e9ca92e" }
+  ],
+  "spend_usd": 1.25,
+  "stage_id": "damm_diagnostic",
+  "status": "complete",
+  "workflow_id": "dar-canonical-v1",
+  "workflow_version": "1.0.0"
+}

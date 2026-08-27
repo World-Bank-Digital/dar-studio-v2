@@ -1,0 +1,195 @@
+{
+ "counts": {
+  "Measured": 19,
+  "Documented": 33,
+  "Judged": 1,
+  "Gap": 4
+ },
+ "rated": 46,
+ "held": 7,
+ "pillars": {
+  "A1": {
+   "n": 10,
+   "rated": 8,
+   "held": 2,
+   "mean": 2.25,
+   "band": "Emerging",
+   "margin": 0.25,
+   "weak": false,
+   "comp": {
+    "Measured": 5,
+    "Documented": 5,
+    "Judged": 0,
+    "Gap": 0
+   },
+   "stale": 6
+  },
+  "C1": {
+   "n": 6,
+   "rated": 6,
+   "held": 0,
+   "mean": 2.83,
+   "band": "Established",
+   "margin": -0.17,
+   "weak": false,
+   "comp": {
+    "Measured": 4,
+    "Documented": 2,
+    "Judged": 0,
+    "Gap": 0
+   },
+   "stale": 0
+  },
+  "C2": {
+   "n": 8,
+   "rated": 7,
+   "held": 1,
+   "mean": 2.57,
+   "band": "Established",
+   "margin": -0.43,
+   "weak": false,
+   "comp": {
+    "Measured": 1,
+    "Documented": 7,
+    "Judged": 0,
+    "Gap": 0
+   },
+   "stale": 0
+  },
+  "C3": {
+   "n": 8,
+   "rated": 8,
+   "held": 0,
+   "mean": 2.88,
+   "band": "Established",
+   "margin": -0.12,
+   "weak": false,
+   "comp": {
+    "Measured": 3,
+    "Documented": 5,
+    "Judged": 0,
+    "Gap": 0
+   },
+   "stale": 0
+  },
+  "C4": {
+   "n": 7,
+   "rated": 4,
+   "held": 2,
+   "mean": 2.5,
+   "band": "Established",
+   "margin": -0.5,
+   "weak": false,
+   "comp": {
+    "Measured": 2,
+    "Documented": 4,
+    "Judged": 0,
+    "Gap": 1
+   },
+   "stale": 2
+  },
+  "E1": {
+   "n": 11,
+   "rated": 9,
+   "held": 1,
+   "mean": 2.56,
+   "band": "Established",
+   "margin": -0.44,
+   "weak": false,
+   "comp": {
+    "Measured": 1,
+    "Documented": 8,
+    "Judged": 1,
+    "Gap": 1
+   },
+   "stale": 1
+  },
+  "O1": {
+   "n": 7,
+   "rated": 4,
+   "held": 1,
+   "mean": 3.25,
+   "band": "Established",
+   "margin": 0.25,
+   "weak": false,
+   "comp": {
+    "Measured": 3,
+    "Documented": 2,
+    "Judged": 0,
+    "Gap": 2
+   },
+   "stale": 2
+  }
+ },
+ "layers": {
+  "Foundation": 2.5,
+  "Enablers": 2.62,
+  "Transformation": 2.71,
+  "Outcomes": 3.25
+ },
+ "leapfrog_gap": -0.21,
+ "prereq": {
+  "2.1": "Present",
+  "2.9": "Present (narrow)",
+  "3.3": "Present (narrow)",
+  "3.11": "Absent",
+  "4.1": "Present",
+  "4.5": "Absent",
+  "4.7": "Present",
+  "4.9": "Absent",
+  "5.5": "Present",
+  "5.7": "Absent",
+  "6.14": "Present",
+  "7.12": "Present"
+ },
+ "matrix": {
+  "ADV": {
+   "status": "Partial",
+   "why": "universal narrow: 2.9",
+   "mean_readiness": 2.71,
+   "mean_need": null,
+   "mean_outcome": 3.0,
+   "n_bearing": 29
+  },
+  "SMF": {
+   "status": "Partial",
+   "why": "universal narrow: 2.9",
+   "mean_readiness": 2.68,
+   "mean_need": null,
+   "mean_outcome": 3.0,
+   "n_bearing": 26
+  },
+  "MKT": {
+   "status": "Partial",
+   "why": "universal narrow: 2.9",
+   "mean_readiness": 2.64,
+   "mean_need": 1.0,
+   "mean_outcome": 3.0,
+   "n_bearing": 24
+  },
+  "SCM": {
+   "status": "Partial",
+   "why": "universal narrow: 2.9",
+   "mean_readiness": 2.61,
+   "mean_need": null,
+   "mean_outcome": 3.0,
+   "n_bearing": 24
+  },
+  "FIN": {
+   "status": "Partial",
+   "why": "3.3",
+   "mean_readiness": 2.5,
+   "mean_need": 1.0,
+   "mean_outcome": 3.0,
+   "n_bearing": 30
+  },
+  "AGI": {
+   "status": "Blocked",
+   "why": "3.11, 4.5",
+   "mean_readiness": 2.57,
+   "mean_need": null,
+   "mean_outcome": 3.0,
+   "n_bearing": 29
+  }
+ }
+}

@@ -99,3 +99,9 @@ export function economyByName(list: Economy[], name: string): Economy | undefine
     list.find((e) => e.name.toLowerCase().includes(n))
   );
 }
+
+/** ISO2 for a workspace's ISO3, from the catalogue workspaces are created from. */
+export function iso2For(iso3: string): string | null {
+  const n = iso3.trim().toLowerCase();
+  return FALLBACK_ECONOMIES.find((e) => e.iso3.toLowerCase() === n)?.iso2 ?? null;
+}

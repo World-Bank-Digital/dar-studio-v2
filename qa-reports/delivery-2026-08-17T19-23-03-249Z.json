@@ -1,0 +1,111 @@
+{
+  "startedAt": "2026-08-17T19:23:03.249Z",
+  "base": "http://127.0.0.1:8080",
+  "phases": {
+    "signin": {
+      "at": "2026-08-17T19:23:05.180Z",
+      "email": "dbcheck@example.com"
+    },
+    "country": {
+      "at": "2026-08-17T19:23:06.186Z",
+      "countryUrl": "http://127.0.0.1:8080/c/f568ddcc-6256-4236-808b-7ebdfb190db8"
+    },
+    "ingest": {
+      "at": "2026-08-17T20:10:15.165Z",
+      "minutes": 47.1
+    },
+    "draftFirst": {
+      "chapters": 17,
+      "annexes": 11,
+      "health": true,
+      "undrafted": 0,
+      "noClaim": true,
+      "conditional": true
+    },
+    "draftFirstAssembled": {
+      "at": "2026-08-17T20:21:44.170Z",
+      "chapters": 17,
+      "annexes": 11,
+      "health": true,
+      "undrafted": 0,
+      "noClaim": true,
+      "conditional": true
+    },
+    "gatesBefore": {
+      "failing": 9,
+      "ids": [
+        "3.3",
+        "3.11",
+        "4.1",
+        "4.5",
+        "4.9",
+        "5.5",
+        "5.7",
+        "7.9",
+        "7.12"
+      ]
+    },
+    "gauntletCleared": {
+      "at": "2026-08-17T20:21:58.321Z",
+      "humanCleared": 9
+    },
+    "ladder": {
+      "at": "2026-08-17T20:22:02.320Z",
+      "steps": "2-8 recorded"
+    },
+    "draft": {
+      "chapters": 17,
+      "annexes": 11,
+      "notDrafted": 0,
+      "gauntletBlocked": false,
+      "chaptersWithModelProse": 15,
+      "fidelityRejected": 2
+    },
+    "draftAssembled": {
+      "at": "2026-08-17T20:35:37.174Z",
+      "chapters": 17,
+      "annexes": 11,
+      "notDrafted": 0,
+      "gauntletBlocked": false,
+      "chaptersWithModelProse": 15,
+      "fidelityRejected": 2
+    },
+    "persistence": {
+      "at": "2026-08-17T20:35:38.871Z",
+      "csv": true,
+      "reload": true
+    }
+  },
+  "ok": true,
+  "consoleErrors": [],
+  "finishedAt": "2026-08-17T20:35:38.871Z",
+  "log": [
+    "19:23:03 1. sign in as the key-holding account",
+    "19:23:05 ✔ signin {\"email\":\"dbcheck@example.com\"}",
+    "19:23:05 2. create a fresh Egypt workspace",
+    "19:23:06 ✔ country {\"countryUrl\":\"http://127.0.0.1:8080/c/f568ddcc-6256-4236-808b-7ebdfb190db8\"}",
+    "19:23:06 3. launch the Step 1 diagnostic (official cascade + verified web search)",
+    "20:10:15 ✔ ingest {\"minutes\":47.1}",
+    "20:10:15 4. draft-first: assemble the full DAR immediately, before any human step",
+    "20:21:42    draft-first: chapters=17 annexes=11 health=true undrafted=0 noClaim=true conditional=true",
+    "20:21:44 ✔ draftFirstAssembled {\"chapters\":17,\"annexes\":11,\"health\":true,\"undrafted\":0,\"noClaim\":true,\"conditional\":true}",
+    "20:21:44 5. gauntlet: read the failing gates, then clear them as the human",
+    "20:21:45    clearing 3.3 — Unmeasured — machine named gap is not an accounted reading.",
+    "20:21:46    clearing 3.11 — Grade C (55/100) is below A/B and is not a human-marked gap.",
+    "20:21:47    clearing 4.1 — Grade C (65/100) is below A/B and is not a human-marked gap.",
+    "20:21:49    clearing 4.5 — Grade C (65/100) is below A/B and is not a human-marked gap.",
+    "20:21:50    clearing 4.9 — Unmeasured — machine named gap is not an accounted reading.",
+    "20:21:52    clearing 5.5 — Unmeasured — machine named gap is not an accounted reading.",
+    "20:21:53    clearing 5.7 — Grade C (55/100) is below A/B and is not a human-marked gap.",
+    "20:21:54    clearing 7.9 — Unmeasured — machine named gap is not an accounted reading.",
+    "20:21:56    clearing 7.12 — Unmeasured — machine named gap is not an accounted reading.",
+    "20:21:58 ✔ gauntletCleared {\"humanCleared\":9}",
+    "20:21:58 6. record steps 2–8",
+    "20:22:02 ✔ ladder {\"steps\":\"2-8 recorded\"}",
+    "20:22:02 7. re-assemble with the validated evidence (live model prose + fidelity gate)",
+    "20:35:37    chapters=17 annexes=11 notDrafted=0 prose=15 fidelityRejected=2",
+    "20:35:37 ✔ draftAssembled {\"chapters\":17,\"annexes\":11,\"notDrafted\":0,\"gauntletBlocked\":false,\"chaptersWithModelProse\":15,\"fidelityRejected\":2}",
+    "20:35:37 8. exports and persistence",
+    "20:35:38 ✔ persistence {\"csv\":true,\"reload\":true}"
+  ]
+}

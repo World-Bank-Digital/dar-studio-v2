@@ -1,0 +1,44 @@
+{
+ "_source": "vendors._MODEL_PREFS and the --vendor defaults in research_orchestrator.py / automated_challenge.py \u2014 exported, never restated. Regenerate with model/export_app_fixtures.py after changing either.",
+ "families": {
+  "anthropic": [
+   "claude-opus-5",
+   "claude-opus-4-8",
+   "claude-sonnet-5"
+  ],
+  "openai": [
+   "gpt-5.6-terra",
+   "gpt-5.6-luna",
+   "gpt-5.6-sol"
+  ],
+  "gemini": [
+   "gemini-3.1-pro-preview",
+   "gemini-2.5-pro",
+   "gemini-pro-latest"
+  ]
+ },
+ "runnable_passes": [
+  "ai",
+  "automated_challenge",
+  "country_research",
+  "diagnostic",
+  "export",
+  "foresight",
+  "generation",
+  "international_lessons",
+  "investment",
+  "research"
+ ],
+ "pass_defaults": {
+  "research": "anthropic/claude-opus-5",
+  "automated_challenge": "openai/gpt-5.6-terra",
+  "country_research": "anthropic/claude-opus-5",
+  "international_lessons": "anthropic/claude-opus-5",
+  "ai": "anthropic/claude-opus-5",
+  "foresight": "anthropic/claude-opus-5",
+  "investment": "anthropic/claude-opus-5",
+  "generation": "anthropic/claude-opus-5",
+  "diagnostic": null,
+  "export": null
+ }
+}

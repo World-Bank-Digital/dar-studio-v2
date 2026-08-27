@@ -1,0 +1,79 @@
+{
+  "startedAt": "2026-08-18T19:11:43.037Z",
+  "base": "http://127.0.0.1:8080",
+  "resumed": true,
+  "resumedFrom": "draftFirst",
+  "workspaceId": "d16bde57-7953-4743-bb77-f47455fe586b",
+  "phases": {
+    "signin": {
+      "at": "2026-08-18T19:11:46.705Z",
+      "email": "dbcheck@example.com"
+    },
+    "country": {
+      "skipped": true,
+      "reason": "resumed at draftFirst"
+    },
+    "ingest": {
+      "skipped": true,
+      "reason": "resumed at draftFirst"
+    },
+    "sweeps": {
+      "skipped": true,
+      "reason": "resumed at draftFirst"
+    },
+    "foresight": {
+      "skipped": true,
+      "reason": "resumed at draftFirst"
+    },
+    "draftFirst": {
+      "chapters": 17,
+      "annexes": 11,
+      "health": true,
+      "modelPage": true,
+      "undrafted": 0,
+      "noClaim": true,
+      "conditional": true,
+      "citesForesight": true
+    },
+    "draftFirstAssembled": {
+      "at": "2026-08-18T19:31:25.304Z",
+      "chapters": 17,
+      "annexes": 11,
+      "health": true,
+      "modelPage": true,
+      "undrafted": 0,
+      "noClaim": true,
+      "conditional": true,
+      "citesForesight": true
+    },
+    "gatesBefore": {
+      "failing": 0,
+      "ids": []
+    },
+    "gauntletCleared": {
+      "at": "2026-08-18T19:31:27.273Z",
+      "humanCleared": 0
+    }
+  },
+  "ok": false,
+  "error": "locator.waitFor: Timeout 20000ms exceeded.\nCall log:\n  - waiting for getByRole('button', { name: /Record decision/i }) to be visible\n",
+  "failedStage": "ladder",
+  "finishedAt": "2026-08-18T19:31:50.908Z",
+  "log": [
+    "19:11:43 1. sign in as the key-holding account",
+    "19:11:46 ✔ signin {\"email\":\"dbcheck@example.com\"}",
+    "19:11:47 ↺ country skipped — already done in an earlier attempt",
+    "19:11:47 ↺ ingest skipped — already done in an earlier attempt",
+    "19:11:47 ↺ sweeps skipped — already done in an earlier attempt",
+    "19:11:47 ↺ foresight skipped — already done in an earlier attempt",
+    "19:11:47 4. draft-first: assemble the full DAR immediately, before any human step",
+    "19:31:22    draft-first: chapters=17 annexes=11 health=true model=true undrafted=0 noClaim=true conditional=true foresight=true",
+    "19:31:25 ✔ draftFirstAssembled {\"chapters\":17,\"annexes\":11,\"health\":true,\"modelPage\":true,\"undrafted\":0,\"noClaim\":true,\"conditional\":true,\"citesForesight\":true}",
+    "19:31:25 5. gauntlet: read the failing gates, then clear them as the human",
+    "19:31:27 ✔ gauntletCleared {\"humanCleared\":0}",
+    "19:31:27 6. record steps 2–8"
+  ],
+  "errors": [
+    "pageerror: Hydration failed because the server rendered HTML didn't match the client. As a result this tree will be regenerated on the client. This can happen if a SSR-ed Client Component used:\n\n- A server/client branch `if (typeof window !== 'undefined')`.\n- Variable input such as `Date.now()` or `Math.random()` which changes each time it's called.\n- Date formatting in a user's locale which doesn't match the server.\n- External changing data without sending a snapshot of it along with the HTML.\n- Invalid HTML tag nesting.\n\nIt can also happen if the client has a browser extension installed which messes with the HTML before React loaded.\n\nhttps://react.dev/link/hydration-mismatch\n\n  ...\n    <MatchImpl routeId=\"/login\">\n      <MatchView router={{...}} match={{id:\"/login...\", ...}}>\n        <SafeFragment>\n          <SafeFragment fallback={null}>\n            <CatchBoundary getResetKey={function getResetKey} errorComponent={function AppErrorComponent} ...>\n              <CatchBoundaryImpl getResetKey={function getResetKey} errorComponent={function AppErrorComponent} ...>\n                <SafeFragment fallback={function fallback}>\n                  <MatchInnerImpl match={{id:\"/login...\", ...}}>\n                    <Lazy>\n                      <Login>\n                        <main className=\"grid min-h...\">\n                          <Card className=\"w-full max...\">\n                            <div className=\"bg-surface...\">\n                              <p>\n                              <h1>\n                              <p>\n                              <div className=\"mt-6 space...\">\n+                               <p className=\"rounded-sm border border-border bg-moss/30 px-3 py-2 text-xs text-muted\">\n-                               <button\n-                                 className=\"inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-s...\"\n-                               >\n                                ...\n                              ...\n"
+  ]
+}

@@ -1,0 +1,195 @@
+{
+ "counts": {
+  "Measured": 20,
+  "Documented": 32,
+  "Judged": 0,
+  "Gap": 5
+ },
+ "rated": 47,
+ "held": 5,
+ "pillars": {
+  "A1": {
+   "n": 10,
+   "rated": 8,
+   "held": 2,
+   "mean": 3.0,
+   "band": "Established",
+   "margin": 0.0,
+   "weak": false,
+   "comp": {
+    "Measured": 6,
+    "Documented": 4,
+    "Judged": 0,
+    "Gap": 0
+   },
+   "stale": 6
+  },
+  "C1": {
+   "n": 6,
+   "rated": 5,
+   "held": 0,
+   "mean": 3.8,
+   "band": "Advanced",
+   "margin": -0.2,
+   "weak": false,
+   "comp": {
+    "Measured": 4,
+    "Documented": 1,
+    "Judged": 0,
+    "Gap": 1
+   },
+   "stale": 1
+  },
+  "C2": {
+   "n": 8,
+   "rated": 8,
+   "held": 0,
+   "mean": 2.88,
+   "band": "Established",
+   "margin": -0.12,
+   "weak": false,
+   "comp": {
+    "Measured": 1,
+    "Documented": 7,
+    "Judged": 0,
+    "Gap": 0
+   },
+   "stale": 0
+  },
+  "C3": {
+   "n": 8,
+   "rated": 8,
+   "held": 0,
+   "mean": 3.25,
+   "band": "Established",
+   "margin": 0.25,
+   "weak": false,
+   "comp": {
+    "Measured": 3,
+    "Documented": 5,
+    "Judged": 0,
+    "Gap": 0
+   },
+   "stale": 2
+  },
+  "C4": {
+   "n": 7,
+   "rated": 3,
+   "held": 3,
+   "mean": 3.33,
+   "band": "Established",
+   "margin": 0.33,
+   "weak": true,
+   "comp": {
+    "Measured": 2,
+    "Documented": 4,
+    "Judged": 0,
+    "Gap": 1
+   },
+   "stale": 2
+  },
+  "E1": {
+   "n": 11,
+   "rated": 9,
+   "held": 0,
+   "mean": 3.11,
+   "band": "Established",
+   "margin": 0.11,
+   "weak": false,
+   "comp": {
+    "Measured": 1,
+    "Documented": 8,
+    "Judged": 0,
+    "Gap": 2
+   },
+   "stale": 0
+  },
+  "O1": {
+   "n": 7,
+   "rated": 6,
+   "held": 0,
+   "mean": 2.67,
+   "band": "Established",
+   "margin": -0.33,
+   "weak": false,
+   "comp": {
+    "Measured": 3,
+    "Documented": 3,
+    "Judged": 0,
+    "Gap": 1
+   },
+   "stale": 0
+  }
+ },
+ "layers": {
+  "Foundation": 3.31,
+  "Enablers": 2.9,
+  "Transformation": 3.71,
+  "Outcomes": 2.67
+ },
+ "leapfrog_gap": -0.4,
+ "prereq": {
+  "2.1": "Unverified",
+  "2.9": "Present",
+  "3.3": "Present",
+  "3.11": "Absent",
+  "4.1": "Present",
+  "4.5": "Absent",
+  "4.7": "Present",
+  "4.9": "Present",
+  "5.5": "Present",
+  "5.7": "Unverified",
+  "6.14": "Present",
+  "7.12": "Absent"
+ },
+ "matrix": {
+  "ADV": {
+   "status": "Blocked",
+   "why": "7.12",
+   "mean_readiness": 3.3,
+   "mean_need": null,
+   "mean_outcome": 3.0,
+   "n_bearing": 30
+  },
+  "SMF": {
+   "status": "Blocked",
+   "why": "7.12",
+   "mean_readiness": 3.21,
+   "mean_need": null,
+   "mean_outcome": 2.0,
+   "n_bearing": 26
+  },
+  "MKT": {
+   "status": "Unverified",
+   "why": "universal unverified: 2.1",
+   "mean_readiness": 3.35,
+   "mean_need": 1.0,
+   "mean_outcome": 2.0,
+   "n_bearing": 23
+  },
+  "SCM": {
+   "status": "Unverified",
+   "why": "universal unverified: 2.1",
+   "mean_readiness": 3.33,
+   "mean_need": null,
+   "mean_outcome": 2.0,
+   "n_bearing": 23
+  },
+  "FIN": {
+   "status": "Blocked",
+   "why": "7.12",
+   "mean_readiness": 3.25,
+   "mean_need": 1.0,
+   "mean_outcome": 2.25,
+   "n_bearing": 29
+  },
+  "AGI": {
+   "status": "Blocked",
+   "why": "3.11, 4.5, 7.12",
+   "mean_readiness": 3.26,
+   "mean_need": null,
+   "mean_outcome": 2.0,
+   "n_bearing": 29
+  }
+ }
+}

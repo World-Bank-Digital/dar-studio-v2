@@ -1,0 +1,183 @@
+{
+  "$schema": "./dar-workflow-v1.schema.json",
+  "schema_version": "damm.dar-workflow/v1",
+  "workflow_id": "dar-canonical-v1",
+  "workflow_version": "1.0.0",
+  "status": "normative",
+  "title": "Canonical Digital Agriculture Report workflow",
+  "required_launch_inputs": [
+    "country"
+  ],
+  "optional_launch_inputs": [
+    {
+      "id": "country_context_documents",
+      "title": "Country context documents",
+      "accepted_extensions": ["pdf", "doc", "docx", "xls", "xlsx", "csv", "txt", "md", "html"]
+    },
+    {
+      "id": "ai_documents",
+      "title": "AI and digital agriculture documents",
+      "accepted_extensions": ["pdf", "doc", "docx", "xls", "xlsx", "csv", "txt", "md", "html"]
+    },
+    {
+      "id": "international_strategy_documents",
+      "title": "International strategy and peer-experience documents",
+      "accepted_extensions": ["pdf", "doc", "docx", "xls", "xlsx", "csv", "txt", "md", "html"]
+    },
+    {
+      "id": "foresight_documents",
+      "title": "Strategic foresight documents",
+      "accepted_extensions": ["pdf", "doc", "docx", "xls", "xlsx", "csv", "txt", "md", "html"]
+    },
+    {
+      "id": "investment_documents",
+      "title": "Investment cost, benefit, financing, and appraisal documents",
+      "accepted_extensions": ["pdf", "doc", "docx", "xls", "xlsx", "csv", "txt", "md", "html"]
+    }
+  ],
+  "execution_policy": {
+    "single_launch": true,
+    "immutable_input_snapshot": true,
+    "required_human_actions_during_run": [],
+    "late_input_policy": "new_workflow_version",
+    "missing_optional_input_policy": "autonomous_research_fallback",
+    "budget_policy": "preauthorized_ceiling_with_fixed_protected_allocations",
+    "fixed_stage_budget_allocations": {
+      "damm_diagnostic": 0.45,
+      "country_research": 0.075,
+      "ai_digital_agriculture": 0.10,
+      "international_lessons": 0.075,
+      "strategic_foresight": 0.10,
+      "investment_options": 0.05,
+      "draft_dar": 0.15,
+      "export_package": 0.00
+    },
+    "budget_exhaustion_policy": "bounded_retry_then_terminal_failure",
+    "transient_failure_policy": "bounded_automatic_retry",
+    "allowed_active_states": ["queued", "running", "retrying"],
+    "terminal_states": ["complete", "failed", "cancelled"],
+    "post_completion_review_only": true,
+    "output_lifecycle_state": "draft"
+  },
+  "stages": [
+    {
+      "ordinal": 1,
+      "id": "damm_diagnostic",
+      "title": "DAMM v1.7 diagnostic",
+      "depends_on": [],
+      "human_input_required": false,
+      "objective": "Collect and challenge DAMM v1.7 evidence, score the diagnostic, and render the diagnostic report.",
+      "optional_inputs": [],
+      "fallback_when_optional_inputs_absent": "Not applicable; DAMM evidence research is always autonomous at this stage.",
+      "required_artifacts": ["damm_observations", "automated_challenge", "scored_assessment", "diagnostic_report", "source_inventory", "stage_manifest"]
+    },
+    {
+      "ordinal": 2,
+      "id": "country_research",
+      "title": "Country research and credible-source inventory",
+      "depends_on": ["damm_diagnostic"],
+      "human_input_required": false,
+      "objective": "Collect country-specific evidence beyond DAMM and consolidate all credible sources and optional TTL materials.",
+      "optional_inputs": ["country_context_documents"],
+      "fallback_when_optional_inputs_absent": "Conduct autonomous country research and record the search and source inventory.",
+      "required_artifacts": ["country_research_report", "country_evidence_data", "source_inventory", "stage_manifest"]
+    },
+    {
+      "ordinal": 3,
+      "id": "ai_digital_agriculture",
+      "title": "AI in digital agriculture assessment",
+      "depends_on": ["country_research"],
+      "human_input_required": false,
+      "objective": "Assess the as-is national AI position, peer-country experience, and the recommended AI agenda for digital agriculture.",
+      "optional_inputs": ["country_context_documents", "ai_documents"],
+      "fallback_when_optional_inputs_absent": "Research country and peer AI evidence autonomously.",
+      "required_sections": ["as_is", "peer_experience", "recommended_agenda"],
+      "required_artifacts": ["ai_assessment_report", "ai_evidence_data", "source_inventory", "stage_manifest"]
+    },
+    {
+      "ordinal": 4,
+      "id": "international_lessons",
+      "title": "International strategies and lessons",
+      "depends_on": ["country_research", "ai_digital_agriculture"],
+      "human_input_required": false,
+      "objective": "Research recent and relevant strategies from other countries and identify transferable lessons and limitations.",
+      "optional_inputs": ["international_strategy_documents"],
+      "fallback_when_optional_inputs_absent": "Conduct autonomous recent-strategy and peer-experience research.",
+      "required_artifacts": ["international_lessons_report", "strategy_comparison_data", "source_inventory", "stage_manifest"]
+    },
+    {
+      "ordinal": 5,
+      "id": "strategic_foresight",
+      "title": "Strategic foresight",
+      "depends_on": ["country_research", "ai_digital_agriculture", "international_lessons"],
+      "human_input_required": false,
+      "objective": "Develop country-specific scenarios, a preferred future, and backcast milestones for digital agriculture.",
+      "optional_inputs": ["country_context_documents", "ai_documents", "foresight_documents"],
+      "fallback_when_optional_inputs_absent": "Research drivers and uncertainties and run the declared foresight method autonomously.",
+      "required_artifacts": ["foresight_report", "foresight_data", "source_inventory", "stage_manifest"]
+    },
+    {
+      "ordinal": 6,
+      "id": "investment_options",
+      "title": "Investment options and cost-benefit analysis",
+      "depends_on": ["damm_diagnostic", "country_research", "ai_digital_agriculture", "international_lessons", "strategic_foresight"],
+      "human_input_required": false,
+      "objective": "Appraise potential recommended investments using explicit baselines, counterfactuals, cost-benefit ranges, assumptions, sensitivity, risks, and evidence gaps.",
+      "optional_inputs": ["country_context_documents", "investment_documents"],
+      "fallback_when_optional_inputs_absent": "Build preliminary ranges from cited benchmarks and mark unsupported values and decisions for post-completion validation.",
+      "required_artifacts": ["investment_options_report", "cost_benefit_workbook", "appraisal_data", "source_inventory", "stage_manifest"]
+    },
+    {
+      "ordinal": 7,
+      "id": "draft_dar",
+      "title": "Integrated Draft DAR",
+      "depends_on": ["damm_diagnostic", "country_research", "ai_digital_agriculture", "international_lessons", "strategic_foresight", "investment_options"],
+      "human_input_required": false,
+      "objective": "Integrate all prior stage evidence and analysis into one comprehensive, traceable Draft DAR.",
+      "optional_inputs": [],
+      "fallback_when_optional_inputs_absent": "Not applicable; every dependency must meet its completion criteria.",
+      "required_artifacts": ["draft_dar_report", "dar_source_data", "claim_provenance", "stage_manifest"]
+    },
+    {
+      "ordinal": 8,
+      "id": "export_package",
+      "title": "Export and download package",
+      "depends_on": ["draft_dar"],
+      "human_input_required": false,
+      "objective": "Create all required downloadable formats and one versioned package with a cryptographic manifest, including every frozen original upload, its extracted text, and its provenance envelope.",
+      "optional_inputs": [],
+      "fallback_when_optional_inputs_absent": "Not applicable; missing a required converter or format is a terminal failure.",
+      "required_artifacts": ["narrative_exports", "structured_exports", "source_inventory_exports", "workflow_manifest", "complete_bundle"]
+    }
+  ],
+  "export_profiles": {
+    "narrative": ["md", "docx", "pdf", "html"],
+    "structured": ["xlsx", "csv", "json"],
+    "package": ["zip", "json"]
+  },
+  "stage_manifest_required_fields": [
+    "schema_version",
+    "workflow_id",
+    "workflow_version",
+    "stage_id",
+    "input_hashes",
+    "output_hashes",
+    "source_inventory",
+    "quality_checks",
+    "execution_mode",
+    "spend_usd",
+    "status"
+  ],
+  "post_completion": {
+    "review_available_after_stage": "export_package",
+    "review_required_to_generate_draft": false,
+    "review_required_for_final_or_publication": true,
+    "allowed_promotions": ["draft", "final"],
+    "prohibitions": [
+      "no_cross_country_ranking",
+      "no_band_as_pdo_dli_or_disbursement_condition",
+      "no_automatic_financing_decision",
+      "no_public_claim_before_human_review"
+    ]
+  }
+}

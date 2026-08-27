@@ -1,0 +1,80 @@
+{
+  "startedAt": "2026-08-18T16:19:57.819Z",
+  "base": "http://127.0.0.1:8080",
+  "resumed": true,
+  "resumedFrom": "deck",
+  "workspaceId": "118fd701-6a9c-4873-83e1-4db265f0104a",
+  "phases": {
+    "signin": {
+      "at": "2026-08-18T16:19:59.205Z",
+      "email": "dbcheck@example.com"
+    },
+    "country": {
+      "skipped": true,
+      "reason": "resumed at deck"
+    },
+    "ingest": {
+      "skipped": true,
+      "reason": "resumed at deck"
+    },
+    "sweeps": {
+      "skipped": true,
+      "reason": "resumed at deck"
+    },
+    "foresight": {
+      "skipped": true,
+      "reason": "resumed at deck"
+    },
+    "draftFirst": {
+      "skipped": true,
+      "reason": "resumed at deck"
+    },
+    "gauntlet": {
+      "skipped": true,
+      "reason": "resumed at deck"
+    },
+    "ladder": {
+      "skipped": true,
+      "reason": "resumed at deck"
+    },
+    "draft": {
+      "skipped": true,
+      "reason": "resumed at deck"
+    },
+    "redTeam": {
+      "skipped": true,
+      "reason": "resumed at deck"
+    },
+    "deck": {
+      "at": "2026-08-18T16:20:01.260Z",
+      "filename": "DAR-EGY-roadmap-deck.pptx",
+      "bytes": 590443
+    },
+    "persistence": {
+      "at": "2026-08-18T16:20:02.883Z",
+      "csv": true,
+      "reload": true
+    }
+  },
+  "ok": true,
+  "consoleErrors": [],
+  "finishedAt": "2026-08-18T16:20:02.883Z",
+  "log": [
+    "16:19:58 1. sign in as the key-holding account",
+    "16:19:59 ✔ signin {\"email\":\"dbcheck@example.com\"}",
+    "16:20:00 ↺ country skipped — already done in an earlier attempt",
+    "16:20:00 ↺ ingest skipped — already done in an earlier attempt",
+    "16:20:00 ↺ sweeps skipped — already done in an earlier attempt",
+    "16:20:00 ↺ foresight skipped — already done in an earlier attempt",
+    "16:20:00 ↺ draftFirst skipped — already done in an earlier attempt",
+    "16:20:00 ↺ gauntlet skipped — already done in an earlier attempt",
+    "16:20:00 ↺ ladder skipped — already done in an earlier attempt",
+    "16:20:00 ↺ draft skipped — already done in an earlier attempt",
+    "16:20:00 ↺ redTeam skipped — already done in an earlier attempt",
+    "16:20:00 7c. export the consulting deck",
+    "16:20:01    deck: DAR-EGY-roadmap-deck.pptx (577 KB)",
+    "16:20:01 ✔ deck {\"filename\":\"DAR-EGY-roadmap-deck.pptx\",\"bytes\":590443}",
+    "16:20:01 8. exports and persistence",
+    "16:20:02 ✔ persistence {\"csv\":true,\"reload\":true}"
+  ]
+}
