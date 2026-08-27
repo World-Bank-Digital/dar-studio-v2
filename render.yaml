@@ -1,0 +1,55 @@
+services:
+  - type: web
+    name: dar-studio-artifacts
+    runtime: docker
+    region: ohio
+    plan: 1c-2g
+    dockerfilePath: ./Dockerfile.artifact-gateway
+    dockerContext: .
+    healthCheckPath: /healthz
+    autoDeployTrigger: off
+    numInstances: 1
+    maxShutdownDelaySeconds: 300
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: DATABASE_URL
+        sync: false
+      - key: ARTIFACT_DELIVERY_SECRET
+        sync: false
+      - key: APP_ORIGIN
+        sync: false
+
+  - type: worker
+    name: dar-studio-worker
+    runtime: docker
+    region: ohio
+    plan: 1c-2g
+    dockerfilePath: ./Dockerfile.worker
+    dockerContext: .
+    autoDeployTrigger: off
+    numInstances: 1
+    maxShutdownDelaySeconds: 300
+    disk:
+      name: dar-studio-worker-data
+      mountPath: /var/data
+      sizeGB: 10
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: DAMM_DATA_ROOT
+        value: /var/data
+      - key: DATABASE_URL
+        sync: false
+      - key: EXA_API_KEY
+        sync: false
+      - key: JINA_API_KEY
+        sync: false
+      - key: PERPLEXITY_API_KEY
+        sync: false
+      - key: ANTHROPIC_API_KEY
+        sync: false
+      - key: OPENAI_API_KEY
+        sync: false
+      - key: GEMINI_API_KEY
+        sync: false

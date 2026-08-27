@@ -93,4 +93,21 @@ describe("the loop itself", () => {
     await loop.done;
     assert.equal(calls, 1);
   });
+
+  it("passes a live stop predicate into the active drain", async () => {
+    let sawStopped = false;
+    const loop = runWorkerLoop({
+      deps,
+      drain: async (_workerId, _deps, shouldStop) => {
+        await Promise.resolve();
+        loop.stop();
+        sawStopped = shouldStop();
+        return 1;
+      },
+      sleep: async () => {},
+    });
+
+    await loop.done;
+    assert.equal(sawStopped, true);
+  });
 });

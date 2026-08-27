@@ -44,7 +44,7 @@ export function nextDelayMs(
 export interface LoopOptions {
   workerId?: string;
   deps?: WorkerDeps;
-  drain?: (workerId: string, deps: WorkerDeps) => Promise<number>;
+  drain?: (workerId: string, deps: WorkerDeps, shouldStop: () => boolean) => Promise<number>;
   sleep?: (ms: number) => Promise<void>;
   onError?: (err: unknown) => void;
 }
@@ -62,8 +62,7 @@ export function runWorkerLoop(opts: LoopOptions = {}): LoopHandle {
   const deps = opts.deps ?? defaultDeps();
   const drain = opts.drain ?? realDrain;
   const sleep = opts.sleep ?? sleepMs;
-  const onError =
-    opts.onError ?? ((err: unknown) => console.error("[damm-worker]", err));
+  const onError = opts.onError ?? ((err: unknown) => console.error("[damm-worker]", err));
 
   let stopped = false;
   let backoffMs = 0;
@@ -72,7 +71,7 @@ export function runWorkerLoop(opts: LoopOptions = {}): LoopHandle {
     while (!stopped) {
       let delayMs: number;
       try {
-        const handled = await drain(workerId, deps);
+        const handled = await drain(workerId, deps, () => stopped);
         ({ delayMs, backoffMs } = nextDelayMs({ handled }, backoffMs));
       } catch (err) {
         onError(err);

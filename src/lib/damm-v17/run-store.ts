@@ -721,7 +721,7 @@ interface PublishedWorkflowArtifactRow {
   methodology_status: WorkflowMethodologyStatus;
 }
 
-type PublishedWorkflowArtifactMetadata = Omit<PublishedWorkflowArtifact, "content">;
+export type PublishedWorkflowArtifactMetadata = Omit<PublishedWorkflowArtifact, "content">;
 
 function publishedWorkflowArtifactMetadata(
   row: PublishedWorkflowArtifactRow,
@@ -844,6 +844,26 @@ async function readVerifiedPublishedWorkflowArtifactContent(
   return content;
 }
 
+/** Authorize and read immutable artifact identity without loading its potentially huge bytes. */
+export async function getPublishedWorkflowArtifactMetadata(
+  runId: string,
+  key: string,
+  userId: string,
+  database?: Sql,
+): Promise<PublishedWorkflowArtifactMetadata | null> {
+  const sql = database ?? (await getSql());
+  return readVerifiedPublishedWorkflowArtifact({ runId, key, userId }, sql);
+}
+
+/** Load and re-hash bytes for local delivery after metadata authorization. */
+export async function getPublishedWorkflowArtifactContent(
+  metadata: PublishedWorkflowArtifactMetadata,
+  database?: Sql,
+): Promise<Uint8Array | null> {
+  const sql = database ?? (await getSql());
+  return readVerifiedPublishedWorkflowArtifactContent(metadata, sql);
+}
+
 /** Read only the artifact set atomically published by a completed canonical run. */
 export async function getPublishedWorkflowArtifact(
   runId: string,
@@ -852,9 +872,9 @@ export async function getPublishedWorkflowArtifact(
   database?: Sql,
 ): Promise<PublishedWorkflowArtifact | null> {
   const sql = database ?? (await getSql());
-  const metadata = await readVerifiedPublishedWorkflowArtifact({ runId, key, userId }, sql);
+  const metadata = await getPublishedWorkflowArtifactMetadata(runId, key, userId, sql);
   if (!metadata) return null;
-  const content = await readVerifiedPublishedWorkflowArtifactContent(metadata, sql);
+  const content = await getPublishedWorkflowArtifactContent(metadata, sql);
   if (!content) return null;
   return { ...metadata, content };
 }
@@ -1126,6 +1146,38 @@ export async function claimNextRun(workerId: string): Promise<ClaimedRun | null>
               claimed_by, claim_token, heartbeat_at, started_at, finished_at,
               stopped_reason`;
   return rows[0] ? { ...toRun(rows[0]), claimToken } : null;
+}
+
+/**
+ * Return a claim acquired concurrently with shutdown before its pipeline starts.
+ *
+ * The worker/claim-token/status guard is the same ownership boundary as heartbeat and
+ * finish. A stale process therefore cannot replay an old release against a newer claim.
+ * The status event makes the brief claim/requeue transition durable without inventing a
+ * completed or failed run.
+ */
+export async function releaseClaim(
+  runId: string,
+  workerId: string,
+  claimToken: string,
+  database?: Sql,
+): Promise<boolean> {
+  const sql = database ?? (await getSql());
+  const rows = await sql<{ run_id: string }>`
+    with released as (
+      update runs set status = 'queued', claimed_by = null, claim_token = null,
+                      heartbeat_at = null, finished_at = null, stopped_reason = null,
+                      updated_at = now()
+      where id = ${runId} and status = 'running'
+        and claimed_by = ${workerId} and claim_token = ${claimToken}
+      returning id
+    )
+    insert into run_events (run_id, kind, message)
+    select id, 'status',
+           'Worker shutdown arrived during queue claim; returned to queue before execution.'
+    from released
+    returning run_id`;
+  return rows.length > 0;
 }
 
 /** Say the worker is still alive. Returns false if the claim was taken from it. */

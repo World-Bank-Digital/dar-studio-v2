@@ -5,9 +5,12 @@ import { defineConfig } from "vite";
 import { tanstackStart } from "@tanstack/react-start/plugin/vite";
 import viteReact from "@vitejs/plugin-react";
 import tailwindcss from "@tailwindcss/vite";
+import netlify from "@netlify/vite-plugin-tanstack-start";
 import { nitro } from "nitro/vite";
 // @ts-expect-error JS integrity gate alongside the TS vite config
 import { verifyDammMethodologyAssets } from "./scripts/damm-methodology-integrity.mjs";
+// @ts-expect-error JS deployment-target resolver alongside the TS vite config
+import { deploymentTarget } from "./scripts/deployment-target.mjs";
 // @ts-expect-error JS plugin alongside the TS vite config
 import { grokPwaPlugin } from "./scripts/grok-pwa-plugin.mjs";
 
@@ -186,37 +189,44 @@ function authPopupPlugin(): Plugin {
 }
 
 // `0.0.0.0:8080` is the live-preview contract — don't change host/port.
-// Keep `nitro` gated to `build` (the Vercel deploy target): enabled in dev it
-// opens a second dev-server port, which breaks the single-port preview.
-export default defineConfig(({ command }) => ({
-  server: {
-    host: "0.0.0.0",
-    port: 8080,
-    strictPort: true,
-  },
-  resolve: { tsconfigPaths: true },
-  plugins: [
-    dammMethodologyIntegrityPlugin(),
-    pgliteBootstrapPlugin(),
-    dammWorkerPlugin(),
-    pgliteAssetsPlugin(),
-    // Before tanstackStart so /auth/popup never falls through to the SPA.
-    authPopupPlugin(),
-    // PWA head + ?install=1 tutorial page; runs before Start/Nitro.
-    grokPwaPlugin(),
-    tailwindcss(),
-    tanstackStart(),
-    ...(command === "build"
-      ? [
-          nitro({
-            preset: "vercel",
-            // Auto-registers server/middleware/* (the PWA install page +
-            // manifest + head-tag middleware). Nitro v3 defaults serverDir to
-            // false, so removing this silently unwires /?install=1 on deploys.
-            serverDir: "./server",
-          }),
-        ]
-      : []),
-    viteReact(),
-  ],
-}));
+// Keep server adapters gated to `build`: either one enabled in ordinary dev can
+// open or emulate another server and break the single-port preview contract.
+export default defineConfig(({ command }) => {
+  const target = deploymentTarget(command);
+  return {
+    server: {
+      host: "0.0.0.0",
+      port: 8080,
+      strictPort: true,
+    },
+    resolve: { tsconfigPaths: true },
+    plugins: [
+      dammMethodologyIntegrityPlugin(),
+      pgliteBootstrapPlugin(),
+      dammWorkerPlugin(),
+      // The explicit PGLite asset bridge belongs only to the legacy Vercel
+      // output. Hosted Netlify execution is required to use Neon.
+      ...(target === "vercel" ? [pgliteAssetsPlugin()] : []),
+      // Before tanstackStart so /auth/popup never falls through to the SPA.
+      authPopupPlugin(),
+      // PWA head + ?install=1 tutorial page; runs before Start/server adapter.
+      grokPwaPlugin(),
+      tailwindcss(),
+      tanstackStart(),
+      ...(target === "netlify"
+        ? [netlify()]
+        : target === "vercel"
+          ? [
+              nitro({
+                preset: "vercel",
+                // Auto-registers server/middleware/* (the PWA install page +
+                // manifest + head-tag middleware). Nitro v3 defaults serverDir to
+                // false, so removing this silently unwires /?install=1 on deploys.
+                serverDir: "./server",
+              }),
+            ]
+          : []),
+      viteReact(),
+    ],
+  };
+});

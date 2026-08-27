@@ -1,0 +1,86 @@
+# syntax=docker/dockerfile:1.7
+
+FROM node:22.22.3-bookworm-slim@sha256:e21fc383b50d5347dc7a9f1cae45b8f4e2f0d39f7ade28e4eef7d2934522b752 AS node-deps
+WORKDIR /opt/app
+COPY package.json package-lock.json ./
+RUN npm ci --omit=dev --ignore-scripts --no-audit --no-fund \
+    && npm cache clean --force
+
+FROM python:3.12.13-slim-bookworm@sha256:4766d8b510c428e595d74b9cc5bbb2fae8e26316fffb4adc89908d79aacd58a2 AS runtime
+
+ENV DEBIAN_FRONTEND=noninteractive \
+    NODE_ENV=production \
+    PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    DAMM_DATA_ROOT=/var/data \
+    DAMM_PIPELINE_PYTHON=/opt/damm-venv/bin/python \
+    HOME=/home/darworker
+
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends \
+        ca-certificates \
+        fonts-dejavu-core \
+        fonts-liberation \
+        git \
+        gosu \
+        libreoffice-writer \
+        pandoc \
+        tini \
+        util-linux \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY --from=node-deps /usr/local/bin/node /usr/local/bin/node
+COPY --from=node-deps /opt/app/node_modules /opt/app/node_modules
+COPY deploy/worker/requirements.lock /opt/app/deploy/worker/requirements.lock
+
+RUN python -m venv /opt/damm-venv \
+    && /opt/damm-venv/bin/pip install \
+        --no-cache-dir \
+        --no-deps \
+        --only-binary=:all: \
+        --requirement /opt/app/deploy/worker/requirements.lock \
+    && /opt/damm-venv/bin/python -B -c \
+        "import anthropic, openai, openpyxl; from google import genai"
+
+# The manifest is the only source of the upstream repository and commit. The image
+# carries a clean seed so a runtime disk checkout never depends on outbound Git access.
+COPY src/data/damm_model_manifest.json /opt/app/src/data/damm_model_manifest.json
+RUN set -eu; \
+    repository="$(python -c 'import json; print(json.load(open("/opt/app/src/data/damm_model_manifest.json"))["source"]["repository"])')"; \
+    commit="$(python -c 'import json; print(json.load(open("/opt/app/src/data/damm_model_manifest.json"))["source"]["commit"])')"; \
+    git clone --no-checkout "$repository" /opt/damm-seed; \
+    git -C /opt/damm-seed checkout --detach "$commit"; \
+    test "$(git -C /opt/damm-seed rev-parse HEAD)" = "$commit"; \
+    test -z "$(git -C /opt/damm-seed status --porcelain=v1 --untracked-files=no)"; \
+    git config --system --add safe.directory /opt/damm-seed
+
+# Execute every upstream unit-test directory under the same 3.12 interpreter that will
+# run the workflow. -B keeps executable bytecode out of the attested source tree.
+RUN set -eu; \
+    cd /opt/damm-seed; \
+    /opt/damm-venv/bin/python -B -m unittest discover -s model -p 'test_*.py'; \
+    /opt/damm-venv/bin/python -B -m unittest discover -s workflow -p 'test_*.py'; \
+    /opt/damm-venv/bin/python -B -m unittest discover -s gauntlet/loop-1 -p 'test_*.py'; \
+    /opt/damm-venv/bin/python -B -m unittest discover -s gauntlet/loop-1/research_pipeline -p 'test_*.py'
+
+COPY package.json package-lock.json /opt/app/
+COPY migrations /opt/app/migrations
+COPY scripts /opt/app/scripts
+COPY src /opt/app/src
+COPY deploy/worker /opt/app/deploy/worker
+
+# Refuse an upstream tree that merely claims the right commit. This applies the app's
+# content hashes, version labels, clean-tree rule, and executable-file/symlink checks.
+RUN DAMM_PIPELINE_DIR=/opt/damm-seed \
+    DAMM_PIPELINE_PYTHON=/opt/damm-venv/bin/python \
+    node --experimental-strip-types --input-type=module -e \
+      'import("./src/lib/damm-v17/worker.ts").then(({ verifyPipelineMethodology }) => { const result = verifyPipelineMethodology(); if (!result.ok) throw new Error(result.reason); })'
+
+RUN groupadd --gid 10001 darworker \
+    && useradd --uid 10001 --gid 10001 --create-home --home-dir /home/darworker darworker \
+    && install -d -m 0755 -o darworker -g darworker /var/data
+
+WORKDIR /opt/app
+STOPSIGNAL SIGTERM
+ENTRYPOINT ["/usr/bin/tini", "--"]
+CMD ["/bin/sh", "/opt/app/deploy/worker/entrypoint.sh"]

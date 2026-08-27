@@ -35,6 +35,11 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 import {
+  MAX_WORKFLOW_ARTIFACT_BYTES,
+  MAX_WORKFLOW_ARTIFACT_TOTAL_BYTES,
+  MAX_WORKFLOW_BUNDLE_BYTES,
+} from "./artifact-limits.ts";
+import {
   DAMM_MODEL_EXPORT,
   DAMM_MODEL_FILENAME,
   DAMM_MODEL_IDENTITY,
@@ -106,6 +111,7 @@ export interface SpawnedProcess {
  */
 export interface RunStore {
   claimNextRun(workerId: string): Promise<ClaimedRun | null>;
+  releaseClaim(runId: string, workerId: string, claimToken: string): Promise<boolean>;
   setRowsTotal(
     runId: string,
     workerId: string,
@@ -137,6 +143,7 @@ export function dbStore(): RunStore {
   const store = () => import("./run-store.ts");
   return {
     claimNextRun: (w) => store().then((m) => m.claimNextRun(w)),
+    releaseClaim: (id, w, token) => store().then((m) => m.releaseClaim(id, w, token)),
     setRowsTotal: (id, w, token, n, v) => store().then((m) => m.setRowsTotal(id, w, token, n, v)),
     recordRow: (id, w, token, e) => store().then((m) => m.recordRow(id, w, token, e)),
     noteEvent: (id, w, token, k, msg) =>
@@ -1770,10 +1777,12 @@ export function artifactPath(run: Run, key: string): { path: string; artifact: A
   }
 }
 
-/** Explicit database-storage guardrails for the hash-verified completed download set. */
-export const MAX_WORKFLOW_ARTIFACT_BYTES = 50 * 1024 * 1024;
-export const MAX_WORKFLOW_BUNDLE_BYTES = 250 * 1024 * 1024;
-export const MAX_WORKFLOW_ARTIFACT_TOTAL_BYTES = 400 * 1024 * 1024;
+// Preserve these public exports for callers while keeping one deployment-wide source of truth.
+export {
+  MAX_WORKFLOW_ARTIFACT_BYTES,
+  MAX_WORKFLOW_ARTIFACT_TOTAL_BYTES,
+  MAX_WORKFLOW_BUNDLE_BYTES,
+} from "./artifact-limits.ts";
 
 /**
  * Read the complete canonical download set only after all manifest checks have passed.
@@ -2155,11 +2164,26 @@ export async function runOne(run: ClaimedRun, workerId: string, deps: WorkerDeps
  * Claim and run until nothing is queued. Returns how many runs it handled, so a caller
  * can decide whether to wait before asking again.
  */
-export async function drain(workerId: string, deps: WorkerDeps = defaultDeps()): Promise<number> {
+export async function drain(
+  workerId: string,
+  deps: WorkerDeps = defaultDeps(),
+  shouldStop: () => boolean = () => false,
+): Promise<number> {
   let handled = 0;
   for (;;) {
+    // A process-level stop request means "finish the claim already held, then leave".
+    // Checking here, between claims, prevents a graceful shutdown from taking another
+    // country merely because it arrived while the current country was running.
+    if (shouldStop()) return handled;
     const run = await deps.store.claimNextRun(workerId);
     if (!run) return handled;
+    // A stop can arrive while the atomic database claim itself is in flight. Give that
+    // exact token back before doing any pipeline work; a different or replayed token
+    // cannot release somebody else's claim.
+    if (shouldStop()) {
+      await deps.store.releaseClaim(run.id, workerId, run.claimToken);
+      return handled;
+    }
     handled++;
     try {
       await runOne(run, workerId, deps);

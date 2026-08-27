@@ -252,6 +252,7 @@ function fakeStore(queue: ClaimedRun[] = []) {
     notes: [] as string[],
     finished: [] as Array<{ status: string; reason: string; spentUsd?: number }>,
     claims: 0,
+    released: [] as Array<{ runId: string; workerId: string; claimToken: string }>,
     heartbeats: 0,
   };
   let claimHeld = true;
@@ -259,6 +260,10 @@ function fakeStore(queue: ClaimedRun[] = []) {
     async claimNextRun() {
       calls.claims++;
       return queue.shift() ?? null;
+    },
+    async releaseClaim(runId, workerId, claimToken) {
+      calls.released.push({ runId, workerId, claimToken });
+      return claimHeld;
     },
     async setRowsTotal(_id, _workerId, _claimToken, n, v) {
       calls.rowsTotal.push([n, v]);
@@ -540,6 +545,62 @@ describe("draining the queue", () => {
     assert.equal(handled, 1);
     assert.equal(f.calls.finished[0].status, "failed");
     assert.match(f.calls.finished[0].reason, /python not found/);
+  });
+
+  it("finishes the run in flight but claims no new run after a graceful stop", async () => {
+    const f = fakeStore([run({ id: "in-flight" }), run({ id: "must-remain-queued" })]);
+    let stopping = false;
+    const handled = await drain(
+      "w1",
+      {
+        ...deps(f.store, fakeProcess([RESEARCH_OUT], 0).proc),
+        spawnPipeline: () => {
+          stopping = true;
+          return fakeProcess([RESEARCH_OUT], 0).proc;
+        },
+      },
+      () => stopping,
+    );
+
+    assert.equal(handled, 1);
+    assert.equal(f.calls.claims, 1, "shutdown must be observed before the next queue claim");
+    assert.equal(f.calls.finished.length, 1, "the already-claimed run still finishes cleanly");
+    assert.equal(f.calls.released.length, 0, "an in-flight pipeline keeps its existing claim");
+  });
+
+  it("releases a claim when shutdown wins the asynchronous claim race", async () => {
+    const claimed = run({ id: "claimed-during-shutdown", claimToken: "race-token" });
+    const f = fakeStore();
+    let stopping = false;
+    let pipelineStarts = 0;
+    f.store.claimNextRun = async () => {
+      f.calls.claims++;
+      stopping = true;
+      return claimed;
+    };
+
+    const handled = await drain(
+      "w-race",
+      {
+        ...deps(f.store, fakeProcess([], 0).proc),
+        spawnPipeline: () => {
+          pipelineStarts++;
+          return fakeProcess([], 0).proc;
+        },
+      },
+      () => stopping,
+    );
+
+    assert.equal(handled, 0);
+    assert.equal(pipelineStarts, 0, "a post-signal claim must never start Python");
+    assert.deepEqual(f.calls.released, [
+      {
+        runId: "claimed-during-shutdown",
+        workerId: "w-race",
+        claimToken: "race-token",
+      },
+    ]);
+    assert.equal(f.calls.finished.length, 0, "requeueing is not a terminal run outcome");
   });
 });
 

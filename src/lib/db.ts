@@ -1,17 +1,15 @@
-/** Which database backend is active. */
-export type DbSource = "neon" | "pglite";
+import { resolveDatabaseConfiguration, type DbSource } from "./db-config.ts";
 
-// An empty/whitespace DATABASE_URL (an easy misconfig in deploy UIs) must mean
-// "unset" — otherwise production would silently run on the PGLite fallback.
-const rawDatabaseUrl = typeof process !== "undefined" ? process.env.DATABASE_URL : undefined;
-const databaseUrl = rawDatabaseUrl && rawDatabaseUrl.trim() ? rawDatabaseUrl : undefined;
+export type { DbSource } from "./db-config.ts";
+
+const databaseConfiguration = resolveDatabaseConfiguration(process.env);
+const databaseUrl = databaseConfiguration.databaseUrl;
 
 /**
- * Active backend: **Neon** when `DATABASE_URL` is set, or on Vercel (hosted
- * deploys must not fall back to the 16MB WASM engine). Otherwise a local
- * embedded **PGLite** so the live preview works with nothing configured.
+ * Active backend: **Neon** when `DATABASE_URL` is set. Hosted execution fails
+ * before this point if it is absent; only local preview may use embedded PGLite.
  */
-export const dbSource: DbSource = databaseUrl || process.env.VERCEL ? "neon" : "pglite";
+export const dbSource: DbSource = databaseConfiguration.source;
 
 /**
  * Minimal shared SQL surface, satisfied by both Neon and PGLite. Both the

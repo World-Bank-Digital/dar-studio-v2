@@ -20,7 +20,7 @@ const root = join(dirname(fileURLToPath(import.meta.url)), "..");
 // so without this the app runs against Neon locally while the migrator quietly skips —
 // and the schema the app needs is never applied to the database it is actually using.
 // Deploys pass DATABASE_URL in the environment and never reach this.
-if (!process.env.DATABASE_URL) {
+if (!process.env.DATABASE_URL && !process.env.MIGRATION_DATABASE_URL) {
   try {
     process.loadEnvFile(join(root, ".env"));
   } catch {
@@ -28,8 +28,16 @@ if (!process.env.DATABASE_URL) {
   }
 }
 
-const databaseUrl = process.env.DATABASE_URL;
+// Deploys use Neon's direct endpoint for schema ownership while application
+// traffic and the worker use the pooled DATABASE_URL.
+const databaseUrl = process.env.MIGRATION_DATABASE_URL || process.env.DATABASE_URL;
 if (!databaseUrl) {
+  if (process.env.NETLIFY === "true") {
+    console.error(
+      "[migrate] DATABASE_URL is required on Netlify — refusing a deploy without durable Neon storage.",
+    );
+    process.exit(1);
+  }
   console.log(
     "[migrate] DATABASE_URL not set — skipping (the PGLite fallback migrates itself).",
   );
@@ -41,7 +49,14 @@ const migrationsDir = join(root, "migrations");
 async function main() {
   const pool = new pg.Pool({ connectionString: databaseUrl, max: 1 });
   const client = await pool.connect();
+  let migrationLockHeld = false;
   try {
+    // Two provider builds can overlap. Serialize the complete read/apply/record
+    // pass on one Postgres session; disconnects release this lock automatically.
+    await client.query("SELECT pg_advisory_lock(hashtext($1))", [
+      "dar-studio:schema-migrations:v1",
+    ]);
+    migrationLockHeld = true;
     await client.query(
       "CREATE TABLE IF NOT EXISTS _migrations (name TEXT PRIMARY KEY, applied_at TIMESTAMPTZ NOT NULL DEFAULT now())",
     );
@@ -81,6 +96,16 @@ async function main() {
     }
     console.log(count ? `[migrate] done — ${count} migration(s) applied.` : "[migrate] up to date.");
   } finally {
+    if (migrationLockHeld) {
+      try {
+        await client.query("SELECT pg_advisory_unlock(hashtext($1))", [
+          "dar-studio:schema-migrations:v1",
+        ]);
+      } catch {
+        // A dead connection already released its session lock. Preserve the
+        // migration error rather than replacing it with an unlock error.
+      }
+    }
     client.release();
     await pool.end();
   }

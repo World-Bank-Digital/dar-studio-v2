@@ -1111,11 +1111,11 @@ describe("post-completion human approval store", () => {
           fx.sql,
         ),
       );
-      assert.equal(
-        unwrap(await getApprovalArtifactAccess(fx.runId, "bundle", USERS.assessor.id, fx.sql))
-          .accessAs,
-        "assigned_reviewer",
+      const originalArtifactAccess = unwrap(
+        await getApprovalArtifactAccess(fx.runId, "bundle", USERS.assessor.id, fx.sql),
       );
+      assert.equal(originalArtifactAccess.accessAs, "assigned_reviewer");
+      assert.equal(originalArtifactAccess.reviewerAssignmentId, original.id);
 
       const missingReason = await assignApprovalReviewer(
         {
@@ -1235,11 +1235,11 @@ describe("post-completion human approval store", () => {
       const activeReview = unwrap(await getAssignedReview(replacement.id, USERS.other.id, fx.sql));
       assert.equal(activeReview.ownDecision, null);
       assert.equal("priorDecisions" in activeReview, false);
-      assert.equal(
-        unwrap(await getApprovalArtifactAccess(fx.runId, "bundle", USERS.other.id, fx.sql))
-          .accessAs,
-        "assigned_reviewer",
+      const replacementArtifactAccess = unwrap(
+        await getApprovalArtifactAccess(fx.runId, "bundle", USERS.other.id, fx.sql),
       );
+      assert.equal(replacementArtifactAccess.accessAs, "assigned_reviewer");
+      assert.equal(replacementArtifactAccess.reviewerAssignmentId, replacement.id);
       const state = unwrap(await getOwnerApprovalState(fx.countryId, USERS.owner.id, fx.sql));
       assert.deepEqual(
         state.assignments.map((assignment) => assignment.id),

@@ -1,0 +1,12 @@
+**
+!Dockerfile.worker
+!package.json
+!package-lock.json
+!deploy/
+!deploy/**
+!migrations/
+!migrations/**
+!scripts/
+!scripts/**
+!src/
+!src/**

@@ -213,6 +213,7 @@ export interface ApprovalArtifactAccess {
   ownerUserId: string;
   bundleSha256: string;
   packageId: string | null;
+  reviewerAssignmentId: string | null;
   targetIdentitySha256: string | null;
   accessAs: "country_owner" | "assigned_reviewer";
 }
@@ -2308,6 +2309,7 @@ export async function getApprovalArtifactAccess(
       artifact_owner_user_id: string;
       bundle_sha256: string;
       package_id: string | null;
+      reviewer_assignment_id: string | null;
       target_identity_sha256: string | null;
       owner_access: boolean;
       reviewer_access: boolean;
@@ -2318,19 +2320,10 @@ export async function getApprovalArtifactAccess(
               workflow_run.user_id as artifact_owner_user_id,
               bundle.sha256 as bundle_sha256,
               package.id as package_id,
+              active_reviewer.assignment_id as reviewer_assignment_id,
               package.target_identity_sha256,
               (workflow_run.user_id = $3) as owner_access,
-              exists (
-                select 1 from workflow_approval_assignments assignment
-                where assignment.package_id = package.id
-                  and assignment.target_identity_sha256 = package.target_identity_sha256
-                  and assignment.reviewer_user_id = $3
-                  and assignment.active
-                  and not exists (
-                    select 1 from workflow_approval_assignment_supersessions supersession
-                    where supersession.revoked_assignment_id = assignment.id
-                  )
-              ) as reviewer_access
+              (active_reviewer.assignment_id is not null) as reviewer_access
        from runs workflow_run
        join workflow_run_artifacts artifact
          on artifact.run_id = workflow_run.id
@@ -2343,6 +2336,19 @@ export async function getApprovalArtifactAccess(
        left join workflow_approval_packages package
          on package.run_id = workflow_run.id
         and package.artifact_set_id = workflow_run.workflow_artifact_set_id
+       left join lateral (
+                select assignment.id as assignment_id
+                from workflow_approval_assignments assignment
+                where assignment.package_id = package.id
+                  and assignment.target_identity_sha256 = package.target_identity_sha256
+                  and assignment.reviewer_user_id = $3
+                  and assignment.active
+                  and not exists (
+                    select 1 from workflow_approval_assignment_supersessions supersession
+                    where supersession.revoked_assignment_id = assignment.id
+                  )
+                limit 1
+       ) active_reviewer on true
        where workflow_run.id = $1 and workflow_run.pass = 'workflow'
          and workflow_run.status = 'done'
          and artifact.workflow_id = $4
@@ -2366,7 +2372,10 @@ export async function getApprovalArtifactAccess(
         "Artifact access is not authorized for this exact package",
       );
     }
-    if (row.reviewer_access && (!row.package_id || !row.target_identity_sha256)) {
+    if (
+      row.reviewer_access &&
+      (!row.package_id || !row.reviewer_assignment_id || !row.target_identity_sha256)
+    ) {
       throw new StoreRefusal(
         "INVALID_STATE",
         "Reviewer access has no exact immutable package binding",
@@ -2395,6 +2404,7 @@ export async function getApprovalArtifactAccess(
       ownerUserId: row.artifact_owner_user_id,
       bundleSha256: row.bundle_sha256,
       packageId: row.package_id,
+      reviewerAssignmentId: row.reviewer_assignment_id,
       targetIdentitySha256: row.target_identity_sha256,
       accessAs: row.owner_access ? "country_owner" : "assigned_reviewer",
     };

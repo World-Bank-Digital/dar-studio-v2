@@ -9,16 +9,17 @@ import { createHash } from "node:crypto";
 import { posix as path } from "node:path";
 import { isDeepStrictEqual } from "node:util";
 
+import {
+  MAX_WORKFLOW_ARTIFACT_BYTES,
+  MAX_WORKFLOW_ARTIFACT_TOTAL_BYTES,
+  MAX_WORKFLOW_BUNDLE_BYTES,
+} from "./artifact-limits.ts";
 import { DAMM_WORKFLOW_METHODOLOGY, runMethodologyManifest } from "./methodology.ts";
 import { DAMM_MODEL_EXPORT } from "./model.ts";
 import { artifactsFor, type WorkflowPackageSelector } from "./worker-artifacts.ts";
 import { DAR_WORKFLOW, DAR_WORKFLOW_SHA256 } from "./workflow.ts";
 
 const SHA256 = /^[a-f0-9]{64}$/;
-// Keep the database-only verifier at least as strict as worker publication.
-const MAX_WORKFLOW_ARTIFACT_BYTES = 50 * 1024 * 1024;
-const MAX_WORKFLOW_BUNDLE_BYTES = 250 * 1024 * 1024;
-const MAX_WORKFLOW_ARTIFACT_TOTAL_BYTES = 400 * 1024 * 1024;
 const PACKAGE_CATEGORIES = new Set([
   "input",
   "narrative",
