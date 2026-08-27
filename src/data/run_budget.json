@@ -3,7 +3,7 @@
  "default_ceiling_usd": 500.0,
  "allocation": {
   "research": 0.35,
-  "g2": 0.1,
+  "automated_challenge": 0.1,
   "country_research": 0.075,
   "international_lessons": 0.075,
   "ai": 0.1,

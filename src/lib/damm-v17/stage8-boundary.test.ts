@@ -301,6 +301,35 @@ describe("stored Stage 8 boundary verification", () => {
     );
   });
 
+  it("requires the exact Stage 1 engine input inside the Stage 8 package", async () => {
+    const fixture = await syntheticValidPackage();
+    const packageManifest = JSON.parse(
+      decoder.decode(artifact(fixture, "package-manifest").content),
+    );
+    const packagedInput = packageManifest.files.find(
+      (candidate: { stage_id?: string; artifact_id?: string }) =>
+        candidate.stage_id === "damm_diagnostic" && candidate.artifact_id === "engine_input",
+    );
+    assert.ok(packagedInput);
+
+    mutateJsonArtifact(fixture, "package-manifest", (manifest) => {
+      manifest.files = manifest.files.filter(
+        (candidate: { path: string }) => candidate.path !== packagedInput.path,
+      );
+      manifest.file_count = manifest.files.length;
+    });
+    rebindStage8Artifact(fixture, "package-manifest");
+    fixture.artifacts = fixture.artifacts.filter(
+      (candidate) => candidate.relativePath !== packagedInput.path,
+    );
+
+    await rejection(
+      () => verifyStoredStage8Boundary(fixture.run, fixture.artifacts),
+      "INVALID_PACKAGE_MAPPING",
+      /exactly one selected Stage 1 engine input/,
+    );
+  });
+
   it("requires the exact catalogue, with no missing or unrecognized stored key", async () => {
     const missing = await syntheticValidPackage();
     missing.artifacts = missing.artifacts.filter(

@@ -27,9 +27,9 @@ export type RunStatus =
   "queued" | "running" | "paused" | "exhausted" | "failed" | "done" | "cancelled";
 
 /**
- * The pipeline's own budget passes. Named to match, so no translation is needed.
- * The upstream compatibility id `g2` is an automated vendor challenge, not the G2
- * independent human review and not a human approval of any kind.
+ * App run identifiers. Most match the upstream budget pass directly; the legacy/admin
+ * database id `g2` is translated once to `automated_challenge`. It is machine QC, never
+ * G2 independent human review or a human approval of any kind.
  */
 export type RunPass =
   "workflow" | "research" | "g2" | "scans" | "foresight" | "generation" | "diagnostic";
@@ -94,9 +94,13 @@ export function isTerminal(s: RunStatus): boolean {
  * with no script would fall through to the research orchestrator and spend a full
  * research budget under another pass's name.
  */
-const LEDGER_PASS_BY_RUN_PASS: Record<Exclude<RunPass, "workflow">, string> = {
+type LedgerPass = keyof typeof budget.allocation;
+
+const LEDGER_PASS_BY_RUN_PASS: Record<Exclude<RunPass, "workflow">, LedgerPass> = {
   research: "research",
-  g2: "g2",
+  // Legacy/admin database pass id. Execution translates it to the canonical
+  // machine-challenge budget, default, script, and artifact identity.
+  g2: "automated_challenge",
   // The retained admin `scans.py` surface is the international-lessons stage in the
   // canonical DAMM ledger. Keep the DB/API alias while charging the exported key.
   scans: "international_lessons",
@@ -205,13 +209,14 @@ export function isActive(s: RunStatus): boolean {
 }
 
 /**
- * The output basename a pass writes under.
+ * The research basename a pass reads and writes under.
  *
- * A research pass mints one. The legacy automated challenge does not: the upstream
- * `gate2.py` compatibility script takes `--run` and reads an existing pass's files. If
- * that pass minted its own name it would inspect nothing and report a false clean machine-
- * QC result. Every later pass inherits the research basename, which is why this returns
- * null when there is none to inherit — the caller has to refuse rather than invent one.
+ * A research pass mints one. The automated challenge does not: the upstream
+ * `automated_challenge.py` entry point takes `--run` and reads an existing pass's files.
+ * If that pass minted its own name it would inspect nothing and report a false clean
+ * machine-QC result. Every later pass inherits the research basename, which is why this
+ * returns null when there is none to inherit — the caller has to refuse rather than
+ * invent one.
  *
  * `token` is what makes a minted name unique, and it is not decoration. The basename is
  * what the pipeline checkpoints under, and it is always invoked with `--resume`. A name
@@ -413,7 +418,7 @@ export function projectToFinish(
   if (rowsRemaining <= 0) return null;
   const costPerRow = run.spentUsd / run.rowsDone;
   const projectedPassCost = costPerRow * run.rowsTotal;
-  const share = run.pass === "workflow" ? 1 : (ALLOCATION[run.pass] ?? 0);
+  const share = run.pass === "workflow" ? 1 : (ALLOCATION[LEDGER_PASS_BY_RUN_PASS[run.pass]] ?? 0);
   const needed = share > 0 ? (projectedPassCost * (1 + RATE_ALLOWANCE)) / share : 0;
   return {
     costPerRow,

@@ -610,9 +610,6 @@ function verifyPackageMappings(
 ): ReadonlyMap<string, StoredWorkflowArtifact> {
   const canonicalKeys = new Set(artifactsFor("workflow").map((artifact) => artifact.key));
   const expectedKeys = new Set(canonicalKeys);
-  // The worker persists the selected Stage 1 engine input outside the Stage 8 bundle
-  // because the pinned upstream exporter currently omits supplemental stage records.
-  if (byKey.has("assessment-input")) expectedKeys.add("assessment-input");
   const storedByPackagePath = new Map<string, StoredWorkflowArtifact>();
   for (const link of artifactsFor("workflow")) {
     if (link.workflowSource?.kind !== "package") continue;
@@ -1131,28 +1128,29 @@ function verifyStoredAssessmentInput(
   const packagedMatches = files.filter(
     (file) => file.stageId === "damm_diagnostic" && file.artifactId === root.assessmentInput.key,
   );
-  if (packagedMatches.length > 1) {
-    refuse("INVALID_PACKAGE_MAPPING", "The package repeats the selected assessment input.");
+  if (packagedMatches.length !== 1) {
+    refuse(
+      "INVALID_PACKAGE_MAPPING",
+      "The package must contain exactly one selected Stage 1 engine input.",
+    );
   }
-  if (packagedMatches.length === 1) {
-    const packaged = packagedMatches[0];
-    const packagedStored = storedByPackagePath.get(packaged.path);
-    if (!packagedStored) {
-      refuse("INVALID_PACKAGE_MAPPING", "The packaged assessment input has no stored bytes.");
-    }
-    if (
-      packaged.category !== "structured" ||
-      packaged.sourceSha256 !== root.assessmentInput.sha256 ||
-      packaged.sha256 !== root.assessmentInput.sha256 ||
-      packagedStored.sha256 !== stored.sha256 ||
-      packagedStored.byteSize !== stored.byteSize ||
-      !packagedStored.content.every((value, index) => value === stored.content[index])
-    ) {
-      refuse(
-        "INVALID_PACKAGE_MAPPING",
-        "The packaged assessment input differs from the stored Stage 1 engine input.",
-      );
-    }
+  const packaged = packagedMatches[0];
+  const packagedStored = storedByPackagePath.get(packaged.path);
+  if (!packagedStored) {
+    refuse("INVALID_PACKAGE_MAPPING", "The packaged assessment input has no stored bytes.");
+  }
+  if (
+    packaged.category !== "structured" ||
+    packaged.sourceSha256 !== root.assessmentInput.sha256 ||
+    packaged.sha256 !== root.assessmentInput.sha256 ||
+    packagedStored.sha256 !== stored.sha256 ||
+    packagedStored.byteSize !== stored.byteSize ||
+    !packagedStored.content.every((value, index) => value === stored.content[index])
+  ) {
+    refuse(
+      "INVALID_PACKAGE_MAPPING",
+      "The packaged assessment input differs from the stored Stage 1 engine input.",
+    );
   }
   return stored;
 }

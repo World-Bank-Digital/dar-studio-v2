@@ -22,16 +22,16 @@ H [ 6/59] 1.5          hold   Documented LNone No national all-crop post-harvest
 wrote EGY_shadow_input.json — 59 rows, 23 gaps, 10 held
 spend $15.14 of $200 allocated ($500 country ceiling) in 23 minutes, 1003 vendor calls`;
 
-// Verbatim upstream compatibility output. Despite its historical labels, this is an
-// automated vendor challenge and has no G1/G2 human-review or approval effect.
-const AUTOMATED_CHALLENGE = `Gate 2 on EGY_shadow · reviewer openai/gpt-5.6-terra
+// Canonical upstream output. This is an automated vendor challenge and has no G1/G2
+// human-review or approval effect.
+const AUTOMATED_CHALLENGE = `Automated challenge on EGY_shadow · challenger openai/gpt-5.6-terra
 scope: 38 of 57 rows — 12 prerequisites, 22 gaps, 11 holds (7 overlap)
 
   [ 1/38] 1.6          gap          confirmed -> upheld     $  0.32   66s
 F [11/38] 3.7          hold         adjust    -> filled     $  2.10  147s
 W [32/38] 7.12         prerequisite refuted   -> withdrawn  $  5.50   80s
 
-reviewed 38 rows · adjusted 3 · filled 4 · upheld 29`;
+challenged 38 rows · adjusted 3 · filled 4 · upheld 29`;
 
 describe("reading the pipeline's progress", () => {
   it("takes the row total and the vendor from the opening line", () => {
@@ -103,6 +103,16 @@ describe("reading the pipeline's progress", () => {
     assert.equal(finalEvent?.kind, "finished");
     assert.match(
       finalEvent?.kind === "finished" ? finalEvent.message : "",
+      /does not satisfy G1 or G2 human review/,
+    );
+  });
+
+  it("keeps the retired reviewed summary as machine-QC-only compatibility input", () => {
+    const event = parseLine("reviewed 38 rows · adjusted 3 · filled 4 · upheld 29");
+    assert.equal(event?.kind, "finished");
+    assert.match(event?.kind === "finished" ? event.message : "", /machine-checked 38 rows/);
+    assert.match(
+      event?.kind === "finished" ? event.message : "",
       /does not satisfy G1 or G2 human review/,
     );
   });

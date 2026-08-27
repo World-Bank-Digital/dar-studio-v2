@@ -515,14 +515,14 @@ describe("honest Draft lifecycle", () => {
   };
 
   it("keeps autonomous completion visibly pre-review Draft", () => {
-    assert.equal(deriveApprovalLifecycle(base), "pre_review_draft");
+    assert.equal(deriveApprovalLifecycle(base), "draft_pre_review");
     assert.equal(deriveApprovalLifecycle({ ...base, reviewStarted: true }), "g1_pending");
     assert.equal(
       deriveApprovalLifecycle({
         ...base,
         decisions: [decision("G1", "approved", actor("bot", "assessor", "automated"))],
       }),
-      "pre_review_draft",
+      "draft_pre_review",
     );
   });
 

@@ -100,6 +100,12 @@ It also produces a ZIP bundle and SHA-256 manifest. When files were uploaded
 before launch, the bundle includes each frozen original file, its verified text
 extraction, and its provenance envelope.
 
+The bundle must also contain exactly one structured Stage 1 `engine_input`,
+byte-identical to the input bound by the root workflow manifest. DAR Studio keeps
+the same bytes as an `assessment-input` download/approval alias, but that
+standalone artifact can never substitute for a missing or different packaged
+input.
+
 ### Methodology identity
 
 DAR Studio executes one content-addressed DAMM v1.7 methodology revision. The
@@ -121,11 +127,12 @@ includes the model, schema, generated census, export manifest, and a per-run
 methodology manifest. The model remains honestly labelled `draft for review`
 and `ratified: false`; provenance does not imply ratification.
 
-On upgrade, migration `0011` stops before changing the schema if an older
-workflow is still active. Allow that workflow to finish under the prior release,
-then retry the deployment; no in-flight run is failed or relaunched. A deferred
-database invariant prevents a still-running old app process from committing an
-unattributed workflow during a rolling deployment.
+On methodology upgrades, migrations `0011` and `0013` stop before changing the
+schema or active source pin if an older workflow is still active. Allow that
+workflow to finish under the prior release, then retry the deployment; no
+in-flight run is failed or relaunched. A deferred database invariant prevents a
+still-running old app process from committing a missing or stale methodology
+snapshot during a rolling deployment.
 
 ## Running locally
 

@@ -49,7 +49,7 @@ describe("model file contract", () => {
       status: model.status,
       ratified: model.ratified,
       sourceRepository: "https://github.com/World-Bank-Digital/DAMM",
-      sourceCommit: "141ebd4db7fb8ebb0d21ed64ead6aef24a7d7027",
+      sourceCommit: "92c6ffe8b331347bc05f345785fe409753401a24",
       sourceModelPath: "model/DAMM-v1.7-model.json",
       sourceSchemaPath: "model/DAMM-v1.7-model.schema.json",
       modelSha256: DAMM_MODEL_SHA256,
@@ -75,7 +75,7 @@ describe("model file contract", () => {
       renderer: {
         version: "1.7",
         path: "gauntlet/loop-1/render_v17.py",
-        sha256: "98f2a52e0be7f54ff38095db86a3f01525527661a4e6993f7c2ee0da1d2cb9c3",
+        sha256: "9dc5d6169c2ae6694d9a0dbc165e61d6557b2589075b962e8def98ec13fd6ba8",
       },
     });
     assert.equal(Object.isFrozen(DAMM_RUNTIME_IDENTITY), true);

@@ -1,14 +1,11 @@
-export type ApprovalLifecycle =
-  | "pre_review_draft"
-  | "g1_pending"
-  | "g2_pending"
-  | "g3_pending"
-  | "revisions_required"
-  | "approved_draft"
-  | "canonical_final";
+import type { ApprovalLifecycleState } from "@/lib/damm-v17/approval-lifecycle";
+
+export type ApprovalLifecycle = ApprovalLifecycleState;
 
 export function lifecycleLabel(lifecycle: ApprovalLifecycle, methodologyRatified: boolean): string {
   switch (lifecycle) {
+    case "draft_pre_review":
+      return "Draft · pre-review";
     case "g1_pending":
       return "Draft · G1 pending";
     case "g2_pending":
@@ -21,7 +18,5 @@ export function lifecycleLabel(lifecycle: ApprovalLifecycle, methodologyRatified
       return "Approved Draft release";
     case "canonical_final":
       return methodologyRatified ? "Canonical Final release" : "Approved Draft release";
-    default:
-      return "Draft · pre-review";
   }
 }

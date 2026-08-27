@@ -130,13 +130,14 @@ aliases are compatibility entry points only and are never called by historical
 v1 identity verification; later canonicalization rules must use new versioned
 names rather than replacing v1 behavior.
 
-The pinned upstream exporter currently omits its supplemental `engine_input`
-from the Stage 8 ZIP even though the root workflow and methodology manifests
-bind it. The app worker therefore persists the already-verified input as the
-canonical `assessment-input` artifact in the same immutable artifact set. G1
-rows and the approval/release identity are derived from those bytes. Upstream
-should still add that supplemental input to the package itself; doing so later
-will not require weakening this app-side binding.
+The pinned upstream exporter requires exactly one structured Stage 1
+`engine_input` inside the Stage 8 ZIP and binds its source/content digest to the
+root workflow manifest. The app worker must reject Draft publication when that
+packaged payload is missing, duplicated, relabelled, or different. It also
+persists the same verified bytes as the `assessment-input` artifact in the
+immutable artifact set so G1 and approval/release identity have a stable
+app-addressable key. That standalone alias is a byte-identical convenience,
+never a fallback for an incomplete bundle.
 
 ## Artifact and trust boundary
 
@@ -167,10 +168,12 @@ they can appear in Documents or become a review target; failed checks remain
 hidden. Downloads always recheck the requested bytes before serving them.
 
 Migration `0011` refuses to install while any pre-methodology workflow is still
-active. Let the existing release finish those runs, then retry deployment; the
-migration must never terminate or relaunch an in-flight workflow. Its deferred
-database invariant also rejects old-version launches during a rolling deployment
-unless the launch transaction contains the required methodology snapshot.
+active, and migration `0013` applies the same boundary when advancing the pinned
+DAMM source/renderer. Let the existing release finish those runs, then retry
+deployment; a migration must never terminate or relaunch an in-flight workflow.
+The deferred database invariant also rejects old-version launches during a
+rolling deployment unless the launch transaction contains the exact current
+methodology snapshot.
 
 Stage 8 must provide:
 

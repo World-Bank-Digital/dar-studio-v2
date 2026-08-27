@@ -9,7 +9,7 @@
  * Two rules this file exists to keep.
  *
  * **The pipeline record is the source of record for money.** Stdout is followed for
- * liveness, while final spend comes from a legacy `<out>_spend.json` ledger or the
+ * liveness, while final spend comes from the pass's `<prefix>_spend.json` ledger or the
  * coordinator's `workflow-manifest.json`. If console output changes, accounting stays
  * anchored to the pipeline record.
  *
@@ -398,7 +398,9 @@ export function argsFor(run: Run): { script: string; args: string[] } {
   // pass's name and bill it to that pass's allocation.
   const SCRIPTS: Partial<Record<RunPass, string>> = {
     research: "research_orchestrator.py",
-    g2: "gate2.py",
+    // `g2` is the retained legacy/admin database id. Execution always enters the
+    // canonically named machine-challenge script.
+    g2: "automated_challenge.py",
     scans: "scans.py",
     foresight: "foresight.py",
     generation: "generate_dar.py",
@@ -433,10 +435,10 @@ export function argsFor(run: Run): { script: string; args: string[] } {
     };
   }
 
-  // The upstream `gate2.py` compatibility script is an automated vendor challenge,
-  // never G2 human review. It takes --run because it reads an existing pass rather than
-  // naming a new one. Passing --out there is accepted as unknown and machine QC reads
-  // the wrong basename.
+  // The automated challenge is machine QC, never G2 human review. It takes --run because
+  // it reads an existing research pass rather than naming a new one. Its own resume logic
+  // reads unambiguous historical `_g2_*` checkpoints and publishes canonical aliases
+  // after a successful legacy resume.
   const nameFlag = run.pass === "g2" ? "--run" : "--out";
   return {
     script: path.join(dir, script),
@@ -554,9 +556,14 @@ export function defaultDeps(): WorkerDeps {
           return null;
         }
       }
-      // The pipeline writes its ledger beside the assessment, in gauntlet/loop-1.
-      const p = path.join(pipelineDir(), "gauntlet/loop-1", `${ledgerName(run)}_spend.json`);
+      // The pipeline writes its ledger beside the assessment, in gauntlet/loop-1. A
+      // historical machine-challenge run may still have only its retired `_g2_spend`
+      // checkpoint; conflicting aliases are never selected silently.
       try {
+        const p =
+          run.pass === "g2"
+            ? compatibleAutomatedChallengePath(run, "spend")
+            : path.join(pipelineDir(), "gauntlet/loop-1", `${ledgerName(run)}_spend.json`);
         const j = JSON.parse(await readFile(p, "utf8"));
         const total = j?.summary?.total;
         return typeof total === "number" ? total : null;
@@ -580,8 +587,50 @@ export function defaultDeps(): WorkerDeps {
  * pass leaves behind, and reading it is how the rows an exhausted pass already paid for
  * can be imported without inventing the ones it never reached.
  */
+type AutomatedChallengeFile = "input" | "state" | "spend" | "findings";
+
+function regularFileBytes(filename: string, label: string): Buffer | null {
+  let stat: ReturnType<typeof lstatSync>;
+  try {
+    stat = lstatSync(filename);
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") return null;
+    throw error;
+  }
+  if (!stat.isFile() || stat.isSymbolicLink()) {
+    throw new Error(`${label} is not a regular file.`);
+  }
+  return readFileSync(filename);
+}
+
+/**
+ * Resolve one canonical machine-challenge file with a narrowly scoped historical alias.
+ * New runs select the canonical name even before it exists. An old `_g2_*` file remains
+ * readable/resumable, but two aliases must carry byte-identical content; otherwise there
+ * is no trustworthy identity to select.
+ */
+function compatibleAutomatedChallengePath(run: Run, file: AutomatedChallengeFile): string {
+  const dir = path.join(pipelineDir(), "gauntlet/loop-1");
+  const canonical = path.join(dir, `${run.outBasename}_automated_challenge_${file}.json`);
+  const legacy = path.join(dir, `${run.outBasename}_g2_${file}.json`);
+  const canonicalBytes = regularFileBytes(canonical, `Canonical automated-challenge ${file}`);
+  const legacyBytes = regularFileBytes(legacy, `Legacy automated-challenge ${file}`);
+  if (canonicalBytes && legacyBytes && !canonicalBytes.equals(legacyBytes)) {
+    throw new Error(`Conflicting canonical and legacy automated-challenge ${file} files.`);
+  }
+  if (canonicalBytes) return canonical;
+  if (legacyBytes) return legacy;
+  return canonical;
+}
+
 export function passFilePaths(run: Run): { input: string; state: string } {
   const dir = path.join(pipelineDir(), "gauntlet/loop-1");
+  if (run.pass === "g2") {
+    return {
+      input: compatibleAutomatedChallengePath(run, "input"),
+      state: compatibleAutomatedChallengePath(run, "state"),
+    };
+  }
   return {
     input: path.join(dir, `${ledgerName(run)}_input.json`),
     state: path.join(dir, `${ledgerName(run)}_state.json`),
@@ -662,13 +711,13 @@ const ARTIFACTS: Record<RunPass, Artifact[]> = {
     {
       key: "input",
       label: "Machine-QC engine input",
-      filename: "_g2_input.json",
+      filename: "_automated_challenge_input.json",
       contentType: JSON_T,
     },
     {
       key: "findings",
       label: "Automated challenge findings",
-      filename: "_g2_findings.json",
+      filename: "_automated_challenge_findings.json",
       contentType: JSON_T,
     },
   ],
@@ -1517,6 +1566,18 @@ function verifiedPackageIndex(
   const validRecords = records as PackageFileRecord[];
   if (new Set(validRecords.map((record) => record.path)).size !== validRecords.length) return null;
 
+  const packagedAssessmentInputs = validRecords.filter(
+    (record) => record.stage_id === "damm_diagnostic" && record.artifact_id === "engine_input",
+  );
+  if (
+    packagedAssessmentInputs.length !== 1 ||
+    packagedAssessmentInputs[0].category !== "structured" ||
+    packagedAssessmentInputs[0].sha256 !== completed.assessmentInput.sha256 ||
+    packagedAssessmentInputs[0].source_sha256 !== completed.assessmentInput.sha256
+  ) {
+    return null;
+  }
+
   const expectedUploadSignature = {
     schema_version: "damm.uploads-manifest/v1",
     manifest_path: completed.uploadManifest.path,
@@ -1694,10 +1755,19 @@ export function artifactPath(run: Run, key: string): { path: string; artifact: A
     }
     return resolved ? { artifact, path: resolved } : null;
   }
-  return {
-    artifact,
-    path: path.join(pipelineDir(), "gauntlet/loop-1", `${run.outBasename}${artifact.filename}`),
-  };
+  try {
+    return {
+      artifact,
+      path:
+        run.pass === "g2"
+          ? compatibleAutomatedChallengePath(run, key === "input" ? "input" : "findings")
+          : path.join(pipelineDir(), "gauntlet/loop-1", `${run.outBasename}${artifact.filename}`),
+    };
+  } catch {
+    // An ambiguous or non-regular compatibility alias is not an artifact DAR Studio may
+    // expose. The upstream resume entry point rejects the same condition before spending.
+    return null;
+  }
 }
 
 /** Explicit database-storage guardrails for the hash-verified completed download set. */
@@ -1922,7 +1992,9 @@ export async function readPassRows(run: Run): Promise<PassOutput | null> {
  * no two passes can overwrite each other's ledger.
  */
 function ledgerName(run: Run): string {
-  return run.pass === "research" ? run.outBasename : `${run.outBasename}_${run.pass}`;
+  if (run.pass === "research") return run.outBasename;
+  if (run.pass === "g2") return `${run.outBasename}_automated_challenge`;
+  return `${run.outBasename}_${run.pass}`;
 }
 
 /** What to record about vendors that were unavailable during a run. */

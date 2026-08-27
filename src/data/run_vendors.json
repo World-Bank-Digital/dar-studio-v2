@@ -1,5 +1,5 @@
 {
- "_source": "vendors._MODEL_PREFS and the --vendor defaults in research_orchestrator.py / gate2.py \u2014 exported, never restated. Regenerate with model/export_app_fixtures.py after changing either.",
+ "_source": "vendors._MODEL_PREFS and the --vendor defaults in research_orchestrator.py / automated_challenge.py \u2014 exported, never restated. Regenerate with model/export_app_fixtures.py after changing either.",
  "families": {
   "anthropic": [
    "claude-opus-5",
@@ -19,11 +19,11 @@
  },
  "runnable_passes": [
   "ai",
+  "automated_challenge",
   "country_research",
   "diagnostic",
   "export",
   "foresight",
-  "g2",
   "generation",
   "international_lessons",
   "investment",
@@ -31,7 +31,7 @@
  ],
  "pass_defaults": {
   "research": "anthropic/claude-opus-5",
-  "g2": "openai/gpt-5.6-terra",
+  "automated_challenge": "openai/gpt-5.6-terra",
   "country_research": "anthropic/claude-opus-5",
   "international_lessons": "anthropic/claude-opus-5",
   "ai": "anthropic/claude-opus-5",

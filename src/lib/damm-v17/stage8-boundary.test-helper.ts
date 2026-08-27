@@ -346,6 +346,20 @@ export async function buildSyntheticStoredStage8Package(
     selectorRecordByKey.set(link.key, file);
   }
 
+  // DAMM Stage 8 now packages the exact supplemental Stage 1 engine input even
+  // though it is not a required artifact in the immutable eight-stage contract.
+  const packagedAssessmentInputRecord: SyntheticPackageRecord = {
+    path: "structured/01_damm_diagnostic/engine_input.json",
+    sha256: assessmentInputSha256,
+    bytes: assessmentInputContent.byteLength,
+    category: "structured",
+    stage_id: "damm_diagnostic",
+    artifact_id: "engine_input",
+    source_sha256: assessmentInputSha256,
+  };
+  packageFiles.push(packagedAssessmentInputRecord);
+  packageBytes.set(packagedAssessmentInputRecord.path, assessmentInputContent);
+
   const packagedUploadManifestRecord: SyntheticPackageRecord = {
     path: "inputs/uploads-manifest.json",
     sha256: uploadManifestSha256,
@@ -491,6 +505,16 @@ export async function buildSyntheticStoredStage8Package(
     );
   });
   artifacts.push(
+    storedArtifact(
+      run,
+      `package-file-${createHash("sha256")
+        .update(packagedAssessmentInputRecord.path)
+        .digest("hex")
+        .slice(0, 24)}`,
+      packagedAssessmentInputRecord.path,
+      assessmentInputContent,
+      "application/json",
+    ),
     storedArtifact(
       run,
       `package-file-${createHash("sha256")

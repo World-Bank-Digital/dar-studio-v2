@@ -1,11 +1,10 @@
 /**
  * Reading the pipeline's own progress output.
  *
- * The worker spawns `research_orchestrator.py` or the legacy `gate2.py` automated
- * vendor-challenge script and has to know how far the run has got, what it has spent,
- * and why it stopped. That compatibility script performs machine QC only; it has no
- * G1/G2 human-review or approval effect. Two channels carry progress, and they are used
- * for different things on purpose:
+ * The worker spawns `research_orchestrator.py` or `automated_challenge.py` and has to
+ * know how far the run has got, what it has spent, and why it stopped. The automated
+ * challenge performs machine QC only; it has no G1/G2 human-review or approval effect.
+ * Two channels carry progress, and they are used for different things on purpose:
  *
  *  - **The checkpoint files are authoritative.** `<out>_spend.json` carries the ledger and
  *    `<out>_state.json` the completed rows. Those are what the pipeline itself resumes
@@ -73,8 +72,8 @@ const INCOMPLETE = /^\s*!!\s*(\d+\s+rows not researched.*)$/i;
 /** `wrote EGY_shadow_input.json — 59 rows, 23 gaps, 10 held` */
 const FINISHED = /^\s*wrote\s+(\S+_input\.json.*)$/;
 
-/** Upstream compatibility output: `reviewed 38 rows · adjusted 3 · filled 4 · upheld 29`. */
-const FINISHED_AUTOMATED_CHALLENGE = /^\s*(reviewed\s+\d+\s+rows.*)$/;
+/** Canonical `challenged …`; retired `reviewed …` remains readable for old checkpoints. */
+const FINISHED_AUTOMATED_CHALLENGE = /^\s*((?:challenged|reviewed)\s+\d+\s+rows.*)$/;
 
 /**
  * `    ! 1.4: perplexity discovery unavailable — 401 ... quota ...`
@@ -212,7 +211,7 @@ export function parseLine(line: string, expectedWorkflowRunId?: string): RunEven
   if ((m = INCOMPLETE.exec(line))) return { kind: "incomplete", message: m[1].trim() };
   if ((m = FINISHED.exec(line))) return { kind: "finished", message: m[1].trim() };
   if ((m = FINISHED_AUTOMATED_CHALLENGE.exec(line))) {
-    const detail = m[1].trim().replace(/^reviewed/i, "machine-checked");
+    const detail = m[1].trim().replace(/^(?:challenged|reviewed)/i, "machine-checked");
     return {
       kind: "finished",
       message:

@@ -1,6 +1,9 @@
 import { createHash } from "node:crypto";
 
+import type { ApprovalLifecycleState } from "./approval-lifecycle.ts";
 import type { EvidenceClass } from "./types.ts";
+
+export type { ApprovalLifecycleState } from "./approval-lifecycle.ts";
 
 export const APPROVAL_GATES = ["G1", "G2", "G3"] as const;
 export type ApprovalGate = (typeof APPROVAL_GATES)[number];
@@ -637,15 +640,6 @@ export function assertGateDecisionAllowed(input: GateDecisionPolicyInput): void 
   if (input.decision === "approved") assertG3AffirmationsForApproval(input.g3Affirmations);
 }
 
-export type ApprovalLifecycleState =
-  | "pre_review_draft"
-  | "g1_pending"
-  | "g2_pending"
-  | "g3_pending"
-  | "revisions_required"
-  | "approved_draft"
-  | "canonical_final";
-
 export type MethodologyVerificationStatus = "canonical" | "legacy_unverified" | "unverified";
 
 export interface ApprovalLifecycleInput {
@@ -661,7 +655,7 @@ export interface ApprovalLifecycleInput {
 export function deriveApprovalLifecycle(input: ApprovalLifecycleInput): ApprovalLifecycleState {
   const g1 = input.decisions.find((decision) => decision.gate === "G1");
   if (!validHumanDecision(g1, "assessor")) {
-    return input.reviewStarted ? "g1_pending" : "pre_review_draft";
+    return input.reviewStarted ? "g1_pending" : "draft_pre_review";
   }
   if (g1.decision === "revisions_required") return "revisions_required";
 

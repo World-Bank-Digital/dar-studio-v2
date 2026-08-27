@@ -153,6 +153,9 @@ function workflowRunInput(id: string, countryId: string) {
 }
 
 const ASSESSMENT_INPUT_SHA256 = "a".repeat(64);
+const PREVIOUS_DAMM_SOURCE_COMMIT = "141ebd4db7fb8ebb0d21ed64ead6aef24a7d7027";
+const PREVIOUS_DAMM_RENDERER_SHA256 =
+  "98f2a52e0be7f54ff38095db86a3f01525527661a4e6993f7c2ee0da1d2cb9c3";
 
 async function insertWorkflowMethodology(
   sql: Sql,
@@ -421,6 +424,85 @@ describe("0011 methodology upgrade", () => {
         /published workflow artifacts are immutable/i,
       );
       assert.ok(await getPublishedWorkflowArtifact("legacy-complete", "bundle", "user-1", sql));
+    } finally {
+      await pg.close();
+    }
+  });
+});
+
+describe("0013 methodology pin cutover", () => {
+  it("waits for stale active workflows and rejects stale or missing launch pins afterward", async () => {
+    const { pg, sql } = await databaseThroughMigration("0012_human_approval_chain.sql");
+    try {
+      await sql.transaction(async (transaction) => {
+        await transaction.query(
+          `insert into runs
+            (id, user_id, country_name, iso3, pass, status, ceiling_usd, out_basename)
+           values ('pre-cutover-active', 'user-1', 'Egypt', 'EGY', 'workflow',
+                   'queued', 500, 'EGY_pre_cutover_active')`,
+        );
+        await insertWorkflowMethodology(transaction, "pre-cutover-active", {
+          sourceCommit: PREVIOUS_DAMM_SOURCE_COMMIT,
+          rendererSha256: PREVIOUS_DAMM_RENDERER_SHA256,
+        });
+      });
+
+      const migration = await readFile(
+        new URL("../../../migrations/0013_damm_methodology_pin_cutover.sql", import.meta.url),
+        "utf8",
+      );
+      await assert.rejects(pg.exec(migration), /current DAMM methodology pin/i);
+      assert.equal(
+        (
+          await sql.query<{ status: string }>(
+            "select status from runs where id = 'pre-cutover-active'",
+          )
+        )[0].status,
+        "queued",
+        "a blocked cutover must not rewrite or terminate the older workflow",
+      );
+
+      await sql.query(
+        `update runs set status = 'cancelled', finished_at = now(), updated_at = now()
+         where id = 'pre-cutover-active'`,
+      );
+      await pg.exec(migration);
+
+      await assert.rejects(
+        sql.transaction(async (transaction) => {
+          await transaction.query(
+            `insert into runs
+              (id, user_id, country_name, iso3, pass, status, ceiling_usd, out_basename)
+             values ('stale-version-launch', 'user-1', 'Egypt', 'EGY', 'workflow',
+                     'queued', 500, 'EGY_stale_version_launch')`,
+          );
+          await insertWorkflowMethodology(transaction, "stale-version-launch", {
+            sourceCommit: PREVIOUS_DAMM_SOURCE_COMMIT,
+            rendererSha256: PREVIOUS_DAMM_RENDERER_SHA256,
+          });
+        }),
+        /current DAMM methodology pin/i,
+      );
+      await assert.rejects(
+        sql.query(
+          `insert into runs
+            (id, user_id, country_name, iso3, pass, status, ceiling_usd, out_basename)
+           values ('missing-pin-launch', 'user-1', 'Egypt', 'EGY', 'workflow',
+                   'queued', 500, 'EGY_missing_pin_launch')`,
+        ),
+        /current DAMM methodology pin/i,
+      );
+
+      await sql.transaction(async (transaction) => {
+        await transaction.query(
+          `insert into runs
+            (id, user_id, country_name, iso3, pass, status, ceiling_usd, out_basename)
+           values ('current-version-launch', 'user-1', 'Egypt', 'EGY', 'workflow',
+                   'queued', 500, 'EGY_current_version_launch')`,
+        );
+        await insertWorkflowMethodology(transaction, "current-version-launch");
+      });
+      assert.equal(await workflowRunUsesCanonicalMethodology("current-version-launch", sql), true);
     } finally {
       await pg.close();
     }
@@ -783,81 +865,33 @@ describe("claim-fenced shared workflow artifacts", () => {
     }
   });
 
-  it("atomically rejects artifact staging and publication for a noncanonical snapshot", async () => {
+  it("atomically rejects a noncanonical methodology before the workflow can launch", async () => {
     const { pg, sql } = await migratedDatabase();
     try {
-      await sql.transaction(async (transaction) => {
-        await transaction.query(
-          `insert into runs
-            (id, user_id, country_name, iso3, pass, status, ceiling_usd, out_basename,
-             claimed_by, claim_token)
-           values ($1, $2, $3, $4, 'workflow', 'running', 500, $5, $6, $7)`,
-          ["stale-method-run", "user-1", "Egypt", "EGY", "EGY_stale", "worker-1", "claim-1"],
-        );
-        await insertWorkflowMethodology(transaction, "stale-method-run", {
-          engineSha256: "b".repeat(64),
-        });
-      });
-      const content = Buffer.from("stale methodology artifact");
-      const sha256 = createHash("sha256").update(content).digest("hex");
-      const artifact = {
-        key: "manifest",
-        relativePath: "workflow-manifest.json",
-        filename: "workflow-manifest.json",
-        contentType: "application/json",
-        sha256,
-        assessmentInputSha256: ASSESSMENT_INPUT_SHA256,
-        content,
-      };
-      assert.equal(
-        await saveWorkflowArtifact("stale-method-run", "worker-1", "claim-1", artifact, sql),
-        false,
+      await assert.rejects(
+        sql.transaction(async (transaction) => {
+          await transaction.query(
+            `insert into runs
+              (id, user_id, country_name, iso3, pass, status, ceiling_usd, out_basename,
+               claimed_by, claim_token)
+             values ($1, $2, $3, $4, 'workflow', 'running', 500, $5, $6, $7)`,
+            ["stale-method-run", "user-1", "Egypt", "EGY", "EGY_stale", "worker-1", "claim-1"],
+          );
+          await insertWorkflowMethodology(transaction, "stale-method-run", {
+            engineSha256: "b".repeat(64),
+          });
+        }),
+        /current DAMM methodology pin/i,
       );
-
-      await sql.query(
-        `insert into workflow_run_artifacts
-          (run_id, artifact_set_id, artifact_key, relative_path, filename, content_type,
-           sha256, byte_size, workflow_id, workflow_version, workflow_contract_sha256,
-           damm_model_version, damm_model_revision, damm_model_sha256, damm_source_commit,
-           assessment_input_sha256, content)
-         values ($1, $2, 'manifest', 'workflow-manifest.json', 'workflow-manifest.json',
-                 'application/json', $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)`,
-        [
-          "stale-method-run",
-          "claim-1",
-          sha256,
-          content.byteLength,
-          DAR_WORKFLOW.workflow_id,
-          DAR_WORKFLOW.workflow_version,
-          DAR_WORKFLOW_SHA256,
-          DAMM_WORKFLOW_METHODOLOGY.modelVersion,
-          DAMM_WORKFLOW_METHODOLOGY.modelRevision,
-          DAMM_WORKFLOW_METHODOLOGY.appModelSha256,
-          DAMM_WORKFLOW_METHODOLOGY.sourceCommit,
-          ASSESSMENT_INPUT_SHA256,
-          content,
-        ],
-      );
-      assert.equal(
-        await publishWorkflowArtifactSet(
-          "stale-method-run",
-          "worker-1",
-          "claim-1",
-          ["manifest"],
-          sql,
-        ),
-        false,
-      );
-      await sql.query("delete from runs where id = $1", ["stale-method-run"]);
       assert.equal(
         (
           await sql.query<{ count: number }>(
-            "select count(*)::int as count from workflow_run_methodology where run_id = $1",
+            "select count(*)::int as count from runs where id = $1",
             ["stale-method-run"],
           )
         )[0].count,
         0,
-        "parent deletion must retain its normal cascading cleanup",
+        "the run and stale methodology must roll back together",
       );
     } finally {
       await pg.close();

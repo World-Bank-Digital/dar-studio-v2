@@ -220,9 +220,9 @@ describe("which name a pass writes under", () => {
   });
 
   it("makes a later pass inherit the research name rather than mint its own", () => {
-    // The upstream gate2.py automated challenge takes --run and reads an existing pass's
-    // files. A compatibility pass under a fresh name would inspect nothing and report a
-    // false clean machine-QC result.
+    // The upstream automated_challenge.py entry point takes --run and reads an existing
+    // pass's files. A compatibility record under a fresh name would inspect nothing and
+    // report a false clean machine-QC result.
     assert.equal(
       basenameFor("g2", "EGY", at, "EGY_202608251407_a1b2c3", "zzz"),
       "EGY_202608251407_a1b2c3",
@@ -300,6 +300,13 @@ describe("how much budget finishing would need", () => {
     // $23.60 projected, plus 20%, is $28.32 — which at research's 35% share needs a
     // ceiling just over $80.91, rounded up to $90.
     assert.equal(projectToFinish(stopped)!.suggestedCeilingUsd, 90);
+  });
+
+  it("projects a legacy challenge run against the canonical automated-challenge share", () => {
+    assert.equal(
+      projectToFinish({ ...stopped, pass: "g2", ceilingUsd: 20 })!.suggestedCeilingUsd,
+      290,
+    );
   });
 
   it("never suggests less than the ceiling already set", () => {

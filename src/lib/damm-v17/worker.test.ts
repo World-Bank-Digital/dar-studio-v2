@@ -88,13 +88,13 @@ describe("how the worker invokes the pipeline", () => {
   });
 
   it("calls the automated vendor challenge with --run for the inherited name", () => {
-    // The upstream gate2.py compatibility script is machine QC, not G2 human review. It
-    // takes --run because it reads an existing pass rather than naming a new one. Passing
-    // --out is silently accepted as unknown and the challenge reads the wrong basename.
+    // The canonical script is machine QC, not G2 human review. It takes --run because it
+    // reads an existing pass rather than naming a new one.
     const { script, args } = argsFor(run({ pass: "g2" }));
-    assert.match(script, /gate2\.py$/);
+    assert.match(script, /automated_challenge\.py$/);
     assert.equal(args[args.indexOf("--run") + 1], "EGY_run1");
     assert.ok(!args.includes("--out"));
+    assert.ok(!args.includes("--legacy-g2-output-names"));
   });
 
   it("passes the ceiling so the pipeline enforces the same budget the app displays", () => {
@@ -600,6 +600,95 @@ describe("spawning the real pipeline", () => {
       await rm(temp, { recursive: true, force: true });
     }
   });
+
+  it("reads new machine-challenge state and spend from the canonical identity", async () => {
+    const before = process.env.DAMM_PIPELINE_DIR;
+    const temp = await mkdtemp(path.join(tmpdir(), "damm-canonical-challenge-"));
+    process.env.DAMM_PIPELINE_DIR = temp;
+    try {
+      const loop = path.join(temp, "gauntlet/loop-1");
+      await mkdir(loop, { recursive: true });
+      const challenge = run({ pass: "g2", outBasename: "EGY_challenge" });
+      await writeFile(
+        path.join(loop, "EGY_challenge_automated_challenge_spend.json"),
+        JSON.stringify({ summary: { total: 12.75 } }),
+      );
+      assert.match(
+        passFilePaths(challenge).input,
+        /EGY_challenge_automated_challenge_input\.json$/,
+      );
+      assert.match(
+        artifactPath(challenge, "findings")?.path ?? "",
+        /EGY_challenge_automated_challenge_findings\.json$/,
+      );
+      assert.equal(await defaultDeps().readLedger(challenge), 12.75);
+    } finally {
+      if (before === undefined) delete process.env.DAMM_PIPELINE_DIR;
+      else process.env.DAMM_PIPELINE_DIR = before;
+      await rm(temp, { recursive: true, force: true });
+    }
+  });
+
+  it("reads one historical g2 alias but rejects divergent parallel identities", async () => {
+    const before = process.env.DAMM_PIPELINE_DIR;
+    const temp = await mkdtemp(path.join(tmpdir(), "damm-legacy-challenge-"));
+    process.env.DAMM_PIPELINE_DIR = temp;
+    try {
+      const loop = path.join(temp, "gauntlet/loop-1");
+      await mkdir(loop, { recursive: true });
+      const challenge = run({ pass: "g2", outBasename: "EGY_legacy" });
+      const input = `${JSON.stringify({ "1.1": { value: "legacy" } })}\n`;
+      const findings = `${JSON.stringify([{ id: "1.1", outcome: "upheld" }])}\n`;
+      const state = `${JSON.stringify({ findings: { "1.1": { outcome: "upheld" } } })}\n`;
+      const spend = JSON.stringify({ summary: { total: 8.5 } });
+      await Promise.all([
+        writeFile(path.join(loop, "EGY_legacy_g2_input.json"), input),
+        writeFile(path.join(loop, "EGY_legacy_g2_findings.json"), findings),
+        writeFile(path.join(loop, "EGY_legacy_g2_state.json"), state),
+        writeFile(path.join(loop, "EGY_legacy_g2_spend.json"), spend),
+      ]);
+
+      assert.match(passFilePaths(challenge).input, /EGY_legacy_g2_input\.json$/);
+      assert.match(passFilePaths(challenge).state, /EGY_legacy_g2_state\.json$/);
+      assert.match(
+        artifactPath(challenge, "findings")?.path ?? "",
+        /EGY_legacy_g2_findings\.json$/,
+      );
+      assert.equal(await defaultDeps().readLedger(challenge), 8.5);
+
+      await writeFile(path.join(loop, "EGY_legacy_automated_challenge_input.json"), input);
+      assert.match(
+        passFilePaths(challenge).input,
+        /EGY_legacy_automated_challenge_input\.json$/,
+        "byte-identical canonical output supersedes the historical alias",
+      );
+
+      await writeFile(
+        path.join(loop, "EGY_legacy_automated_challenge_input.json"),
+        `${JSON.stringify({ "1.1": { value: "divergent" } })}\n`,
+      );
+      assert.throws(() => passFilePaths(challenge), /conflicting canonical and legacy/i);
+      assert.equal(
+        artifactPath(challenge, "input"),
+        null,
+        "a divergent historical alias cannot authorize an artifact read",
+      );
+
+      await writeFile(
+        path.join(loop, "EGY_legacy_automated_challenge_spend.json"),
+        JSON.stringify({ summary: { total: 99 } }),
+      );
+      assert.equal(
+        await defaultDeps().readLedger(challenge),
+        null,
+        "ambiguous ledgers cannot overwrite the recorded spend",
+      );
+    } finally {
+      if (before === undefined) delete process.env.DAMM_PIPELINE_DIR;
+      else process.env.DAMM_PIPELINE_DIR = before;
+      await rm(temp, { recursive: true, force: true });
+    }
+  });
 });
 
 describe("every pass in the allocation", () => {
@@ -636,7 +725,7 @@ describe("the scans pass", () => {
     const g2 = passFilePaths(run({ pass: "g2" }));
     assert.match(scans.state, /EGY_run1_scans_state\.json$/);
     assert.match(research.state, /EGY_run1_state\.json$/);
-    assert.match(g2.state, /EGY_run1_g2_state\.json$/);
+    assert.match(g2.state, /EGY_run1_automated_challenge_state\.json$/);
     assert.notEqual(scans.state, research.state);
   });
 });
@@ -1128,8 +1217,18 @@ async function writeCompletedWorkflow(
         : { content: new Uint8Array(await readFile(path.join(root, source.path))) }),
     };
   }
+  const assessmentInputSource = stageArtifactSources.get("damm_diagnostic\0engine_input");
+  if (!assessmentInputSource) throw new Error("Synthetic Stage 1 engine input source");
   const allPackageFiles: PackageFixtureFile[] = [
     ...boundPackageFiles,
+    {
+      path: "structured/01_damm_diagnostic/engine_input.json",
+      category: "structured",
+      stage_id: "damm_diagnostic",
+      artifact_id: "engine_input",
+      source_sha256: assessmentInputSource.sha256,
+      content: new Uint8Array(await readFile(path.join(root, assessmentInputSource.path))),
+    },
     {
       path: "inputs/uploads-manifest.json",
       category: "input",
@@ -1388,6 +1487,94 @@ async function rebindStage8File(root: string, artifactKey: string): Promise<void
   await writeFile(rootManifestPath, JSON.stringify(rootManifest));
 }
 
+interface Stage8PackageIndexRecordFixture {
+  path: string;
+  sha256: string;
+  bytes: number;
+  category: string;
+  stage_id?: string;
+  artifact_id?: string;
+  source_sha256?: string;
+}
+
+interface Stage8PackageArchiveRewrite {
+  remove?: string[];
+  replace?: Array<{ path: string; content: Uint8Array }>;
+}
+
+async function rewriteStage8PackageIndex(
+  root: string,
+  bundle: string,
+  rewrite: (records: Stage8PackageIndexRecordFixture[]) => Stage8PackageArchiveRewrite | void,
+): Promise<void> {
+  const packageManifestPath = path.join(
+    root,
+    "stages/08-export_package/artifacts/workflow_manifest/package-manifest.json",
+  );
+  const packageManifest = JSON.parse(await readFile(packageManifestPath, "utf8")) as {
+    file_count: number;
+    files: Stage8PackageIndexRecordFixture[];
+  };
+  const archiveRewrite = rewrite(packageManifest.files);
+  packageManifest.file_count = packageManifest.files.length;
+  const packageManifestBytes = Buffer.from(JSON.stringify(packageManifest));
+  await writeFile(packageManifestPath, packageManifestBytes);
+
+  const JSZip = (await import("jszip")).default;
+  const zip = await JSZip.loadAsync(await readFile(bundle));
+  for (const relativePath of archiveRewrite?.remove ?? []) {
+    zip.remove(`fixture-package/${relativePath}`);
+  }
+  for (const replacement of archiveRewrite?.replace ?? []) {
+    zip.file(`fixture-package/${replacement.path}`, replacement.content, {
+      createFolders: false,
+    });
+  }
+  zip.file("fixture-package/package-manifest.json", packageManifestBytes, {
+    createFolders: false,
+  });
+  await writeFile(bundle, await zip.generateAsync({ type: "uint8array" }));
+
+  await rebindStage8File(root, "workflow_manifest");
+  await rebindStage8File(root, "complete_bundle");
+}
+
+function stage1EngineInputRecord(
+  records: Stage8PackageIndexRecordFixture[],
+): Stage8PackageIndexRecordFixture {
+  const matches = records.filter(
+    (record) => record.stage_id === "damm_diagnostic" && record.artifact_id === "engine_input",
+  );
+  assert.equal(matches.length, 1, "the fixture starts with one Stage 1 engine input record");
+  return matches[0];
+}
+
+async function withStage8PackageIndexFixture(
+  basename: string,
+  exercise: (
+    workflow: ClaimedRun,
+    fixture: Awaited<ReturnType<typeof writeCompletedWorkflow>>,
+  ) => Promise<void>,
+): Promise<void> {
+  const before = process.env.DAMM_PIPELINE_DIR;
+  const temp = await mkdtemp(path.join(tmpdir(), `damm-package-index-${basename}-`));
+  process.env.DAMM_PIPELINE_DIR = temp;
+  try {
+    const workflow = run({
+      id: `package-index-${basename}`,
+      pass: "workflow",
+      vendor: null,
+      outBasename: `EGY_package_index_${basename}`,
+    });
+    const fixture = await writeCompletedWorkflow(workflow, completePackageFixtureFiles());
+    await exercise(workflow, fixture);
+  } finally {
+    if (before === undefined) delete process.env.DAMM_PIPELINE_DIR;
+    else process.env.DAMM_PIPELINE_DIR = before;
+    await rm(temp, { recursive: true, force: true });
+  }
+}
+
 describe("where a pass's output lives", () => {
   it("tracks the stage-manifest shape emitted by the DAMM coordinator", () => {
     assert.equal(dammStageManifestFixture.schema_version, "damm.workflow-stage/v1");
@@ -1415,7 +1602,7 @@ describe("where a pass's output lives", () => {
     assert.equal(at("diagnostic", "diagnostic"), "EGY_x_diagnostic.html");
     assert.equal(at("diagnostic", "scored"), "EGY_x_v17.json");
     assert.equal(at("research", "input"), "EGY_x_input.json");
-    assert.equal(at("g2", "input"), "EGY_x_g2_input.json");
+    assert.equal(at("g2", "input"), "EGY_x_automated_challenge_input.json");
     assert.equal(at("scans", "scans"), "EGY_x_scans.json");
     assert.equal(at("scans", "register"), "EGY_x_register.json");
     assert.equal(at("foresight", "foresight"), "EGY_x_foresight.html");
@@ -1701,6 +1888,109 @@ describe("where a pass's output lives", () => {
       else process.env.DAMM_PIPELINE_DIR = before;
       await rm(temp, { recursive: true, force: true });
     }
+  });
+
+  it("publishes a Stage 8 package index with one hash-bound Stage 1 engine input", async () => {
+    await withStage8PackageIndexFixture("accepted", async (workflow) => {
+      assert.equal(verifyWorkflowCompletion(workflow).ok, true);
+      const published = await collectWorkflowArtifacts(workflow);
+      const assessmentInput = published.find((artifact) => artifact.key === "assessment-input");
+      const packagedAssessmentInput = published.find(
+        (artifact) => artifact.relativePath === "structured/01_damm_diagnostic/engine_input.json",
+      );
+      assert.ok(assessmentInput);
+      assert.ok(packagedAssessmentInput);
+      assert.equal(packagedAssessmentInput.sha256, assessmentInput.sha256);
+    });
+  });
+
+  it("rejects a self-consistent Stage 8 package index missing its Stage 1 engine input", async () => {
+    await withStage8PackageIndexFixture("missing", async (workflow, fixture) => {
+      await rewriteStage8PackageIndex(fixture.root, fixture.bundle, (records) => {
+        const engineInput = stage1EngineInputRecord(records);
+        records.splice(records.indexOf(engineInput), 1);
+        return { remove: [engineInput.path] };
+      });
+      assert.equal(
+        verifyWorkflowCompletion(workflow).ok,
+        true,
+        "the eight-stage completion manifests remain valid after the package rewrite",
+      );
+      await assert.rejects(
+        collectWorkflowArtifacts(workflow),
+        /bundle does not match its package manifest/,
+      );
+    });
+  });
+
+  it("rejects a self-consistent Stage 8 package index with duplicate Stage 1 engine inputs", async () => {
+    await withStage8PackageIndexFixture("duplicate", async (workflow, fixture) => {
+      const engineInputPath = fixture.packagePaths.get(
+        "structured/01_damm_diagnostic/engine_input.json",
+      );
+      assert.ok(engineInputPath);
+      const engineInputContent = new Uint8Array(await readFile(engineInputPath));
+      await rewriteStage8PackageIndex(fixture.root, fixture.bundle, (records) => {
+        const engineInput = stage1EngineInputRecord(records);
+        const duplicate = {
+          ...engineInput,
+          path: "structured/01_damm_diagnostic/engine_input-copy.json",
+        };
+        records.push(duplicate);
+        return { replace: [{ path: duplicate.path, content: engineInputContent }] };
+      });
+      assert.equal(
+        verifyWorkflowCompletion(workflow).ok,
+        true,
+        "the eight-stage completion manifests remain valid after the package rewrite",
+      );
+      await assert.rejects(
+        collectWorkflowArtifacts(workflow),
+        /bundle does not match its package manifest/,
+      );
+    });
+  });
+
+  it("rejects a self-consistent Stage 8 package index whose engine-input content hash drifted", async () => {
+    await withStage8PackageIndexFixture("content-hash-drift", async (workflow, fixture) => {
+      const driftedContent = new TextEncoder().encode(
+        JSON.stringify({ "1.1": { value: 0, cls: "Measured" } }),
+      );
+      const driftedSha256 = createHash("sha256").update(driftedContent).digest("hex");
+      await rewriteStage8PackageIndex(fixture.root, fixture.bundle, (records) => {
+        const engineInput = stage1EngineInputRecord(records);
+        engineInput.sha256 = driftedSha256;
+        engineInput.bytes = driftedContent.byteLength;
+        return { replace: [{ path: engineInput.path, content: driftedContent }] };
+      });
+      assert.equal(
+        verifyWorkflowCompletion(workflow).ok,
+        true,
+        "the eight-stage completion manifests remain valid after the package rewrite",
+      );
+      await assert.rejects(
+        collectWorkflowArtifacts(workflow),
+        /bundle does not match its package manifest/,
+      );
+    });
+  });
+
+  it("rejects a self-consistent Stage 8 package index whose engine-input source hash drifted", async () => {
+    await withStage8PackageIndexFixture("source-hash-drift", async (workflow, fixture) => {
+      await rewriteStage8PackageIndex(fixture.root, fixture.bundle, (records) => {
+        const engineInput = stage1EngineInputRecord(records);
+        engineInput.source_sha256 = "0".repeat(64);
+      });
+      assert.equal(
+        verifyWorkflowCompletion(workflow).ok,
+        true,
+        "the eight-stage completion manifests remain valid after the package rewrite",
+      );
+      await assert.rejects(
+        collectWorkflowArtifacts(workflow),
+        /bundle does not match its package manifest/,
+      );
+    });
   });
 
   it("publishes the exhaustive package and rejects an unmanifested ZIP payload", async () => {
