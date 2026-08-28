@@ -15,7 +15,7 @@ const service = (blueprint, name) => {
 };
 
 describe("Render worker deployment contract", () => {
-  it("deploys one Ohio worker with a persistent disk and the full shutdown window", () => {
+  it("deploys one Ohio worker with a persistent disk and no unsupported shutdown-delay field", () => {
     const blueprint = read("render.yaml");
     const worker = service(blueprint, "dar-studio-worker");
     assert.equal((blueprint.match(/^\s*- type: worker$/gm) ?? []).length, 1);
@@ -25,7 +25,7 @@ describe("Render worker deployment contract", () => {
     assert.match(worker, /^\s+dockerfilePath: \.\/Dockerfile\.worker$/m);
     assert.match(worker, /^\s+autoDeployTrigger: off$/m);
     assert.match(worker, /^\s+numInstances: 1$/m);
-    assert.match(worker, /^\s+maxShutdownDelaySeconds: 300$/m);
+    assert.doesNotMatch(worker, /^\s+maxShutdownDelaySeconds:/m);
     assert.match(
       worker,
       /disk:\n\s+name: dar-studio-worker-data\n\s+mountPath: \/var\/data\n\s+sizeGB: 10/,
@@ -52,7 +52,8 @@ describe("Render worker deployment contract", () => {
   });
 
   it("keeps the large-artifact gateway in the same Ohio stack without a disk", () => {
-    const gateway = service(read("render.yaml"), "dar-studio-artifacts");
+    const blueprint = read("render.yaml");
+    const gateway = service(blueprint, "dar-studio-artifacts");
     assert.match(gateway, /^\s*- type: web$/m);
     assert.match(gateway, /^\s+runtime: docker$/m);
     assert.match(gateway, /^\s+region: ohio$/m);
@@ -63,6 +64,7 @@ describe("Render worker deployment contract", () => {
     assert.match(gateway, /^\s+autoDeployTrigger: off$/m);
     assert.match(gateway, /^\s+numInstances: 1$/m);
     assert.match(gateway, /^\s+maxShutdownDelaySeconds: 300$/m);
+    assert.equal((blueprint.match(/^\s+maxShutdownDelaySeconds:/gm) ?? []).length, 1);
     assert.doesNotMatch(gateway, /^\s+disk:/m);
     assert.doesNotMatch(gateway, /^\s+- key: PORT$/m);
     for (const key of ["DATABASE_URL", "ARTIFACT_DELIVERY_SECRET", "APP_ORIGIN"]) {
