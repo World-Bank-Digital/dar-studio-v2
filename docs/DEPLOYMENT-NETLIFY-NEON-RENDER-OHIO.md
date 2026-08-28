@@ -40,6 +40,8 @@ Relevant platform documentation:
 - [Render: Blueprint fields and `sync: false` secrets](https://render.com/docs/blueprint-spec)
 - [Render: environment variables](https://render.com/docs/configure-environment-variables)
 - [Render: regions](https://render.com/docs/regions)
+- [Render: graceful shutdown](https://render.com/docs/deploys#graceful-shutdown)
+- [Render: persistent-disk limitations](https://render.com/docs/disks#disk-limitations-and-considerations)
 
 ## Data flow and ownership
 
@@ -284,13 +286,13 @@ Do this only after migration verification.
 Dashboard path: **Render Dashboard > New > Blueprint > Connect** the exact repository.
 
 1. Name the Blueprint clearly, select branch `main`, and keep Blueprint path `render.yaml`.
-2. Review `dar-studio-worker`: `type: worker`, `runtime: docker`, `region: ohio`, plan `1c-2g`, `dockerfilePath: ./Dockerfile.worker`, one instance, `autoDeployTrigger: off`, and `maxShutdownDelaySeconds: 300`.
-3. Confirm its persistent disk is `dar-studio-worker-data`, mounted at `/var/data`, with 10 GB. A disk disables zero-downtime deploys; the worker's graceful SIGTERM path and five-minute shutdown delay are therefore material.
+2. Review `dar-studio-worker`: `type: worker`, `runtime: docker`, `region: ohio`, plan `1c-2g`, `dockerfilePath: ./Dockerfile.worker`, one instance, `autoDeployTrigger: off`, and no `maxShutdownDelaySeconds` field.
+3. Confirm its persistent disk is `dar-studio-worker-data`, mounted at `/var/data`, with 10 GB. Render's live semantic validator rejects a custom maximum shutdown delay on a service with a disk, so the worker uses Render's documented default 30-second shutdown window. Its graceful SIGTERM path, five-minute claim lease, and durable coordinator/workflow checkpoints let a replacement worker reclaim and resume a forced-off run. Keep Blueprint Auto Sync and service auto-deploy disabled, and never trigger a manual worker deploy while a workflow is active.
 4. Review `dar-studio-artifacts`: `type: web`, `runtime: docker`, `region: ohio`, plan `1c-2g`, `dockerfilePath: ./Dockerfile.artifact-gateway`, one instance, `autoDeployTrigger: off`, `healthCheckPath: /healthz`, `maxShutdownDelaySeconds: 300`, and **no disk**.
 5. At the initial `sync: false` prompts, give the worker `DATABASE_URL` (pooled) plus all six vendor keys. Give the gateway the same pooled `DATABASE_URL`, the generated `ARTIFACT_DELIVERY_SECRET`, and `APP_ORIGIN` set to the exact `NETLIFY_URL`/`BETTER_AUTH_URL`. Render supplies `PORT`.
 6. Review both `1c-2g` service charges and the worker disk charge. Only then click **Deploy Blueprint**.
 7. Capture the Blueprint ID, worker service ID, gateway service ID, and the gateway's public `https://<name>.onrender.com` origin.
-8. In the created Blueprint open **Settings** and set **Auto Sync: No**. Both services also have `autoDeployTrigger: off` in `render.yaml`. Later Blueprint syncs and service deploys must be explicit, use the merged `main` commit, and must not interrupt an active workflow casually.
+8. In the created Blueprint open **Settings** and set **Auto Sync: No**. Both services also have `autoDeployTrigger: off` in `render.yaml`. Later Blueprint syncs and service deploys must be explicit, use the merged `main` commit, and occur only after the active-workflow query returns zero rows.
 
 Render prompts for `sync: false` values only on initial creation. If a value is missed, use **Service > Environment > Environment Variables > + Add Environment Variable**, then **Save, rebuild, and deploy**. Stop before clicking Deploy Blueprint if either service's branch, region, type, plan, disk, instance count, commit, or secret list differs. Render cannot change a service's region in place.
 
