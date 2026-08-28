@@ -20,11 +20,17 @@ if [ "$(id -u)" = "0" ]; then
   install -d -m 0700 -o darworker -g darworker "$DATA_ROOT/checkouts"
   chown darworker:darworker "$DATA_ROOT"
   chmod 0700 "$DATA_ROOT"
+  gosu darworker test -x /opt/damm-seed || fail "the image DAMM seed is not traversable by the worker"
+  gosu darworker test -r /opt/damm-seed/.git/HEAD || fail "the image DAMM seed is not readable by the worker"
   exec gosu darworker /bin/sh "$0" --worker-user
 fi
 
 [ "${1:-}" = "--worker-user" ] || fail "entrypoint must initialize the disk as root"
 [ "$(id -u)" = "10001" ] || fail "worker must run as the unprivileged darworker user"
+[ "$(id -g)" = "10001" ] || fail "worker must run with the unprivileged darworker group"
+case " $(id -G) " in
+  *" 1000 "*) fail "worker must not belong to Render's secret-file group" ;;
+esac
 [ -w "$DATA_ROOT/checkouts" ] || fail "/var/data/checkouts is not writable"
 
 PIPELINE_DIR="$(node /opt/app/deploy/worker/prepare-checkout.mjs)" \

@@ -44,13 +44,24 @@ RUN python -m venv /opt/damm-venv \
 
 # The manifest is the only source of the upstream repository and commit. The image
 # carries a clean seed so a runtime disk checkout never depends on outbound Git access.
+# The worker-only damm_git_netrc credential is mounted only for this instruction and
+# is not persisted in an image layer or in the canonical credential-free Git origin.
 COPY src/data/damm_model_manifest.json /opt/app/src/data/damm_model_manifest.json
-RUN set -eu; \
+RUN --mount=type=secret,id=damm_git_netrc,dst=/root/.netrc,required=true,mode=0400 \
+    set -eu; \
+    test -s /root/.netrc; \
     repository="$(python -c 'import json; print(json.load(open("/opt/app/src/data/damm_model_manifest.json"))["source"]["repository"])')"; \
     commit="$(python -c 'import json; print(json.load(open("/opt/app/src/data/damm_model_manifest.json"))["source"]["commit"])')"; \
-    git clone --no-checkout "$repository" /opt/damm-seed; \
+    install -d -m 0755 /opt/damm-seed; \
+    git -C /opt/damm-seed init --quiet; \
+    git -C /opt/damm-seed remote add origin "$repository"; \
+    test "$(git -C /opt/damm-seed remote get-url --all origin)" = "$repository"; \
+    test "$(git -C /opt/damm-seed remote get-url --push --all origin)" = "$repository"; \
+    HOME=/root GIT_TERMINAL_PROMPT=0 git -C /opt/damm-seed fetch --depth=1 --no-tags origin "$commit"; \
     git -C /opt/damm-seed checkout --detach "$commit"; \
     test "$(git -C /opt/damm-seed rev-parse HEAD)" = "$commit"; \
+    test "$(git -C /opt/damm-seed rev-list --count --all)" = "1"; \
+    test -z "$(git -C /opt/damm-seed tag --list)"; \
     test -z "$(git -C /opt/damm-seed status --porcelain=v1 --untracked-files=no)"; \
     git config --system --add safe.directory /opt/damm-seed
 

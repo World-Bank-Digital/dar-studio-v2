@@ -328,6 +328,15 @@ for render_key in DATABASE_URL ARTIFACT_DELIVERY_SECRET APP_ORIGIN EXA_API_KEY J
   grep -q "key: $render_key" render.yaml || stop "render.yaml is missing required environment key $render_key."
 done
 [[ "$(grep -c "key: DATABASE_URL" render.yaml)" -eq 2 ]] || stop "Both Render services must receive their own pooled DATABASE_URL."
+grep -Fq "RUN --mount=type=secret,id=damm_git_netrc,dst=/root/.netrc,required=true,mode=0400" Dockerfile.worker ||
+  stop "Dockerfile.worker does not require the private DAMM BuildKit secret mount."
+grep -Fq 'HOME=/root GIT_TERMINAL_PROMPT=0 git -C /opt/damm-seed fetch --depth=1 --no-tags origin "$commit"' Dockerfile.worker ||
+  stop "Dockerfile.worker does not shallow-fetch only the pinned private DAMM commit."
+if grep -Eiq '^[[:space:]]*(ARG|ENV)[[:space:]].*(damm_git_netrc|DAMM_(GIT_)?(TOKEN|PAT|PASSWORD)|GITHUB_(TOKEN|PAT|PASSWORD)|GH_(TOKEN|PAT|PASSWORD))' Dockerfile.worker ||
+   grep -Eiq '^[[:space:]]*(damm_git_netrc|DAMM_(GIT_)?(TOKEN|PAT|PASSWORD)|GITHUB_(TOKEN|PAT|PASSWORD)|GH_(TOKEN|PAT|PASSWORD))[[:space:]]*=' Dockerfile.worker ||
+   grep -Eiq 'key:[[:space:]]*(damm_git_netrc|DAMM_(GIT_)?(TOKEN|PAT|PASSWORD)|GITHUB_(TOKEN|PAT|PASSWORD)|GH_(TOKEN|PAT|PASSWORD))' render.yaml; then
+  stop "The private DAMM build credential must never be a Docker ARG, image ENV, or Render environment variable."
+fi
 grep -q "MIGRATION_DATABASE_URL" scripts/migrate.mjs ||
   stop "The migrator does not separate the direct migration URL from pooled runtime DATABASE_URL."
 grep -qi "advisory" scripts/migrate.mjs ||
@@ -358,7 +367,7 @@ open_url "https://app.netlify.com/"
 open_url "https://console.neon.tech/app/projects"
 open_url "https://dashboard.render.com/"
 step "Confirm you can administer all three accounts, view usage, and rotate their credentials."
-step "Confirm GitHub access to the exact dar-studio-v2 repository from Netlify and Render."
+step "Confirm GitHub access to both rsudan/dar-studio-v2 and private World-Bank-Digital/DAMM, including authority for a short-expiry, DAMM-only, Contents: read-only fine-grained token."
 confirm_or_stop \
   "Are you authorized to create the Neon project, both paid Render services, the worker disk, and run vendor-cost smoke tests?" \
   "Cost authority is required before any cloud resource is created."
@@ -592,14 +601,28 @@ step "At the initial worker sync:false prompts enter pooled DATABASE_URL and EXA
 step "For dar-studio-artifacts enter the same pooled DATABASE_URL, the generated ARTIFACT_DELIVERY_SECRET, and APP_ORIGIN=$NETLIFY_URL. Render supplies PORT; do not add it."
 step "Do not enter MIGRATION_DATABASE_URL, DAR_KEY_SECRET, BETTER_AUTH_SECRET, broker values, or any other Netlify-only value."
 warn "Render prompts for sync:false values only during initial Blueprint creation. Verify every key before deployment."
+step "Before creating the billed resources, open GitHub and create a short-expiry fine-grained token: resource owner World-Bank-Digital; only repository DAMM; Contents permission Read-only. Metadata Read-only appears automatically; grant nothing else."
+step "Wait for organization approval if required. Keep the active token only in a password manager or secure clipboard; do not paste it into this wizard or $ENV_FILE."
+confirm_or_stop "Is the active, short-expiry, DAMM-only read token ready for the worker Secret File?" \
+  "Do not create the services until the private source credential is active and available."
 confirm_or_stop "Does the review exactly match both Ohio services, the one worker disk, main commit, and each service's required secrets?" \
   "Do not create mismatched or incompletely configured paid services."
 confirm_or_stop "Deploy this billed Blueprint now?" \
   "The paid Render mutation was not authorized."
-step "Click Deploy Blueprint and wait for both resources to be created."
-step "Open the new Blueprint's Settings page and set Auto Sync to No. Service auto-deploy is already off in render.yaml."
+step "Click Deploy Blueprint. The gateway may succeed, but the worker's first build should reach Failed because the required build secret is deliberately absent. Do not wait for worker success or diagnose that expected first failure; continue as soon as the worker resource exists."
+step "Immediately open the new Blueprint's Settings page and set Auto Sync to No. Service auto-deploy is already off in render.yaml."
 confirm_or_stop "Are Blueprint Auto Sync and both services' automatic deploy triggers off?" \
-  "A later repository push must not interrupt an active workflow or replace the reviewed gateway unexpectedly."
+  "Do not upload a live build credential while a repository push can trigger an unplanned Blueprint sync."
+step "Open dar-studio-worker > Environment > Secret Files > Add Secret File. Filename: damm_git_netrc. Contents: three lines—machine github.com, login x-access-token, password followed by the token."
+step "Never put this credential in an environment variable, Docker ARG, URL, log, repository file, or the artifact gateway. Keep it short-lived and rotate it before a later build."
+step "Click Save Changes. Render automatically starts the worker retry; do not start an overlapping manual deploy. Require BuildKit secret ID damm_git_netrc and no credential in build output."
+step "Wait until that credentialed deploy reaches a terminal state—Live, Failed, or Canceled—then immediately delete/revoke its fine-grained PAT in GitHub. Do this before inspecting or retrying any failure."
+step "The running worker never needs GitHub. The saved Render file may remain, but it must now contain only the revoked, inert value."
+confirm_or_stop "Has the PAT been revoked after the settled credentialed deploy attempt?" \
+  "Never leave a live source credential mounted after an image-build attempt ends."
+step "Verify the settled deploy is Live on commit $DEPLOY_GIT_SHA. If it failed, was canceled, or used another commit, stop and diagnose it with the token revoked. Every retry requires a fresh short-expiry token placed in the Secret File; Save Changes triggers the retry, and that new token must again be revoked as soon as the attempt settles."
+confirm_or_stop "Is the worker deploy Live on the exact recorded commit, with its build PAT already revoked?" \
+  "Do not continue to runtime verification from a failed, canceled, wrong-commit, or live-token deploy."
 ask RENDER_BLUEPRINT_ID "Render Blueprint ID from its Settings page or URL:"
 require_value RENDER_BLUEPRINT_ID "$RENDER_BLUEPRINT_ID"
 ask RENDER_WORKER_SERVICE_ID "dar-studio-worker service ID from its Settings page or URL:"
@@ -623,23 +646,23 @@ step "Open worker Logs. Require [worker-checkout] installed/reusing, [worker-pre
 step "Require DAMM commit 92c6ffe8b331347bc05f345785fe409753401a24, clean source, /var/data/checkouts/<commit>, and /opt/damm-venv/bin/python."
 step "Require Pandoc, LibreOffice/soffice, six nonempty vendor variables with pinned SDK imports, blank mode-0600 upstream .env, and queue watching."
 warn "Any worker-checkout, worker-preflight, or worker-entrypoint failed line, checkout drift, missing renderer/vendor, or crash loop is a hard stop."
-open_url "$ARTIFACT_GATEWAY_URL/healthz"
-step "Require gateway status 200, body {\"status\":\"ok\"}, and Cache-Control: no-store."
-step "Request fixed $ARTIFACT_GATEWAY_URL/v1/artifacts without the exact Origin and Authorization header; require a non-disclosing 404 with body Not found."
-open_url "https://dashboard.render.com/web/$RENDER_ARTIFACT_SERVICE_ID"
-step "Open gateway Logs; require [artifact-gateway] listening on 0.0.0.0:<PORT> and no secret or database URL."
 ask RENDER_WORKER_DEPLOY_ID "Successful Render worker deploy ID:"
 require_value RENDER_WORKER_DEPLOY_ID "$RENDER_WORKER_DEPLOY_ID"
 ask RENDER_WORKER_DEPLOY_SHA "Commit SHA shown for the worker deploy:"
 [[ "$RENDER_WORKER_DEPLOY_SHA" == "$DEPLOY_GIT_SHA" ]] ||
   stop "The Render worker did not deploy the recorded origin/main commit."
+write_env RENDER_WORKER_DEPLOY_ID "$RENDER_WORKER_DEPLOY_ID"
+write_env RENDER_WORKER_DEPLOY_SHA "$RENDER_WORKER_DEPLOY_SHA"
+open_url "$ARTIFACT_GATEWAY_URL/healthz"
+step "Require gateway status 200, body {\"status\":\"ok\"}, and Cache-Control: no-store."
+step "Request fixed $ARTIFACT_GATEWAY_URL/v1/artifacts without the exact Origin and Authorization header; require a non-disclosing 404 with body Not found."
+open_url "https://dashboard.render.com/web/$RENDER_ARTIFACT_SERVICE_ID"
+step "Open gateway Logs; require [artifact-gateway] listening on 0.0.0.0:<PORT> and no secret or database URL."
 ask RENDER_ARTIFACT_DEPLOY_ID "Successful Render artifact gateway deploy ID:"
 require_value RENDER_ARTIFACT_DEPLOY_ID "$RENDER_ARTIFACT_DEPLOY_ID"
 ask RENDER_ARTIFACT_DEPLOY_SHA "Commit SHA shown for the artifact gateway deploy:"
 [[ "$RENDER_ARTIFACT_DEPLOY_SHA" == "$DEPLOY_GIT_SHA" ]] ||
   stop "The Render artifact gateway did not deploy the recorded origin/main commit."
-write_env RENDER_WORKER_DEPLOY_ID "$RENDER_WORKER_DEPLOY_ID"
-write_env RENDER_WORKER_DEPLOY_SHA "$RENDER_WORKER_DEPLOY_SHA"
 write_env RENDER_ARTIFACT_DEPLOY_ID "$RENDER_ARTIFACT_DEPLOY_ID"
 write_env RENDER_ARTIFACT_DEPLOY_SHA "$RENDER_ARTIFACT_DEPLOY_SHA"
 confirm_or_stop "Are both services stable, on the exact commit, and free of preflight, health, or disclosure failures?" \
