@@ -95,6 +95,15 @@ describe("Render worker deployment contract", () => {
     assert.doesNotMatch(dockerfile, /chown[^\n]*\/opt\/(?:app|damm-seed|damm-venv)/);
   });
 
+  it("sets the runtime workdir before importing the methodology verifier", () => {
+    const dockerfile = read("Dockerfile.worker");
+    const runtimeStage = dockerfile.slice(dockerfile.indexOf(" AS runtime"));
+    const verification = runtimeStage.indexOf("RUN DAMM_PIPELINE_DIR=/opt/damm-seed");
+    assert.notEqual(verification, -1);
+    const precedingWorkdirs = runtimeStage.slice(0, verification).match(/^WORKDIR .+$/gm) ?? [];
+    assert.equal(precedingWorkdirs.at(-1), "WORKDIR /opt/app");
+  });
+
   it("takes the private DAMM repository and commit through an ephemeral build credential", () => {
     const dockerfile = read("Dockerfile.worker");
     const instructions = dockerfile.replace(/\\\r?\n[ \t]*/g, " ");
