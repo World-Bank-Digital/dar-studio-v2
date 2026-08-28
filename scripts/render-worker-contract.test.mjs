@@ -1,9 +1,11 @@
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
-import { readFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { describe, it } from "node:test";
 import { fileURLToPath } from "node:url";
+import { validateCheckout } from "../deploy/worker/prepare-checkout.mjs";
 
 const ROOT = dirname(dirname(fileURLToPath(import.meta.url)));
 const read = (relative) => readFileSync(join(ROOT, relative), "utf8");
@@ -84,19 +86,91 @@ describe("Render worker deployment contract", () => {
     assert.match(dockerfile, /pip install[\s\S]*--no-deps[\s\S]*requirements\.lock/);
     assert.match(dockerfile, /npm ci --omit=dev --ignore-scripts/);
     assert.match(dockerfile, /USER|gosu|useradd/);
+    assert.match(
+      dockerfile,
+      /groupadd --gid 10001 darworker[\s\S]*useradd --uid 10001 --gid 10001/,
+    );
+    assert.doesNotMatch(dockerfile, /(?:usermod|useradd)[^\n]*(?:--groups|-G)[^\n]*\b1000\b/);
     assert.match(dockerfile, /git config --system --add safe\.directory \/opt\/damm-seed/);
     assert.doesNotMatch(dockerfile, /chown[^\n]*\/opt\/(?:app|damm-seed|damm-venv)/);
   });
 
-  it("takes the DAMM repository and commit only from the canonical manifest", () => {
+  it("takes the private DAMM repository and commit through an ephemeral build credential", () => {
     const dockerfile = read("Dockerfile.worker");
+    const instructions = dockerfile.replace(/\\\r?\n[ \t]*/g, " ");
     const manifest = JSON.parse(read("src/data/damm_model_manifest.json"));
     assert.match(dockerfile, /damm_model_manifest\.json/);
-    assert.match(dockerfile, /git clone --no-checkout/);
+    assert.match(
+      dockerfile,
+      /RUN --mount=type=secret,id=damm_git_netrc,dst=\/root\/\.netrc,required=true,mode=0400/,
+    );
+    assert.equal((dockerfile.match(/type=secret,id=damm_git_netrc/g) ?? []).length, 1);
+    assert.equal((dockerfile.match(/\/root\/\.netrc/g) ?? []).length, 2);
+    assert.match(dockerfile, /git -C \/opt\/damm-seed init --quiet/);
+    assert.match(dockerfile, /install -d -m 0755 \/opt\/damm-seed/);
+    assert.match(
+      dockerfile,
+      /HOME=\/root GIT_TERMINAL_PROMPT=0 git -C \/opt\/damm-seed fetch --depth=1 --no-tags origin "\$commit"/,
+    );
+    assert.doesNotMatch(dockerfile, /git clone/);
+    assert.match(dockerfile, /remote get-url --all origin\)" = "\$repository"/);
+    assert.match(dockerfile, /remote get-url --push --all origin\)" = "\$repository"/);
     assert.match(dockerfile, /git -C \/opt\/damm-seed checkout --detach "\$commit"/);
+    assert.match(dockerfile, /rev-list --count --all\)" = "1"/);
+    assert.match(dockerfile, /test -z "\$\(git -C \/opt\/damm-seed tag --list\)"/);
     assert.match(dockerfile, /verifyPipelineMethodology/);
     assert.doesNotMatch(dockerfile, new RegExp(manifest.source.commit));
     assert.doesNotMatch(dockerfile, /World-Bank-Digital\/DAMM/);
+    assert.doesNotMatch(
+      instructions,
+      /^\s*(?:ARG|ENV)\s+.*(?:damm_git_netrc|DAMM_(?:GIT_)?(?:TOKEN|PAT|PASSWORD)|GITHUB_(?:TOKEN|PAT|PASSWORD)|GH_(?:TOKEN|PAT|PASSWORD))/gim,
+    );
+    assert.doesNotMatch(dockerfile, /https:\/\/[^/\s]+@github\.com/);
+    assert.doesNotMatch(instructions, /^\s*(?:COPY|ADD).*netrc/gim);
+    assert.doesNotMatch(dockerfile, /\bset\s+-[^;\n]*x\b/i);
+    assert.doesNotMatch(dockerfile, /credential\.helper|http\.[^\s]*extraheader/i);
+    assert.doesNotMatch(
+      dockerfile,
+      /\b(?:cat|head|tail|sed|awk|grep|strings|base64|xxd|od|hexdump)\b[^;\n]*(?:\/root\/\.netrc|damm_git_netrc)/i,
+    );
+    assert.match(read(".gitignore"), /^damm_git_netrc$/m);
+    assert.doesNotMatch(read("render.yaml"), /key:\s*damm_git_netrc/i);
+  });
+
+  it("requires the private DAMM build credential without committing or printing it", () => {
+    const wizard = read("scripts/deploy/netlify-neon-render-ohio.sh");
+    const guide = read("docs/DEPLOYMENT-NETLIFY-NEON-RENDER-OHIO.md");
+    for (const deploymentSurface of [wizard, guide]) {
+      assert.match(deploymentSurface, /damm_git_netrc/);
+      assert.match(deploymentSurface, /Contents(?::| permission)? Read-only/i);
+      assert.match(deploymentSurface, /Metadata(?::)?\s+Read-only.*automatically/i);
+      assert.match(deploymentSurface, /automatically (?:starts|triggers)/i);
+      assert.match(deploymentSurface, /Live.*Failed.*Cancel/i);
+      assert.match(deploymentSurface, /(?:delete|revoke).*PAT/i);
+      assert.doesNotMatch(deploymentSurface, /\b(?:cat|echo|printf)\b.*damm_git_netrc/i);
+      assert.ok(
+        deploymentSurface.indexOf("Auto Sync: No") <
+          deploymentSurface.indexOf("Secret Files > Add Secret File"),
+      );
+      const gatewayVerificationMarker =
+        deploymentSurface === wizard
+          ? 'open_url "$ARTIFACT_GATEWAY_URL/healthz"'
+          : "For `dar-studio-artifacts`, open";
+      const credentialSaveMarker =
+        deploymentSurface === wizard ? 'step "Click Save Changes.' : "Click **Save Changes**.";
+      const oneAttemptRevocationMarker =
+        deploymentSurface === wizard
+          ? 'step "Wait until that credentialed deploy reaches a terminal state'
+          : "Wait for that credentialed deploy to reach a terminal state";
+      assert.ok(
+        deploymentSurface.indexOf(oneAttemptRevocationMarker) <
+          deploymentSurface.indexOf(gatewayVerificationMarker),
+      );
+      assert.ok(
+        deploymentSurface.indexOf(credentialSaveMarker) <
+          deploymentSurface.indexOf(oneAttemptRevocationMarker),
+      );
+    }
   });
 
   it("runs all upstream test roots without writing executable bytecode", () => {
@@ -120,9 +194,111 @@ describe("Render worker deployment contract", () => {
     assert.match(prepare, /\["clone", "--no-local", "--no-checkout"/);
     assert.match(prepare, /SEED_ROOT, temporary/);
     assert.match(prepare, /git\(temporary, "fsck", "--strict", "--no-dangling"\)/);
+    assert.match(prepare, /git\(root, "remote", "get-url", "--all", "origin"\)/);
+    assert.match(prepare, /git\(root, "remote", "get-url", "--push", "--all", "origin"\)/);
+    assert.match(prepare, /fetchOrigins !== repository \|\| pushOrigins !== repository/);
+    assert.match(prepare, /canonical credential-free origin/);
+    assert.match(prepare, /git\(root, "rev-list", "--count", "--all"\) !== "1"/);
+    assert.match(prepare, /Git history beyond the manifest commit/);
+    assert.equal(
+      (prepare.match(/await validateCheckout\([^\n]*repository, commit/g) ?? []).length,
+      4,
+    );
+    assert.equal(
+      (
+        prepare.match(
+          /await validateCheckout\(target, repository, commit, "the persistent DAMM checkout"\);/g,
+        ) ?? []
+      ).length,
+      2,
+    );
+    assert.match(
+      prepare,
+      /git\(temporary, "remote", "set-url", "origin", repository\);[\s\S]*await validateCheckout\(temporary, repository, commit, "the prepared DAMM checkout"\);/,
+    );
     assert.match(prepare, /await rename\(temporary, target\)/);
     assert.match(prepare, /constants\.O_NOFOLLOW/);
     assert.match(prepare, /stat\.size !== 0/);
+  });
+
+  it("rejects extra history and credential-bearing origins without disclosure", async () => {
+    const checkout = mkdtempSync(join(tmpdir(), "dar-worker-checkout-"));
+    const canonical = "https://github.com/World-Bank-Digital/DAMM";
+    const credentialMarker = "DO-NOT-DISCLOSE-CREDENTIAL";
+    const isolatedGitEnvironment = {
+      GIT_CONFIG_GLOBAL: "/dev/null",
+      GIT_CONFIG_NOSYSTEM: "1",
+      GIT_TERMINAL_PROMPT: "0",
+    };
+    const previousGitEnvironment = Object.fromEntries(
+      Object.keys(isolatedGitEnvironment).map((key) => [key, process.env[key]]),
+    );
+    Object.assign(process.env, isolatedGitEnvironment);
+    const runGit = (...args) =>
+      execFileSync("git", ["-C", checkout, ...args], {
+        encoding: "utf8",
+        stdio: ["ignore", "pipe", "pipe"],
+      }).trim();
+    let commit;
+    const rejectedWithoutDisclosure = async () => {
+      await assert.rejects(
+        validateCheckout(checkout, canonical, commit, "test checkout"),
+        (error) => {
+          assert.match(error.message, /canonical credential-free origin/);
+          assert.doesNotMatch(error.message, new RegExp(credentialMarker));
+          return true;
+        },
+      );
+    };
+
+    try {
+      runGit("init");
+      runGit("config", "user.email", "worker-contract@example.invalid");
+      runGit("config", "user.name", "Worker Contract");
+      writeFileSync(join(checkout, "model.txt"), "pinned\n");
+      runGit("add", "model.txt");
+      runGit("commit", "-m", "pinned fixture");
+      commit = runGit("rev-parse", "HEAD");
+      runGit("remote", "add", "origin", canonical);
+
+      await validateCheckout(checkout, canonical, commit, "test checkout");
+
+      runGit(
+        "remote",
+        "set-url",
+        "origin",
+        `https://x-access-token:${credentialMarker}@github.com/World-Bank-Digital/DAMM`,
+      );
+      await rejectedWithoutDisclosure();
+
+      runGit("remote", "remove", "origin");
+      runGit("remote", "add", "origin", canonical);
+      writeFileSync(join(checkout, "model.txt"), "unpinned history\n");
+      runGit("add", "model.txt");
+      runGit("commit", "-m", "unwanted history");
+      const unpinnedCommit = runGit("rev-parse", "HEAD");
+      await assert.rejects(
+        validateCheckout(checkout, canonical, unpinnedCommit, "test checkout"),
+        /Git history beyond the manifest commit/,
+      );
+
+      runGit("remote", "set-url", "origin", canonical);
+      runGit(
+        "remote",
+        "set-url",
+        "--add",
+        "--push",
+        "origin",
+        `https://x-access-token:${credentialMarker}@github.com/World-Bank-Digital/DAMM`,
+      );
+      await rejectedWithoutDisclosure();
+    } finally {
+      rmSync(checkout, { recursive: true, force: true });
+      for (const [key, value] of Object.entries(previousGitEnvironment)) {
+        if (value === undefined) delete process.env[key];
+        else process.env[key] = value;
+      }
+    }
   });
 
   it("fails closed before starting Node and never runs database migrations", () => {
@@ -130,10 +306,21 @@ describe("Render worker deployment contract", () => {
     const preflight = read("deploy/worker/preflight.mjs");
     assert.match(entrypoint, /mountpoint -q "\$DATA_ROOT"/);
     assert.match(entrypoint, /gosu darworker/);
+    assert.match(entrypoint, /gosu darworker test -x \/opt\/damm-seed/);
+    assert.match(entrypoint, /gosu darworker test -r \/opt\/damm-seed\/\.git\/HEAD/);
+    assert.match(entrypoint, /\[ "\$\(id -g\)" = "10001" \]/);
+    assert.match(
+      entrypoint,
+      /\*" 1000 "\*\) fail "worker must not belong to Render's secret-file group"/,
+    );
     assert.match(entrypoint, /prepare-checkout\.mjs/);
     assert.match(entrypoint, /preflight\.mjs/);
     assert.match(entrypoint, /exec node --experimental-strip-types/);
-    assert.ok(entrypoint.indexOf("preflight.mjs") < entrypoint.indexOf("exec node"));
+    assert.ok(
+      entrypoint.indexOf("exec gosu darworker") < entrypoint.indexOf("prepare-checkout.mjs"),
+    );
+    assert.ok(entrypoint.indexOf("prepare-checkout.mjs") < entrypoint.indexOf("preflight.mjs"));
+    assert.ok(entrypoint.indexOf("preflight.mjs") < entrypoint.lastIndexOf("exec node"));
 
     assert.match(preflight, /verifyPipelineMethodology/);
     assert.match(

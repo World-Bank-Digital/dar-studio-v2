@@ -55,3 +55,51 @@ test("the deployment wizard delegates Neon URL validation to the shared parsed p
   assert.match(wizard, /validate_same_neon_database DATABASE_URL DATABASE_URL_DIRECT/);
   assert.doesNotMatch(wizard, /-pooler\.us-east-2\.aws\.neon\.tech/);
 });
+
+test("the deployment wizard keeps the private DAMM build credential out of env values", () => {
+  const wizard = readFileSync(
+    join(root, "scripts/deploy/netlify-neon-render-ohio.sh"),
+    "utf8",
+  );
+
+  assert.match(wizard, /Secret Files > Add Secret File/);
+  assert.match(wizard, /damm_git_netrc/);
+  assert.match(wizard, /machine github\.com/);
+  assert.match(wizard, /Contents permission Read-only/);
+  assert.match(wizard, /Metadata Read-only appears automatically/);
+  assert.match(wizard, /RUN --mount=type=secret,id=damm_git_netrc/);
+  assert.match(wizard, /fetch --depth=1 --no-tags origin/);
+  assert.match(wizard, /automatically starts the worker retry/);
+  assert.match(wizard, /Live, Failed, or Canceled/);
+  assert.match(wizard, /delete\/revoke its fine-grained PAT/);
+  assert.ok(
+    wizard.indexOf("set Auto Sync to No") <
+      wizard.indexOf("Secret Files > Add Secret File"),
+  );
+  assert.ok(
+    wizard.indexOf("Save Changes. Render automatically starts the worker retry") <
+      wizard.indexOf("delete/revoke its fine-grained PAT"),
+  );
+  assert.ok(
+    wizard.indexOf("delete/revoke its fine-grained PAT") <
+      wizard.indexOf('ask RENDER_WORKER_DEPLOY_SHA "Commit SHA shown for the worker deploy:"'),
+  );
+  assert.ok(
+    wizard.indexOf("delete/revoke its fine-grained PAT") <
+      wizard.indexOf('open_url "$ARTIFACT_GATEWAY_URL/healthz"'),
+  );
+  const credentialNames =
+    /(?:damm_git_netrc|DAMM_(?:GIT_)?(?:TOKEN|PAT|PASSWORD)|GITHUB_(?:TOKEN|PAT|PASSWORD)|GH_(?:TOKEN|PAT|PASSWORD))/i;
+  for (const command of [
+    "ask",
+    "ask_secret",
+    "generate_secret",
+    "set_secret",
+    "set_var",
+    "write_env",
+    "write_optional",
+  ]) {
+    assert.doesNotMatch(wizard, new RegExp(`\\b${command}\\s+${credentialNames.source}`, "i"));
+  }
+  assert.match(wizard, /key:\[\[:space:\]\]\*\(damm_git_netrc\|/);
+});

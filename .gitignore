@@ -22,6 +22,7 @@ vendor/
 pglite-debug.log
 *.pem
 *.key
+damm_git_netrc
 .claude/
 
 # Generated decks — rebuild with scripts/build-methodology-deck.mjs

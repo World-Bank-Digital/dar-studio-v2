@@ -40,8 +40,10 @@ Relevant platform documentation:
 - [Render: Blueprint fields and `sync: false` secrets](https://render.com/docs/blueprint-spec)
 - [Render: environment variables](https://render.com/docs/configure-environment-variables)
 - [Render: regions](https://render.com/docs/regions)
+- [Render: Docker build secret files](https://render.com/docs/docker-secrets)
 - [Render: graceful shutdown](https://render.com/docs/deploys#graceful-shutdown)
 - [Render: persistent-disk limitations](https://render.com/docs/disks#disk-limitations-and-considerations)
+- [GitHub: fine-grained personal access tokens](https://docs.github.com/en/authentication/keeping-your-account-and-data-secure/managing-your-personal-access-tokens)
 
 ## Data flow and ownership
 
@@ -98,6 +100,7 @@ The wizard writes an ignored, mode-`0600` operator file. Never commit it. In the
 | `ANTHROPIC_API_KEY` | Anthropic Console, Settings > API keys | Render worker; local operator file | secret |
 | `OPENAI_API_KEY` | [OpenAI API keys](https://platform.openai.com/api-keys) | Render worker; local operator file | secret |
 | `GEMINI_API_KEY` | [Google AI Studio API keys](https://aistudio.google.com/app/apikey) | Render worker vendor preflight; local operator file | secret |
+| `damm_git_netrc` | three-line netrc payload backed by a one-attempt GitHub fine-grained PAT scoped to `World-Bank-Digital/DAMM`, **Contents: read-only** | Render worker **Secret Files** only; never the local operator file, environment variables, gateway, source, or image layer | secret build credential; revoke immediately after every settled build attempt and replace with a fresh token for any retry |
 | `NETLIFY_PROJECT_SLUG` | Netlify project creation | production hostname and local record | public identifier |
 | `NETLIFY_SITE_ID` | Project configuration > General > Project information | local record | public identifier |
 | `NETLIFY_URL` | Domain management > Production domains | auth base URL, smoke tests, local record | public configuration |
@@ -139,7 +142,7 @@ Stop if any validation fails, if a generated manifest changes, if the canonical 
 
 ### 2. Confirm accounts, billing, and spend authority
 
-Before creating anything, verify access to Netlify, Neon, Render, GitHub, Exa, Jina, Perplexity, Anthropic, OpenAI, and Google AI Studio. Both Render `1c-2g` services and the worker's persistent disk are billed. Vendor smoke checks and a full eight-stage workflow consume paid API calls. Record explicit authorization for those staging costs.
+Before creating anything, verify access to Netlify, Neon, Render, GitHub, Exa, Jina, Perplexity, Anthropic, OpenAI, and Google AI Studio. GitHub access must include both `rsudan/dar-studio-v2` and the private `World-Bank-Digital/DAMM` repository, plus authority to create an approved, repository-scoped **Contents: read-only** fine-grained token for the worker image build. Both Render `1c-2g` services and the worker's persistent disk are billed. Vendor smoke checks and a full eight-stage workflow consume paid API calls. Record explicit authorization for those staging costs.
 
 Stop if the operator cannot view billing/usage, cannot rotate a key, or does not have authority to incur the costs.
 
@@ -290,11 +293,15 @@ Dashboard path: **Render Dashboard > New > Blueprint > Connect** the exact repos
 3. Confirm its persistent disk is `dar-studio-worker-data`, mounted at `/var/data`, with 10 GB. Render's live semantic validator rejects a custom maximum shutdown delay on a service with a disk, so the worker uses Render's documented default 30-second shutdown window. Its graceful SIGTERM path, five-minute claim lease, and durable coordinator/workflow checkpoints let a replacement worker reclaim and resume a forced-off run. Keep Blueprint Auto Sync and service auto-deploy disabled, and never trigger a manual worker deploy while a workflow is active.
 4. Review `dar-studio-artifacts`: `type: web`, `runtime: docker`, `region: ohio`, plan `1c-2g`, `dockerfilePath: ./Dockerfile.artifact-gateway`, one instance, `autoDeployTrigger: off`, `healthCheckPath: /healthz`, `maxShutdownDelaySeconds: 300`, and **no disk**.
 5. At the initial `sync: false` prompts, give the worker `DATABASE_URL` (pooled) plus all six vendor keys. Give the gateway the same pooled `DATABASE_URL`, the generated `ARTIFACT_DELIVERY_SECRET`, and `APP_ORIGIN` set to the exact `NETLIFY_URL`/`BETTER_AUTH_URL`. Render supplies `PORT`.
-6. Review both `1c-2g` service charges and the worker disk charge. Only then click **Deploy Blueprint**.
-7. Capture the Blueprint ID, worker service ID, gateway service ID, and the gateway's public `https://<name>.onrender.com` origin.
-8. In the created Blueprint open **Settings** and set **Auto Sync: No**. Both services also have `autoDeployTrigger: off` in `render.yaml`. Later Blueprint syncs and service deploys must be explicit, use the merged `main` commit, and occur only after the active-workflow query returns zero rows.
+6. Before creating the billed resources, create a short-expiry fine-grained personal access token in GitHub. Set resource owner to `World-Bank-Digital`, select only repository `DAMM`, set **Contents: Read-only**, accept the **Metadata: Read-only** permission GitHub adds automatically, and grant nothing else. If organization approval is required, wait until the token is active. Keep it only in a password manager or secure clipboard; never put it in `.env.staging`.
+7. Review both `1c-2g` service charges and the worker disk charge. Only after the token is active click **Deploy Blueprint**. The gateway may succeed, but the worker's first build should reach **Failed** because its required build secret is deliberately absent. Do not wait for worker success or investigate this expected first failure; continue once the worker resource exists.
+8. Immediately open the created Blueprint's **Settings** and set **Auto Sync: No**. Both services already have `autoDeployTrigger: off` in `render.yaml`. Do not upload the live token until all three automatic paths are off. Later Blueprint syncs and service deploys must be explicit, use the merged `main` commit, and occur only after the active-workflow query returns zero rows.
+9. Open **dar-studio-worker > Environment > Secret Files > Add Secret File**. Set the filename to `damm_git_netrc` and enter exactly three lines: `machine github.com`, `login x-access-token`, and `password <the fine-grained token>`. Never add it as an environment variable, Docker `ARG`, URL credential, or gateway secret.
+10. Click **Save Changes**. Render automatically starts a new deploy, so do not start an overlapping manual deploy. Its build must use BuildKit secret ID `damm_git_netrc`; the mount is absent from image layers. It initializes a credential-free seed and shallow-fetches only the pinned commit, with no tags or older reachable history.
+11. Wait for that credentialed deploy to reach a terminal state—**Live**, **Failed**, or **Canceled**—then immediately delete/revoke its fine-grained PAT in GitHub, regardless of the outcome and before investigating a failure. The worker never needs GitHub at runtime. Leave only the revoked, inert value in Render's saved Secret File. If the deploy failed, was canceled, or used the wrong commit, diagnose it with the token revoked. For every retry, create a fresh short-expiry token with the same narrow scope, replace the Secret File, let **Save Changes** trigger the retry, and revoke that new token as soon as the attempt settles. Continue only after a deploy is **Live** on the recorded `DEPLOY_GIT_SHA` and its PAT is revoked.
+12. Capture the Blueprint ID, worker service ID, gateway service ID, and the gateway's public `https://<name>.onrender.com` origin.
 
-Render prompts for `sync: false` values only on initial creation. If a value is missed, use **Service > Environment > Environment Variables > + Add Environment Variable**, then **Save, rebuild, and deploy**. Stop before clicking Deploy Blueprint if either service's branch, region, type, plan, disk, instance count, commit, or secret list differs. Render cannot change a service's region in place.
+Render prompts for `sync: false` values only on initial creation. If a value is missed, use **Service > Environment > Environment Variables > + Add Environment Variable**, then **Save, rebuild, and deploy**. The `damm_git_netrc` file is a separate worker-only build credential and must use **Secret Files**, not Environment Variables. Stop before clicking Deploy Blueprint if either service's branch, region, type, plan, disk, instance count, commit, or secret list differs. Render cannot change a service's region in place.
 
 ### 12. Verify the worker and artifact gateway
 
@@ -309,9 +316,11 @@ For `dar-studio-worker`, open **Logs**. Require `[worker-checkout] installed DAM
 - the upstream root `.env` exists as a blank mode-`0600` compatibility file; and
 - the worker is watching the Neon queue.
 
-For `dar-studio-artifacts`, open `https://<gateway>.onrender.com/healthz`. Require status `200`, body `{"status":"ok"}`, and `Cache-Control: no-store`. Request fixed `/v1/artifacts` without the exact allowed Origin and header capability; require a non-disclosing `404` and `Not found.`. Its logs must show `[artifact-gateway] listening on 0.0.0.0:<PORT>` without a secret or database URL.
+Capture the worker deploy ID and commit, and require that commit to equal `DEPLOY_GIT_SHA`. Before runtime verification began, the credentialed deploy attempt must already have settled and its one-attempt PAT must already be revoked. A live PAT during these checks is a hard stop.
 
-Capture each service's deploy ID and deployed commit. Both commits must equal `DEPLOY_GIT_SHA`. Any `[worker-checkout] failed:`, `[worker-preflight] failed:`, `[worker-entrypoint] failed:`, gateway startup/database failure, checkout drift, wrong commit, absent renderer, invalid health response, or repeated crash/restart is a hard stop. Do not launch a workflow to diagnose a failed preflight.
+For `dar-studio-artifacts`, open `https://<gateway>.onrender.com/healthz`. Require status `200`, body `{"status":"ok"}`, and `Cache-Control: no-store`. Request fixed `/v1/artifacts` without the exact allowed Origin and header capability; require a non-disclosing `404` and `Not found.`. Its logs must show `[artifact-gateway] listening on 0.0.0.0:<PORT>` without a secret or database URL. Capture its deploy ID and require its commit to equal `DEPLOY_GIT_SHA`.
+
+Any `[worker-checkout] failed:`, `[worker-preflight] failed:`, `[worker-entrypoint] failed:`, gateway startup/database failure, checkout drift, wrong commit, absent renderer, invalid health response, or repeated crash/restart is a hard stop. Do not launch a workflow to diagnose a failed preflight.
 
 ### 13. Set Netlify production-only environment variables
 

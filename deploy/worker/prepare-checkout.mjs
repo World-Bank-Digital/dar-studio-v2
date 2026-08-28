@@ -37,7 +37,7 @@ async function plainDirectory(filename, label) {
   return realpath(filename);
 }
 
-async function validateCheckout(root, commit, label) {
+export async function validateCheckout(root, repository, commit, label) {
   const canonicalRoot = await plainDirectory(root, label);
   const gitDirectory = await lstat(path.join(root, ".git")).catch(() => null);
   if (!gitDirectory?.isDirectory() || gitDirectory.isSymbolicLink()) {
@@ -45,7 +45,15 @@ async function validateCheckout(root, commit, label) {
   }
   const topLevel = await realpath(git(root, "rev-parse", "--show-toplevel"));
   if (topLevel !== canonicalRoot) fail(`${label} is not its Git top-level directory`);
+  const fetchOrigins = git(root, "remote", "get-url", "--all", "origin");
+  const pushOrigins = git(root, "remote", "get-url", "--push", "--all", "origin");
+  if (fetchOrigins !== repository || pushOrigins !== repository) {
+    fail(`${label} does not have the canonical credential-free origin`);
+  }
   if (git(root, "rev-parse", "HEAD") !== commit) fail(`${label} is not the manifest commit`);
+  if (git(root, "rev-list", "--count", "--all") !== "1" || git(root, "tag", "--list")) {
+    fail(`${label} contains Git history beyond the manifest commit`);
+  }
   if (git(root, "status", "--porcelain=v1", "--untracked-files=no")) {
     fail(`${label} has tracked changes`);
   }
@@ -98,14 +106,14 @@ async function main() {
   const target = path.join(checkoutsRoot, commit);
   const existing = await lstat(target).catch(() => null);
   if (existing) {
-    await validateCheckout(target, commit, "the persistent DAMM checkout");
+    await validateCheckout(target, repository, commit, "the persistent DAMM checkout");
     await ensureBlankVendorEnv(target);
     process.stderr.write(`[worker-checkout] reusing DAMM ${commit}\n`);
     process.stdout.write(target);
     return;
   }
 
-  await validateCheckout(SEED_ROOT, commit, "the image DAMM seed");
+  await validateCheckout(SEED_ROOT, repository, commit, "the image DAMM seed");
   let temporary = await mkdtemp(path.join(checkoutsRoot, `.prepare-${commit}-`));
   try {
     execFileSync("git", ["clone", "--no-local", "--no-checkout", "--", SEED_ROOT, temporary], {
@@ -115,20 +123,22 @@ async function main() {
     git(temporary, "checkout", "--detach", commit);
     git(temporary, "remote", "set-url", "origin", repository);
     git(temporary, "fsck", "--strict", "--no-dangling");
-    await validateCheckout(temporary, commit, "the prepared DAMM checkout");
+    await validateCheckout(temporary, repository, commit, "the prepared DAMM checkout");
     await rename(temporary, target);
     temporary = null;
   } finally {
     if (temporary) await rm(temporary, { recursive: true, force: true });
   }
 
-  await validateCheckout(target, commit, "the persistent DAMM checkout");
+  await validateCheckout(target, repository, commit, "the persistent DAMM checkout");
   await ensureBlankVendorEnv(target);
   process.stderr.write(`[worker-checkout] installed DAMM ${commit}\n`);
   process.stdout.write(target);
 }
 
-main().catch((error) => {
-  process.stderr.write(`[worker-checkout] failed: ${error?.message ?? String(error)}\n`);
-  process.exitCode = 1;
-});
+if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+  main().catch((error) => {
+    process.stderr.write(`[worker-checkout] failed: ${error?.message ?? String(error)}\n`);
+    process.exitCode = 1;
+  });
+}
