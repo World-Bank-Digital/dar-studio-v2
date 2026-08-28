@@ -83,6 +83,9 @@ describe("Render artifact delivery gateway", () => {
     const valid =
       "postgresql://role:secret@ep-dar-pooler.us-east-2.aws.neon.tech/neondb?sslmode=require";
     assert.equal(requireArtifactGatewayDatabaseUrl(valid), valid);
+    const clusterQualified =
+      "postgresql://role:secret@ep-dar-pooler.c-5.us-east-2.aws.neon.tech/neondb?sslmode=require&channel_binding=require";
+    assert.equal(requireArtifactGatewayDatabaseUrl(clusterQualified), clusterQualified);
     for (const candidate of [
       undefined,
       "postgresql://role:secret@ep-dar.us-east-2.aws.neon.tech/neondb?sslmode=require",

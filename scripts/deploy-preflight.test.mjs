@@ -93,6 +93,25 @@ test("pooled runtime and direct migration URLs identify the same Neon database a
   }
 });
 
+test("cluster-qualified Neon Ohio URLs identify the same pooled and direct endpoint", () => {
+  const environment = {
+    ...validEnvironment(),
+    DATABASE_URL:
+      "postgresql://role:secret@ep-dar-pooler.c-5.us-east-2.aws.neon.tech/neondb?sslmode=require&channel_binding=require",
+    MIGRATION_DATABASE_URL:
+      "postgresql://role:secret@ep-dar.c-5.us-east-2.aws.neon.tech/neondb?sslmode=require&channel_binding=require",
+  };
+
+  assert.deepEqual(validateNetlifyEnvironment(environment), []);
+
+  const wrongCluster = {
+    ...environment,
+    MIGRATION_DATABASE_URL:
+      "postgresql://role:secret@ep-dar.c-6.us-east-2.aws.neon.tech/neondb?sslmode=require&channel_binding=require",
+  };
+  assert.match(validateNetlifyEnvironment(wrongCluster).join("\n"), /same Neon endpoint/);
+});
+
 test("the public hostname must be bare and match the Better Auth origin", () => {
   const mismatch = { ...validEnvironment(), VITE_PUBLIC_HOSTNAME: "other.netlify.app" };
   assert.match(validateNetlifyEnvironment(mismatch).join("\n"), /must match BETTER_AUTH_URL/);
