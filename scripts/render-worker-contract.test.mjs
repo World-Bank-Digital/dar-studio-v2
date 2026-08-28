@@ -173,14 +173,11 @@ describe("Render worker deployment contract", () => {
     }
   });
 
-  it("runs all upstream test roots without writing executable bytecode", () => {
+  it("runs standalone model parity and every upstream unittest root without bytecode", () => {
     const dockerfile = read("Dockerfile.worker");
-    for (const root of [
-      "model",
-      "workflow",
-      "gauntlet/loop-1",
-      "gauntlet/loop-1/research_pipeline",
-    ]) {
+    assert.match(dockerfile, /python -B model\/test_model_parity\.py/);
+    assert.doesNotMatch(dockerfile, /unittest discover -s model/);
+    for (const root of ["workflow", "gauntlet/loop-1", "gauntlet/loop-1/research_pipeline"]) {
       assert.match(dockerfile, new RegExp(`unittest discover -s ${root.replaceAll("/", "\\/")}`));
     }
     assert.match(dockerfile, /PYTHONDONTWRITEBYTECODE=1/);

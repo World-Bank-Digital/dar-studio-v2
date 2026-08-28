@@ -65,11 +65,12 @@ RUN --mount=type=secret,id=damm_git_netrc,dst=/root/.netrc,required=true,mode=04
     test -z "$(git -C /opt/damm-seed status --porcelain=v1 --untracked-files=no)"; \
     git config --system --add safe.directory /opt/damm-seed
 
-# Execute every upstream unit-test directory under the same 3.12 interpreter that will
-# run the workflow. -B keeps executable bytecode out of the attested source tree.
+# Execute the standalone model-parity program and every upstream unittest directory
+# under the same 3.12 interpreter that will run the workflow. -B keeps executable
+# bytecode out of the attested source tree.
 RUN set -eu; \
     cd /opt/damm-seed; \
-    /opt/damm-venv/bin/python -B -m unittest discover -s model -p 'test_*.py'; \
+    /opt/damm-venv/bin/python -B model/test_model_parity.py; \
     /opt/damm-venv/bin/python -B -m unittest discover -s workflow -p 'test_*.py'; \
     /opt/damm-venv/bin/python -B -m unittest discover -s gauntlet/loop-1 -p 'test_*.py'; \
     /opt/damm-venv/bin/python -B -m unittest discover -s gauntlet/loop-1/research_pipeline -p 'test_*.py'
