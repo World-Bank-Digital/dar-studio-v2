@@ -65,7 +65,8 @@ RUN --mount=type=secret,id=damm_git_netrc,dst=/root/.netrc,required=true,mode=04
     test "$(git -C /opt/damm-seed rev-list --count --all)" = "1"; \
     test -z "$(git -C /opt/damm-seed tag --list)"; \
     test -z "$(git -C /opt/damm-seed status --porcelain=v1 --untracked-files=no)"; \
-    git config --system --add safe.directory /opt/damm-seed
+    git config --system --add safe.directory /opt/damm-seed; \
+    git config --system --add safe.directory /opt/damm-seed/.git
 
 # Execute the standalone model-parity program and every upstream unittest directory
 # under the same 3.12 interpreter that will run the workflow. -B keeps executable
