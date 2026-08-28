@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { execFileSync } from "node:child_process";
+import { execFileSync, spawnSync } from "node:child_process";
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
@@ -102,6 +102,70 @@ describe("Render worker deployment contract", () => {
     assert.notEqual(verification, -1);
     const precedingWorkdirs = runtimeStage.slice(0, verification).match(/^WORKDIR .+$/gm) ?? [];
     assert.equal(precedingWorkdirs.at(-1), "WORKDIR /opt/app");
+  });
+
+  it("allows the unprivileged runtime to read the root-owned image seed", () => {
+    const root = mkdtempSync(join(tmpdir(), "dar-worker-seed-owner-"));
+    try {
+      const seed = join(root, "damm-seed");
+      const gitConfig = join(root, "system-gitconfig");
+      execFileSync("git", ["init", "--quiet", seed]);
+      writeFileSync(gitConfig, "", { mode: 0o600 });
+      const gitEnv = {
+        ...process.env,
+        GIT_CONFIG_GLOBAL: "/dev/null",
+        GIT_CONFIG_SYSTEM: gitConfig,
+        GIT_TEST_ASSUME_DIFFERENT_OWNER: "1",
+      };
+      const probeOwnership = () =>
+        spawnSync("git", ["-C", join(seed, ".git"), "rev-parse", "--git-dir"], {
+          encoding: "utf8",
+          env: gitEnv,
+        });
+
+      const rejected = probeOwnership();
+      assert.notEqual(rejected.status, 0);
+      assert.match(rejected.stderr, /detected dubious ownership/);
+
+      const dockerfile = read("Dockerfile.worker");
+      const runtimeStage = dockerfile.slice(dockerfile.indexOf(" AS runtime"));
+      const entrypoint = runtimeStage.indexOf("ENTRYPOINT");
+      assert.notEqual(entrypoint, -1);
+      const safeDirectories = [
+        ...runtimeStage
+          .slice(0, entrypoint)
+          .matchAll(/git config --system --add safe\.directory ([^\s;]+)/g),
+      ].map((match) => match[1]);
+      assert.deepEqual(safeDirectories, ["/opt/damm-seed", "/opt/damm-seed/.git"]);
+      const metadataSafeDirectories = safeDirectories.filter((directory) =>
+        directory.endsWith("/.git"),
+      );
+      for (const directory of metadataSafeDirectories) {
+        execFileSync("git", [
+          "config",
+          "--file",
+          gitConfig,
+          "--add",
+          "safe.directory",
+          directory.replace("/opt/damm-seed", seed),
+        ]);
+      }
+
+      const accepted = probeOwnership();
+      assert.equal(accepted.status, 0, accepted.stderr);
+
+      const cloned = spawnSync(
+        "git",
+        ["clone", "--no-local", "--no-checkout", "--", seed, join(root, "checkout")],
+        {
+          encoding: "utf8",
+          env: gitEnv,
+        },
+      );
+      assert.equal(cloned.status, 0, cloned.stderr);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
   });
 
   it("takes the private DAMM repository and commit through an ephemeral build credential", () => {
