@@ -186,6 +186,10 @@ finish() {
 
 TOTAL_STAGES=18
 
+# A database URL contains a password. Never honor caller-supplied shell tracing
+# while this wizard handles secrets.
+set +x
+
 # The template defaults to .env. This deployment deliberately uses an ignored,
 # environment-specific operator record unless the caller supplied ENV_FILE.
 if [[ "$ENV_FILE" == ".env" ]]; then
@@ -220,6 +224,18 @@ require_email() {
   local name="$1" value="$2"
   [[ "$value" =~ ^[^[:space:]@]+@[^[:space:]@]+\.[^[:space:]@]+$ ]] ||
     stop "$name must be a valid email address."
+}
+
+validate_neon_connection() {
+  local variable_name="$1" mode="$2"
+  printf '%s' "${!variable_name}" |
+    node scripts/validate-neon-deployment-urls.mjs "$mode"
+}
+
+validate_same_neon_database() {
+  local pooled_name="$1" direct_name="$2"
+  printf '%s\0%s' "${!pooled_name}" "${!direct_name}" |
+    node scripts/validate-neon-deployment-urls.mjs pair
 }
 
 remove_env() {
@@ -286,6 +302,7 @@ required_files=(
   deploy/worker/entrypoint.sh
   deploy/worker/preflight.mjs
   scripts/artifact-gateway.ts
+  scripts/validate-neon-deployment-urls.mjs
   migrations/0013_damm_methodology_pin_cutover.sql
   docs/DEPLOYMENT-NETLIFY-NEON-RENDER-OHIO.md
 )
@@ -417,27 +434,17 @@ say "In the Neon project Dashboard click Connect. Select production and the inte
 step "Turn Connection pooling on. Copy the URL whose hostname contains -pooler."
 ask_secret DATABASE_URL "Paste the pooled Neon DATABASE_URL:"
 require_value DATABASE_URL "$DATABASE_URL"
-[[ "$DATABASE_URL" == postgres://* || "$DATABASE_URL" == postgresql://* ]] ||
-  stop "DATABASE_URL must be a postgres:// or postgresql:// URL."
-[[ "$DATABASE_URL" == *"-pooler.us-east-2.aws.neon.tech"* ]] ||
-  stop "The pooled URL must contain -pooler and the Neon Ohio hostname."
-[[ "$DATABASE_URL" == *"sslmode=require"* ]] ||
-  stop "The pooled DATABASE_URL must include sslmode=require."
+validate_neon_connection DATABASE_URL pooled ||
+  stop "DATABASE_URL must be Neon's pooled Ohio URL with sslmode=require."
 write_env DATABASE_URL "$DATABASE_URL"
 
 step "Turn Connection pooling off and copy the direct URL."
 ask_secret DATABASE_URL_DIRECT "Paste the direct Neon migration URL:"
 require_value DATABASE_URL_DIRECT "$DATABASE_URL_DIRECT"
-[[ "$DATABASE_URL_DIRECT" == postgres://* || "$DATABASE_URL_DIRECT" == postgresql://* ]] ||
-  stop "DATABASE_URL_DIRECT must be a postgres:// or postgresql:// URL."
-[[ "$DATABASE_URL_DIRECT" == *".us-east-2.aws.neon.tech"* ]] ||
-  stop "The direct URL is not in Neon AWS Ohio."
-[[ "$DATABASE_URL_DIRECT" != *-pooler.* ]] ||
-  stop "DATABASE_URL_DIRECT unexpectedly contains -pooler."
-[[ "$DATABASE_URL_DIRECT" == *"sslmode=require"* ]] ||
-  stop "The direct DATABASE_URL_DIRECT must include sslmode=require."
-[[ "$DATABASE_URL" != "$DATABASE_URL_DIRECT" ]] ||
-  stop "Pooled DATABASE_URL and direct DATABASE_URL_DIRECT must be different connection strings."
+validate_neon_connection DATABASE_URL_DIRECT direct ||
+  stop "DATABASE_URL_DIRECT must be Neon's direct Ohio URL with sslmode=require."
+validate_same_neon_database DATABASE_URL DATABASE_URL_DIRECT ||
+  stop "Pooled and direct URLs must identify the same Neon endpoint, database, and role."
 write_env DATABASE_URL_DIRECT "$DATABASE_URL_DIRECT"
 chmod 600 "$ENV_FILE"
 say "Pooled: Netlify Build+Functions and both Render services. Direct: local migration and Netlify Build-only MIGRATION_DATABASE_URL."

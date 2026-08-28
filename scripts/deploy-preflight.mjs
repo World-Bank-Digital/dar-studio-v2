@@ -2,7 +2,11 @@
 
 import { fileURLToPath } from "node:url";
 
-import { validAbsoluteHttpsUrl, validNeonOhioConnection } from "./deployment-url-policy.mjs";
+import {
+  sameNeonDatabaseIdentity,
+  validAbsoluteHttpsUrl,
+  validNeonOhioConnection,
+} from "./deployment-url-policy.mjs";
 
 function text(environment, name) {
   const value = environment[name];
@@ -17,25 +21,6 @@ function publicHostname(value) {
   } catch {
     return null;
   }
-}
-
-function neonDatabaseIdentity(value) {
-  const url = new URL(value);
-  return {
-    hostname: url.hostname.replace(/-pooler(?=\.us-east-2\.aws\.neon\.tech$)/, ""),
-    username: url.username,
-    database: url.pathname.slice(1),
-  };
-}
-
-function sameNeonDatabaseIdentity(pooledUrl, directUrl) {
-  const pooled = neonDatabaseIdentity(pooledUrl);
-  const direct = neonDatabaseIdentity(directUrl);
-  return (
-    pooled.hostname === direct.hostname &&
-    pooled.username === direct.username &&
-    pooled.database === direct.database
-  );
 }
 
 /** Return variable-name-only failures; secret values are never copied into diagnostics. */

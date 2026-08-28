@@ -168,7 +168,7 @@ Stop if the project region is not `aws-us-east-2`, the branch has a parent, or t
 Dashboard path: **Neon project Dashboard > Connect**.
 
 1. Select branch `production`, the intended database, and its owner role.
-2. Turn **Connection pooling** on and copy the URL as `DATABASE_URL`. Its hostname must contain both `-pooler` and `.us-east-2.aws.neon.tech`.
+2. Turn **Connection pooling** on and copy the URL as `DATABASE_URL`. Its hostname must contain both `-pooler` and `.us-east-2.aws.neon.tech`. Neon may place a cluster segment such as `.c-5` between them; retain the hostname exactly as supplied.
 3. Turn pooling off and copy the direct URL as `DATABASE_URL_DIRECT`. It must use `.us-east-2.aws.neon.tech` and must not contain `-pooler`.
 4. Require `sslmode=require` exactly once in both URLs (and retain `channel_binding=require` when Neon supplies it). The pooled and direct strings must not be identical, but after removing the pooled host marker they must identify the same Neon endpoint, database, and role. The deployment preflight rejects cross-project, cross-database, or cross-role pairs so a build cannot migrate one database and serve another.
 
