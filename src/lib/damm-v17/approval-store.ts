@@ -18,6 +18,7 @@ import {
 } from "./approvals.ts";
 import {
   DAMM_WORKFLOW_METHODOLOGY,
+  methodologyIdentitiesMatch,
   methodologyMatchesCanonical,
   type WorkflowMethodologyIdentity,
 } from "./methodology.ts";
@@ -32,6 +33,11 @@ import { DAR_WORKFLOW, DAR_WORKFLOW_SHA256 } from "./workflow.ts";
 
 export const APPROVAL_OBSERVATIONS_ARTIFACT_KEY = "data-damm_diagnostic-damm_observations-json";
 export const APPROVAL_ASSESSMENT_INPUT_ARTIFACT_KEY = "assessment-input";
+const PREVIOUS_DAMM_SOURCE_COMMIT = "92c6ffe8b331347bc05f345785fe409753401a24";
+const PREVIOUS_DAMM_WORKFLOW_METHODOLOGY: Readonly<WorkflowMethodologyIdentity> = Object.freeze({
+  ...DAMM_WORKFLOW_METHODOLOGY,
+  sourceCommit: PREVIOUS_DAMM_SOURCE_COMMIT,
+});
 
 export type ApprovalStoreErrorCode =
   | "AUTH_REQUIRED"
@@ -41,6 +47,7 @@ export type ApprovalStoreErrorCode =
   | "INVALID_PACKAGE"
   | "ARTIFACT_INTEGRITY"
   | "METHODOLOGY_UNVERIFIED"
+  | "HISTORICAL_SOURCE_PIN"
   | "POLICY_VIOLATION"
   | "CONFLICT"
   | "INVALID_STATE";
@@ -183,8 +190,20 @@ export interface ApprovalRelease {
   createdAt: string;
 }
 
+export interface OwnerApprovalPackageHistoryEntry {
+  packageId: string;
+  runId: string;
+  artifactSetId: string;
+  bundleSha256: string;
+  targetIdentitySha256: string;
+  completedAt: string;
+  sourceCommit: string;
+  currentMethodology: boolean;
+}
+
 export interface OwnerApprovalState {
   package: ApprovalPackage;
+  packageHistory: readonly OwnerApprovalPackageHistoryEntry[];
   rows: readonly ApprovalReviewRow[];
   assignments: readonly ApprovalAssignment[];
   assignmentSupersessions: readonly ApprovalAssignmentSupersession[];
@@ -356,16 +375,7 @@ interface DbUser {
   email: string;
 }
 
-interface LatestCandidateRow {
-  run_id: string;
-  country_id: string;
-  country_name: string;
-  iso3: string;
-  ceiling_usd: number | string;
-  vendor: string | null;
-  owner_user_id: string;
-  artifact_set_id: string | null;
-  completed_at: Date | string | null;
+interface DbMethodologyRow {
   manifest_schema_version: string | null;
   model_id: string | null;
   model_version: string | null;
@@ -389,6 +399,18 @@ interface LatestCandidateRow {
   renderer_version: string | null;
   renderer_path: string | null;
   renderer_sha256: string | null;
+}
+
+interface LatestCandidateRow extends DbMethodologyRow {
+  run_id: string;
+  country_id: string;
+  country_name: string;
+  iso3: string;
+  ceiling_usd: number | string;
+  vendor: string | null;
+  owner_user_id: string;
+  artifact_set_id: string | null;
+  completed_at: Date | string | null;
   bundle_artifact_set_id: string | null;
   bundle_sha256: string | null;
   bundle_workflow_id: string | null;
@@ -641,7 +663,7 @@ function methodologyFromPackage(row: DbPackageRow): WorkflowMethodologyIdentity 
   };
 }
 
-function methodologyFromCandidate(row: LatestCandidateRow): WorkflowMethodologyIdentity | null {
+function methodologyFromDbRow(row: DbMethodologyRow): WorkflowMethodologyIdentity | null {
   const values = [
     row.manifest_schema_version,
     row.model_id,
@@ -913,7 +935,9 @@ function approvalLifecycle(
     reviewStarted: assignments.length > 0 || decisions.length > 0,
     decisions: decisions.map(policyDecision),
     countryOwnerUserId: approvalPackage.ownerUserId,
-    methodologyStatus: "canonical",
+    methodologyStatus: methodologyMatchesCanonical(approvalPackage.methodology)
+      ? "canonical"
+      : "historical_verified",
     methodologyModelStatus: approvalPackage.methodology.modelStatus,
     methodologyRatified: approvalPackage.methodology.modelRatified,
   });
@@ -1288,13 +1312,16 @@ async function verifyCompleteStoredArtifactSet(
   }
 }
 
-function verifyCandidate(candidate: LatestCandidateRow): {
+function verifyCandidate(
+  candidate: LatestCandidateRow,
+  expectedMethodology: WorkflowMethodologyIdentity = DAMM_WORKFLOW_METHODOLOGY,
+): {
   methodology: WorkflowMethodologyIdentity;
   assessmentInputSha256: string;
   completedAt: string;
 } {
-  const methodology = methodologyFromCandidate(candidate);
-  if (!methodology || !methodologyMatchesCanonical(methodology)) {
+  const methodology = methodologyFromDbRow(candidate);
+  if (!methodology || !methodologyIdentitiesMatch(methodology, expectedMethodology)) {
     throw new StoreRefusal(
       "METHODOLOGY_UNVERIFIED",
       "Legacy or methodology-unverified Draft packages cannot enter the canonical approval chain",
@@ -1429,10 +1456,26 @@ async function verifyPackageReadIntegrity(
   rows: readonly ApprovalReviewRow[],
   sql: Sql,
 ): Promise<void> {
-  if (!methodologyMatchesCanonical(approvalPackage.methodology)) {
+  const frozenMethodologies = await sql.query<DbMethodologyRow>(
+    `select manifest_schema_version, model_id, model_version, model_revision,
+            model_status, model_ratified, app_model_sha256, app_model_schema_sha256,
+            source_repository, source_commit, source_model_path, source_model_sha256,
+            source_schema_path, source_schema_sha256, census_revision, census_path,
+            census_sha256, engine_version, engine_path, engine_sha256,
+            renderer_version, renderer_path, renderer_sha256
+     from workflow_run_methodology where run_id = $1 limit 1`,
+    [approvalPackage.runId],
+  );
+  const frozenMethodology = frozenMethodologies[0]
+    ? methodologyFromDbRow(frozenMethodologies[0])
+    : null;
+  if (
+    !frozenMethodology ||
+    !methodologyIdentitiesMatch(approvalPackage.methodology, frozenMethodology)
+  ) {
     throw new StoreRefusal(
       "METHODOLOGY_UNVERIFIED",
-      "Approval package methodology is not canonical",
+      "Approval package methodology does not match its immutable workflow launch identity",
     );
   }
   if (rows.length !== approvalPackage.machineRowCount) {
@@ -1526,6 +1569,15 @@ async function verifyPackageReadIntegrity(
   }
 }
 
+function requireCurrentApprovalActivity(approvalPackage: ApprovalPackage): void {
+  if (!methodologyMatchesCanonical(approvalPackage.methodology)) {
+    throw new StoreRefusal(
+      "METHODOLOGY_UNVERIFIED",
+      "This historical Draft package remains audit-readable, but new approval activity requires the current methodology",
+    );
+  }
+}
+
 async function packageById(
   packageId: string,
   sql: Sql,
@@ -1562,6 +1614,27 @@ export async function ensureApprovalPackage(
     return sql.transaction(async (transaction) => {
       await registeredUser(ownerUserId, transaction);
       const candidate = await latestCandidate(countryId, ownerUserId, transaction);
+      const candidateMethodology = methodologyFromDbRow(candidate);
+      if (
+        candidateMethodology &&
+        methodologyIdentitiesMatch(candidateMethodology, PREVIOUS_DAMM_WORKFLOW_METHODOLOGY)
+      ) {
+        if (candidate.artifact_set_id) {
+          const historical = await transaction.query<DbPackageRow>(
+            `select * from workflow_approval_packages
+             where run_id = $1 and artifact_set_id = $2 limit 1`,
+            [candidate.run_id, candidate.artifact_set_id],
+          );
+          if (historical[0]) {
+            return packageById(historical[0].id, transaction, { ownerUserId });
+          }
+        }
+        verifyCandidate(candidate, PREVIOUS_DAMM_WORKFLOW_METHODOLOGY);
+        throw new StoreRefusal(
+          "HISTORICAL_SOURCE_PIN",
+          "The latest completed Draft uses the exact preceding DAMM source pin and cannot start a new approval chain",
+        );
+      }
       const verified = verifyCandidate(candidate);
       const boundary = await verifyCompleteStoredArtifactSet(
         candidate,
@@ -1706,14 +1779,23 @@ export async function ensureApprovalPackage(
   });
 }
 
-/** Return the latest materialized package owned by this authenticated country owner. */
+/**
+ * Return one exact materialized package owned by this authenticated country owner.
+ * Without an explicit package ID the latest package remains the default, while the
+ * returned history makes earlier immutable approval chains directly auditable.
+ */
 export async function getOwnerApprovalState(
   countryId: string,
   ownerUserId: string,
   database?: Sql,
+  requestedPackageId?: string,
 ): Promise<ApprovalStoreResult<OwnerApprovalState>> {
   return resultOf(async () => {
     requireHumanId(ownerUserId);
+    const packageId = requestedPackageId?.trim();
+    if (requestedPackageId !== undefined && !packageId) {
+      throw new StoreRefusal("INVALID_INPUT", "Approval package ID is required");
+    }
     const sql = database ?? (await getSql());
     return sql.transaction(async (transaction) => {
       // Decisions and their release commit atomically. A repeatable read keeps the
@@ -1725,13 +1807,19 @@ export async function getOwnerApprovalState(
         `select package.*
          from workflow_approval_packages package
          where package.country_id = $1 and package.owner_user_id = $2
-         order by package.completed_at desc limit 1`,
+         order by package.completed_at desc, package.created_at desc, package.id desc`,
         [countryId, ownerUserId],
       );
       if (!packages[0]) {
         throw new StoreRefusal("NOT_FOUND", "No approval package has been materialized");
       }
-      const approvalPackage = await packageById(packages[0].id, transaction, { ownerUserId });
+      const selected = packageId
+        ? packages.find((candidate) => candidate.id === packageId)
+        : packages[0];
+      if (!selected) {
+        throw new StoreRefusal("NOT_FOUND", "Approval package not found");
+      }
+      const approvalPackage = await packageById(selected.id, transaction, { ownerUserId });
       const [rows, assignments, assignmentSupersessions, decisions, release] = await Promise.all([
         packageRows(approvalPackage.id, transaction),
         packageAssignments(approvalPackage.id, transaction),
@@ -1742,6 +1830,20 @@ export async function getOwnerApprovalState(
       if (release) verifyReleaseReadIntegrity(release, approvalPackage, decisions);
       return {
         package: approvalPackage,
+        packageHistory: Object.freeze(
+          packages.map((item) =>
+            Object.freeze({
+              packageId: item.id,
+              runId: item.run_id,
+              artifactSetId: item.artifact_set_id,
+              bundleSha256: item.bundle_sha256,
+              targetIdentitySha256: item.target_identity_sha256,
+              completedAt: iso(item.completed_at),
+              sourceCommit: item.damm_source_commit,
+              currentMethodology: methodologyMatchesCanonical(methodologyFromPackage(item)),
+            }),
+          ),
+        ),
         rows,
         assignments,
         assignmentSupersessions,
@@ -1751,6 +1853,30 @@ export async function getOwnerApprovalState(
       };
     });
   });
+}
+
+/**
+ * Open owner controls without allowing a newer unmaterialized prior-pin run to
+ * hide an older immutable package. Only the methodology-cutover refusal falls
+ * back to package history; integrity and package failures remain visible.
+ */
+export async function openOwnerApprovalState(
+  countryId: string,
+  ownerUserId: string,
+  database?: Sql,
+  requestedPackageId?: string,
+): Promise<ApprovalStoreResult<OwnerApprovalState>> {
+  if (requestedPackageId !== undefined) {
+    return getOwnerApprovalState(countryId, ownerUserId, database, requestedPackageId);
+  }
+  const prepared = await ensureApprovalPackage(countryId, ownerUserId, database);
+  if (!prepared.ok) {
+    if (prepared.error.code !== "HISTORICAL_SOURCE_PIN") return prepared;
+    const historical = await getOwnerApprovalState(countryId, ownerUserId, database);
+    if (historical.ok || historical.error.code !== "NOT_FOUND") return historical;
+    return prepared;
+  }
+  return getOwnerApprovalState(countryId, ownerUserId, database);
 }
 
 export interface AssignApprovalReviewerInput {
@@ -1792,6 +1918,7 @@ export async function assignApprovalReviewer(
         lock: true,
         ownerUserId: input.ownerUserId,
       });
+      requireCurrentApprovalActivity(approvalPackage);
       if (approvalPackage.ownerUserId !== input.ownerUserId) {
         throw new StoreRefusal("FORBIDDEN", "Only the country owner may assign reviewers");
       }
@@ -1959,10 +2086,17 @@ export async function getAssignedReview(
     const acceptedG1 = priorDecisions.some(
       (decision) => decision.gate === "g1" && decision.decision === "approved",
     );
-    const canSubmit = !terminal && !alreadyDecided && (assignment.gate === "g1" || acceptedG1);
+    const currentMethodology = methodologyMatchesCanonical(approvalPackage.methodology);
+    const canSubmit =
+      currentMethodology &&
+      !terminal &&
+      !alreadyDecided &&
+      (assignment.gate === "g1" || acceptedG1);
     const lockedReason = canSubmit
       ? null
-      : terminal
+      : !currentMethodology
+        ? "This historical package remains audit-readable, but its methodology is no longer current; start a new Draft package for approval."
+        : terminal
         ? "This package requires revision; its approval chain is closed."
         : alreadyDecided
           ? `${assignment.gate.toUpperCase()} already has an immutable decision.`
@@ -2078,6 +2212,7 @@ export async function submitAssignedReview(
       if (!assignments[0]) throw new StoreRefusal("NOT_FOUND", "Assigned review not found");
       const assignment = assignmentFromDb(assignments[0]);
       const approvalPackage = await packageById(assignment.packageId, transaction, { lock: true });
+      requireCurrentApprovalActivity(approvalPackage);
       await registeredUser(input.reviewerUserId, transaction);
       const prior = await packageDecisions(approvalPackage.id, transaction);
       const rowReviews = normalizeRowReviews(input, assignment.scope);
@@ -2175,6 +2310,7 @@ export async function submitCountryOwnerSignoff(
         lock: true,
         ownerUserId: input.ownerUserId,
       });
+      requireCurrentApprovalActivity(approvalPackage);
       if (approvalPackage.ownerUserId !== input.ownerUserId) {
         throw new StoreRefusal("FORBIDDEN", "Only the authenticated country owner may record G3");
       }
@@ -2410,7 +2546,3 @@ export async function getApprovalArtifactAccess(
     };
   });
 }
-
-// Keep the canonical constant referenced here: package creation must fail when the app's
-// shipped methodology changes without a new workflow/artifact identity.
-void DAMM_WORKFLOW_METHODOLOGY;

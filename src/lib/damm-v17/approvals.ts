@@ -640,7 +640,11 @@ export function assertGateDecisionAllowed(input: GateDecisionPolicyInput): void 
   if (input.decision === "approved") assertG3AffirmationsForApproval(input.g3Affirmations);
 }
 
-export type MethodologyVerificationStatus = "canonical" | "legacy_unverified" | "unverified";
+export type MethodologyVerificationStatus =
+  | "canonical"
+  | "historical_verified"
+  | "legacy_unverified"
+  | "unverified";
 
 export interface ApprovalLifecycleInput {
   reviewStarted: boolean;

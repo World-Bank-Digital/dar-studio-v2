@@ -65,7 +65,15 @@ const METHODOLOGY_KEYS = Object.keys(
 ) as (keyof WorkflowMethodologyIdentity)[];
 
 export function methodologyMatchesCanonical(value: WorkflowMethodologyIdentity): boolean {
-  return METHODOLOGY_KEYS.every((key) => value[key] === DAMM_WORKFLOW_METHODOLOGY[key]);
+  return methodologyIdentitiesMatch(value, DAMM_WORKFLOW_METHODOLOGY);
+}
+
+/** Exact identity equality for immutable launch/package snapshots, including historical pins. */
+export function methodologyIdentitiesMatch(
+  left: WorkflowMethodologyIdentity,
+  right: WorkflowMethodologyIdentity,
+): boolean {
+  return METHODOLOGY_KEYS.every((key) => left[key] === right[key]);
 }
 
 function sortedJsonValue(value: unknown): unknown {
