@@ -54,10 +54,10 @@ export function DarReviewTab({ countryId }: { countryId: string }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const refresh = useCallback(async () => {
+  const refresh = useCallback(async (packageId?: string) => {
     setLoading(true);
     try {
-      const result = await getOwnerApprovalStateAction({ data: { countryId } });
+      const result = await getOwnerApprovalStateAction({ data: { countryId, packageId } });
       if (!result.ok) {
         setState(null);
         setError(result.error.message);
@@ -105,7 +105,18 @@ export function DarReviewTab({ countryId }: { countryId: string }) {
   const g1 = assignmentDecision(state.decisions, "g1");
   const g2 = assignmentDecision(state.decisions, "g2");
   const g3 = state.decisions.find((item) => item.gate === "g3");
-  const g3Unlocked = g1?.decision === "approved" && g2?.decision === "approved";
+  const selectedHistory = state.packageHistory.find(
+    (item) => item.packageId === state.package.id,
+  );
+  const historicalReadOnly = selectedHistory?.currentMethodology === false;
+  const activityLockedReason = historicalReadOnly
+    ? "This exact historical package remains audit-readable, but its approval chain is read-only. Start a new current-methodology Draft package for any new G1, G2, or G3 activity."
+    : state.lifecycle === "revisions_required"
+      ? "This package requires revision; assignments resume only on a new completed Draft package and approval chain."
+      : null;
+  const g3Unlocked =
+    !activityLockedReason && g1?.decision === "approved" && g2?.decision === "approved";
+  const refreshSelected = () => refresh(state.package.id);
 
   return (
     <div className="space-y-5 bg-white">
@@ -133,6 +144,41 @@ export function DarReviewTab({ countryId }: { countryId: string }) {
         </div>
       </Card>
 
+      {state.packageHistory.length > 1 ? (
+        <Card className="border border-border bg-white p-5">
+          <label className="block text-sm font-semibold" htmlFor="approval-package-history">
+            Exact Draft package and approval history
+          </label>
+          <p className="mt-1 text-sm text-muted">
+            Select an immutable package to inspect its own reviewers, decisions, hashes, and release.
+            Historical approvals never transfer to another artifact set.
+          </p>
+          <select
+            id="approval-package-history"
+            className="mt-3 h-11 w-full rounded-sm border border-border bg-white px-3 text-sm"
+            value={state.package.id}
+            disabled={loading}
+            onChange={(event) => void refresh(event.currentTarget.value)}
+          >
+            {state.packageHistory.map((item) => (
+              <option key={item.packageId} value={item.packageId}>
+                {item.currentMethodology ? "Current methodology" : "Historical · read only"} ·{" "}
+                {new Date(item.completedAt).toLocaleString()} · run {item.runId}
+              </option>
+            ))}
+          </select>
+          {historicalReadOnly ? (
+            <p className="mt-3 rounded-sm border border-amber-300 bg-white p-3 text-sm font-medium text-amber-900">
+              {activityLockedReason}
+            </p>
+          ) : null}
+        </Card>
+      ) : historicalReadOnly ? (
+        <Card className="border border-amber-300 bg-white p-5 text-sm font-medium text-amber-900">
+          {activityLockedReason}
+        </Card>
+      ) : null}
+
       <ApprovalPackageIdentity approvalPackage={state.package} lifecycle={state.lifecycle} />
       <OriginalDraftDownloads downloads={state.originalDraftDownloads} />
 
@@ -143,8 +189,8 @@ export function DarReviewTab({ countryId }: { countryId: string }) {
           assignment={state.assignments.find((item) => item.gate === "g1")}
           decision={g1}
           prerequisiteAccepted={true}
-          chainClosed={state.lifecycle === "revisions_required"}
-          onChanged={refresh}
+          activityLockedReason={activityLockedReason}
+          onChanged={refreshSelected}
         />
         <ReviewerAssignmentCard
           approvalPackage={state.package}
@@ -152,8 +198,8 @@ export function DarReviewTab({ countryId }: { countryId: string }) {
           assignment={state.assignments.find((item) => item.gate === "g2")}
           decision={g2}
           prerequisiteAccepted={g1?.decision === "approved"}
-          chainClosed={state.lifecycle === "revisions_required"}
-          onChanged={refresh}
+          activityLockedReason={activityLockedReason}
+          onChanged={refreshSelected}
         />
       </section>
 
@@ -196,7 +242,8 @@ export function DarReviewTab({ countryId }: { countryId: string }) {
         affirmations={state.g3Affirmations}
         decision={g3}
         unlocked={g3Unlocked}
-        onChanged={refresh}
+        lockedReason={activityLockedReason}
+        onChanged={refreshSelected}
       />
 
       <ReleaseCard state={state} />
@@ -215,7 +262,7 @@ function ReviewerAssignmentCard({
   assignment,
   decision,
   prerequisiteAccepted,
-  chainClosed,
+  activityLockedReason,
   onChanged,
 }: {
   approvalPackage: ApprovalPackage;
@@ -223,7 +270,7 @@ function ReviewerAssignmentCard({
   assignment?: ApprovalAssignment;
   decision?: HumanApprovalDecision;
   prerequisiteAccepted: boolean;
-  chainClosed: boolean;
+  activityLockedReason: string | null;
   onChanged: () => Promise<void>;
 }) {
   const [email, setEmail] = useState("");
@@ -320,7 +367,7 @@ function ReviewerAssignmentCard({
             </div>
           </div>
 
-          {!decision && !chainClosed ? (
+          {!decision && !activityLockedReason ? (
             <div className="rounded-sm border border-amber-300 bg-white p-3">
               <p className="text-sm font-semibold">Replace this pending assignment</p>
               <p className="mt-1 text-xs text-subtle">
@@ -375,14 +422,14 @@ function ReviewerAssignmentCard({
               type="email"
               autoComplete="email"
               value={email}
-              disabled={chainClosed}
+              disabled={Boolean(activityLockedReason)}
               onChange={(event) => setEmail(event.target.value)}
               placeholder="reviewer@example.org"
             />
           </label>
           <Button
             type="button"
-            disabled={busy || chainClosed || !email.trim()}
+            disabled={busy || Boolean(activityLockedReason) || !email.trim()}
             onClick={() => void assign()}
           >
             {busy ? <Loader2 className="size-4 animate-spin" /> : null}
@@ -393,10 +440,9 @@ function ReviewerAssignmentCard({
             scope, assigner, and assignment time. Browser-provided identity or roles are never
             trusted.
           </p>
-          {chainClosed ? (
+          {activityLockedReason ? (
             <p className="text-xs font-medium text-amber-900">
-              This package requires revision; assignments resume only on a new completed Draft
-              package and approval chain.
+              {activityLockedReason}
             </p>
           ) : null}
         </div>
@@ -453,12 +499,14 @@ function G3CountryOwnerCard({
   affirmations,
   decision,
   unlocked,
+  lockedReason,
   onChanged,
 }: {
   approvalPackage: ApprovalPackage;
   affirmations: readonly G3AffirmationView[];
   decision?: HumanApprovalDecision;
   unlocked: boolean;
+  lockedReason: string | null;
   onChanged: () => Promise<void>;
 }) {
   const [checked, setChecked] = useState<Record<string, boolean>>({});
@@ -518,8 +566,9 @@ function G3CountryOwnerCard({
         <CompletedDecision decision={decision} />
       ) : !unlocked ? (
         <p className="mt-4 flex items-start gap-2 rounded-sm border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900">
-          <LockKeyhole className="mt-0.5 size-4 shrink-0" aria-hidden="true" /> G3 is locked until
-          valid, accepted human G1 and independent human G2 decisions exist for this exact package.
+          <LockKeyhole className="mt-0.5 size-4 shrink-0" aria-hidden="true" />
+          {lockedReason ??
+            "G3 is locked until valid, accepted human G1 and independent human G2 decisions exist for this exact package."}
         </p>
       ) : (
         <div className="mt-4 space-y-4">

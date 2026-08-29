@@ -56,6 +56,20 @@ test("the deployment wizard delegates Neon URL validation to the shared parsed p
   assert.doesNotMatch(wizard, /-pooler\.us-east-2\.aws\.neon\.tech/);
 });
 
+test("the deployment wizard verifies the append-only DAMM source repin", () => {
+  const wizard = readFileSync(
+    join(root, "scripts/deploy/netlify-neon-render-ohio.sh"),
+    "utf8",
+  );
+
+  assert.match(wizard, /migrations\/0013_damm_methodology_pin_cutover\.sql/);
+  assert.match(wizard, /migrations\/0014_damm_source_pin_cutover\.sql/);
+  assert.match(wizard, /MIGRATION_0014_VERIFIED/);
+  assert.match(wizard, /0014_damm_source_pin_cutover\.sql/);
+  assert.match(wizard, /d4c659f5873f3a891634c8edf6b7166cb2eb374c/);
+  assert.doesNotMatch(wizard, /92c6ffe8b331347bc05f345785fe409753401a24/);
+});
+
 test("the deployment wizard keeps the private DAMM build credential out of env values", () => {
   const wizard = readFileSync(
     join(root, "scripts/deploy/netlify-neon-render-ohio.sh"),

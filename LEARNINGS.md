@@ -771,6 +771,12 @@ never cross a lossy JavaScript hashing boundary; reviewer payloads retain the
 database-canonical numeric spelling. G2 also persists the exact version, text,
 and SHA-256 of its substantive source/class/ladder QC affirmation, rather than
 a generic checked boolean.
+When a later deployment changes only the canonical source pin, already completed
+approval records stay exact and audit-readable, while unfinished prior-pin chains
+become historical read-only; authority never crosses the pin boundary implicitly.
+Audit readability also needs an explicit package-addressing path: selecting only
+the newest country package makes an older chain operationally invisible as soon as
+a replacement Draft completes, even if every underlying row remains immutable.
 **Meta-lesson: completion proves that automation finished; approval proves who
 reviewed exactly which immutable bytes under which methodology. Those are
 different state machines and must have different identities, records, and

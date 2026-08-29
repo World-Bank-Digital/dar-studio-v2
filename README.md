@@ -86,6 +86,15 @@ but immediately loses review and artifact access, while the successor receives
 the unchanged package scope. An assignment with a completed decision can never
 be replaced or have its recorded identity altered.
 
+When a deployment advances the canonical DAMM source pin, packages already
+materialized under the preceding pin remain integrity-verified, downloadable,
+and audit-readable with their exact assignments, decisions, and releases. They
+are historical records, however: an unfinished chain cannot receive a new
+assignment, supersession, G1/G2/G3 decision, or release after the cutover. A new
+current-pin Draft package must begin its own approval chain. The owner controls
+list every materialized package and allow an owner to select an older exact
+package for read-only audit even after a newer Draft package exists.
+
 Accepted G3 creates a separate, versioned release manifest referring to the
 reviewed Draft and its exact G1/G2/G3 records. It never relabels or overwrites
 the Stage 8 files. While the pinned DAMM model is `draft for review` with
@@ -127,12 +136,16 @@ includes the model, schema, generated census, export manifest, and a per-run
 methodology manifest. The model remains honestly labelled `draft for review`
 and `ratified: false`; provenance does not imply ratification.
 
-On methodology upgrades, migrations `0011` and `0013` stop before changing the
-schema or active source pin if an older workflow is still active. Allow that
-workflow to finish under the prior release, then retry the deployment; no
-in-flight run is failed or relaunched. A deferred database invariant prevents a
-still-running old app process from committing a missing or stale methodology
-snapshot during a rolling deployment.
+On methodology upgrades, migrations `0011`, `0013`, and `0014` stop before
+changing the schema or active source pin if an older workflow is still active.
+Migration `0014` advances only the upstream source commit after the foresight
+candidate-register repair; the model, workflow, engine, renderer, and
+ratification fields remain unchanged. Allow an in-flight workflow to finish
+under the prior release, then retry the deployment; no run is failed or
+relaunched. A deferred database invariant prevents a still-running old app
+process from committing a missing or stale methodology snapshot, manufacturing
+a terminal stale run, or promoting a failed/cancelled stale run during a rolling
+deployment.
 
 ## Running locally
 

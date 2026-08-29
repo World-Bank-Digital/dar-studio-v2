@@ -11,6 +11,7 @@ import {
   getApprovalArtifactAccess,
   getAssignedReview,
   getOwnerApprovalState,
+  openOwnerApprovalState,
   submitAssignedReview,
   submitCountryOwnerSignoff,
   type ApprovalAssignment,
@@ -94,6 +95,14 @@ function unwrap<T>(result: ApprovalStoreResult<T>): T {
   return result.value;
 }
 
+function assertMethodologyRefusal<T>(result: ApprovalStoreResult<T>): void {
+  assert.equal(result.ok, false);
+  if (!result.ok) {
+    assert.equal(result.error.code, "METHODOLOGY_UNVERIFIED");
+    assert.match(result.error.message, /historical|current methodology|methodology-unverified/i);
+  }
+}
+
 function allAffirmations(): G3AffirmationChecklist {
   return Object.fromEntries(G3_AFFIRMATION_IDS.map((id) => [id, true])) as G3AffirmationChecklist;
 }
@@ -104,6 +113,8 @@ const USERS = {
   peer: { id: "peer-user", name: "Independent Peer", email: "peer@example.test" },
   other: { id: "other-user", name: "Other Reviewer", email: "other@example.test" },
 } as const;
+
+const PREVIOUS_DAMM_SOURCE_COMMIT = "92c6ffe8b331347bc05f345785fe409753401a24";
 
 interface Fixture {
   pg: PGlite;
@@ -130,6 +141,159 @@ function canonicalJson(value: unknown): string {
     return child;
   };
   return JSON.stringify(sort(value));
+}
+
+function historicalTargetIdentity(approvalPackage: ApprovalPackage): {
+  methodology: ApprovalPackage["methodology"];
+  targetIdentitySha256: string;
+} {
+  const methodology = Object.freeze({
+    ...approvalPackage.methodology,
+    sourceCommit: PREVIOUS_DAMM_SOURCE_COMMIT,
+  });
+  const identity = {
+    schemaVersion: "damm.approval-package/v1",
+    workflowRunId: approvalPackage.runId,
+    artifactSetId: approvalPackage.artifactSetId,
+    completeBundleSha256: approvalPackage.bundleSha256,
+    observationsArtifactKey: "data-damm_diagnostic-damm_observations-json",
+    observationsSha256: approvalPackage.observationsSha256,
+    workflow: {
+      id: approvalPackage.workflowId,
+      version: approvalPackage.workflowVersion,
+      contractSha256: approvalPackage.workflowContractSha256,
+    },
+    methodology,
+    assessmentInputArtifactKey: approvalPackage.assessmentInputArtifactKey,
+    assessmentInputSourcePath: approvalPackage.assessmentInputSourcePath,
+    assessmentInputSha256: approvalPackage.assessmentInputSha256,
+    machineRowCount: approvalPackage.machineRowCount,
+    machineRowSetSha256: approvalPackage.machineRowSetSha256,
+    g1ScopeSha256: approvalPackage.g1ScopeSha256,
+    g2ScopeSha256: approvalPackage.g2ScopeSha256,
+    completedAt: approvalPackage.completedAt,
+  };
+  return {
+    methodology,
+    targetIdentitySha256: createHash("sha256").update(canonicalJson(identity)).digest("hex"),
+  };
+}
+
+/**
+ * Reconstruct the immutable identity an already-materialized package had immediately
+ * before migration 0014. Trigger bypass is test setup only: production rows were
+ * written under 0013 and migration 0014 intentionally never rewrites them.
+ */
+async function makePackageHistorical(fx: Fixture): Promise<Fixture> {
+  const { methodology, targetIdentitySha256 } = historicalTargetIdentity(fx.approvalPackage);
+  await fx.sql.query("set session_replication_role = replica");
+  try {
+    await fx.sql.query(
+      "update workflow_run_methodology set source_commit = $2 where run_id = $1",
+      [fx.runId, PREVIOUS_DAMM_SOURCE_COMMIT],
+    );
+    await fx.sql.query(
+      "update workflow_run_artifacts set damm_source_commit = $2 where run_id = $1",
+      [fx.runId, PREVIOUS_DAMM_SOURCE_COMMIT],
+    );
+    for (const table of [
+      "workflow_approval_rows",
+      "workflow_approval_assignments",
+      "workflow_approval_assignment_supersessions",
+      "workflow_approval_decisions",
+    ]) {
+      await fx.sql.query(
+        `update ${table} set target_identity_sha256 = $2 where package_id = $1`,
+        [fx.approvalPackage.id, targetIdentitySha256],
+      );
+    }
+    const releases = await fx.sql.query<{ id: string; manifest_json: Record<string, unknown> }>(
+      `select id, manifest_json from workflow_approval_releases where package_id = $1`,
+      [fx.approvalPackage.id],
+    );
+    for (const release of releases) {
+      const manifest = structuredClone(release.manifest_json);
+      manifest.targetIdentitySha256 = targetIdentitySha256;
+      const manifestMethodology = manifest.methodology as Record<string, unknown>;
+      manifestMethodology.sourceCommit = PREVIOUS_DAMM_SOURCE_COMMIT;
+      await fx.sql.query(
+        `update workflow_approval_releases
+         set target_identity_sha256 = $2, manifest_json = $3::jsonb,
+             manifest_sha256 = $4
+         where id = $1`,
+        [
+          release.id,
+          targetIdentitySha256,
+          JSON.stringify(manifest),
+          createHash("sha256").update(canonicalJson(manifest)).digest("hex"),
+        ],
+      );
+    }
+    await fx.sql.query(
+      `update workflow_approval_packages
+       set damm_source_commit = $2, target_identity_sha256 = $3
+       where id = $1`,
+      [fx.approvalPackage.id, PREVIOUS_DAMM_SOURCE_COMMIT, targetIdentitySha256],
+    );
+  } finally {
+    await fx.sql.query("set session_replication_role = origin");
+  }
+  return {
+    ...fx,
+    approvalPackage: Object.freeze({
+      ...fx.approvalPackage,
+      methodology,
+      targetIdentitySha256,
+    }),
+  };
+}
+
+async function approvalAuditSnapshot(fx: Fixture): Promise<unknown> {
+  const snapshots = await fx.sql.query<{ snapshot: unknown }>(
+    `select jsonb_build_object(
+       'run', (select to_jsonb(workflow_run) from runs workflow_run where id = $1),
+       'methodology', (
+         select to_jsonb(methodology) from workflow_run_methodology methodology
+         where run_id = $1
+       ),
+       'artifacts', coalesce((
+         select jsonb_agg(
+           (to_jsonb(artifact) - 'content') || jsonb_build_object(
+             'stored_content_sha256', encode(sha256(artifact.content), 'hex')
+           ) order by artifact.artifact_key
+         )
+         from workflow_run_artifacts artifact where artifact.run_id = $1
+       ), '[]'::jsonb),
+       'package', (
+         select to_jsonb(package) from workflow_approval_packages package where id = $2
+       ),
+       'rows', coalesce((
+         select jsonb_agg(to_jsonb(package_row) order by package_row.ordinal)
+         from workflow_approval_rows package_row where package_row.package_id = $2
+       ), '[]'::jsonb),
+       'assignments', coalesce((
+         select jsonb_agg(to_jsonb(assignment) order by assignment.id)
+         from workflow_approval_assignments assignment where assignment.package_id = $2
+       ), '[]'::jsonb),
+       'supersessions', coalesce((
+         select jsonb_agg(to_jsonb(supersession) order by supersession.id)
+         from workflow_approval_assignment_supersessions supersession
+         where supersession.package_id = $2
+       ), '[]'::jsonb),
+       'decisions', coalesce((
+         select jsonb_agg(to_jsonb(decision_record) order by decision_record.id)
+         from workflow_approval_decisions decision_record
+         where decision_record.package_id = $2
+       ), '[]'::jsonb),
+       'releases', coalesce((
+         select jsonb_agg(to_jsonb(release_record) order by release_record.id)
+         from workflow_approval_releases release_record
+         where release_record.package_id = $2
+       ), '[]'::jsonb)
+     ) as snapshot`,
+    [fx.runId, fx.approvalPackage.id],
+  );
+  return snapshots[0].snapshot;
 }
 
 async function insertMethodology(sql: Sql, runId: string): Promise<void> {
@@ -475,6 +639,397 @@ describe("post-completion human approval store", () => {
             fx.sql,
           ),
         ),
+      );
+    } finally {
+      await fx.pg.close();
+    }
+  });
+
+  it("keeps the prior-pin package, decisions, and release audit-readable after repinning", async () => {
+    let fx = await fixture("historical-complete");
+    try {
+      const originalTarget = fx.approvalPackage.targetIdentitySha256;
+      const { g1, g2 } = await assignBoth(fx);
+      const g1Decision = unwrap(await approveAssignment(fx, g1));
+      const g2Decision = unwrap(await approveAssignment(fx, g2));
+      const signed = unwrap(
+        await submitCountryOwnerSignoff(
+          {
+            packageId: fx.approvalPackage.id,
+            expectedTargetIdentitySha256: fx.approvalPackage.targetIdentitySha256,
+            expectedBundleSha256: fx.approvalPackage.bundleSha256,
+            ownerUserId: USERS.owner.id,
+            decision: "approved",
+            notes: "Completed under the preceding deployment pin",
+            affirmations: allAffirmations(),
+          },
+          fx.sql,
+        ),
+      );
+      assert.ok(signed.release);
+
+      fx = await makePackageHistorical(fx);
+      const beforeCutover = await approvalAuditSnapshot(fx);
+      await fx.pg.exec(
+        await readFile(
+          new URL("../../../migrations/0014_damm_source_pin_cutover.sql", import.meta.url),
+          "utf8",
+        ),
+      );
+      assert.deepEqual(
+        await approvalAuditSnapshot(fx),
+        beforeCutover,
+        "the append-only cutover must not rewrite any historical run, artifact, approval, or release identity",
+      );
+      const reopened = unwrap(
+        await ensureApprovalPackage(fx.countryId, USERS.owner.id, fx.sql),
+      );
+      assert.equal(reopened.id, fx.approvalPackage.id);
+      assert.equal(reopened.methodology.sourceCommit, PREVIOUS_DAMM_SOURCE_COMMIT);
+      const state = unwrap(await getOwnerApprovalState(fx.countryId, USERS.owner.id, fx.sql));
+      assert.equal(state.package.methodology.sourceCommit, PREVIOUS_DAMM_SOURCE_COMMIT);
+      assert.notEqual(state.package.targetIdentitySha256, originalTarget);
+      assert.deepEqual(
+        state.decisions.map((decision) => decision.id),
+        [g1Decision.id, g2Decision.id, signed.decision.id],
+      );
+      assert.equal(state.release?.id, signed.release.id);
+      assert.equal(state.release?.targetIdentitySha256, state.package.targetIdentitySha256);
+      assert.equal(
+        (state.release?.manifest.methodology as Record<string, unknown>).sourceCommit,
+        PREVIOUS_DAMM_SOURCE_COMMIT,
+      );
+      assert.equal(state.lifecycle, "approved_draft");
+
+      const historicalReview = unwrap(await getAssignedReview(g1.id, USERS.assessor.id, fx.sql));
+      assert.equal(historicalReview.ownDecision?.id, g1Decision.id);
+      assert.equal(historicalReview.canSubmit, false);
+      assert.match(historicalReview.lockedReason ?? "", /historical|no longer current/i);
+
+      const historicalPackageId = fx.approvalPackage.id;
+      const currentFx = await publishAdditionalWorkflow(fx, "historical-complete-current");
+      const latest = unwrap(
+        await getOwnerApprovalState(currentFx.countryId, USERS.owner.id, currentFx.sql),
+      );
+      assert.equal(latest.package.id, currentFx.approvalPackage.id);
+      assert.deepEqual(
+        latest.packageHistory.map((item) => [item.packageId, item.currentMethodology]),
+        [
+          [currentFx.approvalPackage.id, true],
+          [historicalPackageId, false],
+        ],
+      );
+
+      const selectedHistorical = unwrap(
+        await getOwnerApprovalState(
+          currentFx.countryId,
+          USERS.owner.id,
+          currentFx.sql,
+          historicalPackageId,
+        ),
+      );
+      assert.equal(selectedHistorical.package.id, historicalPackageId);
+      assert.deepEqual(
+        selectedHistorical.decisions.map((item) => item.id),
+        [g1Decision.id, g2Decision.id, signed.decision.id],
+      );
+      assert.equal(selectedHistorical.release?.id, signed.release.id);
+      assert.equal(selectedHistorical.packageHistory.length, 2);
+    } finally {
+      await fx.pg.close();
+    }
+  });
+
+  it("keeps an incomplete prior-pin chain readable but rejects every new API decision", async () => {
+    let fx = await fixture("historical-pending");
+    try {
+      const { g1, g2 } = await assignBoth(fx);
+      fx = await makePackageHistorical(fx);
+
+      const state = unwrap(await getOwnerApprovalState(fx.countryId, USERS.owner.id, fx.sql));
+      assert.equal(state.package.methodology.sourceCommit, PREVIOUS_DAMM_SOURCE_COMMIT);
+      assert.deepEqual(state.decisions, []);
+      assert.equal(state.lifecycle, "g1_pending");
+
+      for (const assignment of [g1, g2]) {
+        const review = unwrap(
+          await getAssignedReview(assignment.id, assignment.reviewerUserId, fx.sql),
+        );
+        assert.equal(review.canSubmit, false);
+        assert.match(review.lockedReason ?? "", /historical|no longer current/i);
+        assertMethodologyRefusal(await approveAssignment(fx, assignment));
+      }
+
+      assertMethodologyRefusal(
+        await replaceAssignment(
+          fx,
+          g1,
+          USERS.other.email,
+          "A historical assignment must not be transferred to another reviewer",
+        ),
+      );
+      assertMethodologyRefusal(
+        await submitCountryOwnerSignoff(
+          {
+            packageId: fx.approvalPackage.id,
+            expectedTargetIdentitySha256: fx.approvalPackage.targetIdentitySha256,
+            expectedBundleSha256: fx.approvalPackage.bundleSha256,
+            ownerUserId: USERS.owner.id,
+            decision: "approved",
+            notes: "Historical G3 must remain closed",
+            affirmations: allAffirmations(),
+          },
+          fx.sql,
+        ),
+      );
+
+      const persisted = await fx.sql.query<{
+        assignments: number;
+        supersessions: number;
+        decisions: number;
+        releases: number;
+      }>(
+        `select
+           (select count(*)::int from workflow_approval_assignments
+            where package_id = $1) as assignments,
+           (select count(*)::int from workflow_approval_assignment_supersessions
+            where package_id = $1) as supersessions,
+           (select count(*)::int from workflow_approval_decisions
+            where package_id = $1) as decisions,
+           (select count(*)::int from workflow_approval_releases
+            where package_id = $1) as releases`,
+        [fx.approvalPackage.id],
+      );
+      assert.deepEqual(persisted[0], {
+        assignments: 2,
+        supersessions: 0,
+        decisions: 0,
+        releases: 0,
+      });
+    } finally {
+      await fx.pg.close();
+    }
+  });
+
+  it("does not let a newer unmaterialized prior-pin Draft mask package history", async () => {
+    let fx = await fixture("historical-masked");
+    try {
+      fx = await makePackageHistorical(fx);
+      const historicalPackageId = fx.approvalPackage.id;
+      const newerRunId = "run-historical-unmaterialized-newer";
+      const newerArtifactSetId = "set-historical-unmaterialized-newer";
+      const newerObservations = observationBytes("historical-unmaterialized-newer");
+      await insertCompletedWorkflow(fx.sql, {
+        countryId: fx.countryId,
+        countryName: "Country",
+        iso3: "TST",
+        runId: newerRunId,
+        artifactSetId: newerArtifactSetId,
+        outBasename: "TST_historical_unmaterialized_newer",
+        observations: newerObservations,
+        assessmentInput: newerObservations,
+        completedAt: "2026-08-27T00:00:02.654321Z",
+      });
+      await fx.sql.query("set session_replication_role = replica");
+      try {
+        await fx.sql.query(
+          "update workflow_run_methodology set source_commit = $2 where run_id = $1",
+          [newerRunId, PREVIOUS_DAMM_SOURCE_COMMIT],
+        );
+        await fx.sql.query(
+          "update workflow_run_artifacts set damm_source_commit = $2 where run_id = $1",
+          [newerRunId, PREVIOUS_DAMM_SOURCE_COMMIT],
+        );
+      } finally {
+        await fx.sql.query("set session_replication_role = origin");
+      }
+
+      const unmaterialized = await ensureApprovalPackage(fx.countryId, USERS.owner.id, fx.sql);
+      assert.equal(unmaterialized.ok, false);
+      if (!unmaterialized.ok) assert.equal(unmaterialized.error.code, "HISTORICAL_SOURCE_PIN");
+      const opened = unwrap(
+        await openOwnerApprovalState(fx.countryId, USERS.owner.id, fx.sql),
+      );
+      assert.equal(opened.package.id, historicalPackageId);
+      assert.equal(opened.packageHistory.length, 1);
+      assert.equal(opened.packageHistory[0].currentMethodology, false);
+      assert.equal(opened.packageHistory[0].packageId, historicalPackageId);
+    } finally {
+      await fx.pg.close();
+    }
+  });
+
+  it("does not hide a corrupt current-pin Draft behind older valid package history", async () => {
+    const fx = await fixture("current-corrupt-masked");
+    try {
+      const historicalPackageId = fx.approvalPackage.id;
+      const newerRunId = "run-current-corrupt-newer";
+      const newerArtifactSetId = "set-current-corrupt-newer";
+      const newerObservations = observationBytes("current-corrupt-newer");
+      await insertCompletedWorkflow(fx.sql, {
+        countryId: fx.countryId,
+        countryName: "Country",
+        iso3: "TST",
+        runId: newerRunId,
+        artifactSetId: newerArtifactSetId,
+        outBasename: "TST_current_corrupt_newer",
+        observations: newerObservations,
+        assessmentInput: newerObservations,
+        completedAt: "2026-08-27T00:00:02.654321Z",
+      });
+      await fx.sql.query("set session_replication_role = replica");
+      try {
+        await fx.sql.query(
+          `update workflow_run_artifacts
+           set damm_source_commit = $3
+           where run_id = $1 and artifact_set_id = $2 and artifact_key = 'bundle'`,
+          [newerRunId, newerArtifactSetId, PREVIOUS_DAMM_SOURCE_COMMIT],
+        );
+      } finally {
+        await fx.sql.query("set session_replication_role = origin");
+      }
+
+      const opened = await openOwnerApprovalState(fx.countryId, USERS.owner.id, fx.sql);
+      assert.equal(opened.ok, false);
+      if (!opened.ok) assert.equal(opened.error.code, "METHODOLOGY_UNVERIFIED");
+      const explicitlySelected = unwrap(
+        await openOwnerApprovalState(
+          fx.countryId,
+          USERS.owner.id,
+          fx.sql,
+          historicalPackageId,
+        ),
+      );
+      assert.equal(explicitlySelected.package.id, historicalPackageId);
+    } finally {
+      await fx.pg.close();
+    }
+  });
+
+  it("blocks direct-SQL approval decisions and releases for a prior-pin package", async () => {
+    let fx = await fixture("historical-sql");
+    try {
+      const { g1, g2 } = await assignBoth(fx);
+      fx = await makePackageHistorical(fx);
+      await assert.rejects(
+        fx.sql.query(
+          `insert into workflow_approval_assignments
+            (id, package_id, target_identity_sha256, gate, reviewer_user_id,
+             reviewer_name, reviewer_email, declared_role, assigned_by_user_id,
+             assigned_by_name, assigned_by_email, scope_rows, scope_row_count,
+             scope_sha256)
+           values ('historical-sql-assignment', $1, $2, 'g1', $3, $4, $5,
+                   'assessor', $6, $7, $8, $9::jsonb, $10, $11)`,
+          [
+            fx.approvalPackage.id,
+            fx.approvalPackage.targetIdentitySha256,
+            USERS.other.id,
+            USERS.other.name,
+            USERS.other.email,
+            USERS.owner.id,
+            USERS.owner.name,
+            USERS.owner.email,
+            JSON.stringify(fx.approvalPackage.g1Scope),
+            fx.approvalPackage.g1Scope.length,
+            fx.approvalPackage.g1ScopeSha256,
+          ],
+        ),
+        /current DAMM methodology/i,
+      );
+      await assert.rejects(
+        fx.sql.query(
+          `insert into workflow_approval_assignment_supersessions
+            (id, revoked_assignment_id, superseding_assignment_id, package_id,
+             target_identity_sha256, gate, revoked_by_user_id, revoked_by_name,
+             revoked_by_email, reason)
+           values ('historical-sql-supersession', $1, 'historical-sql-successor',
+                   $2, $3, 'g1', $4, $5, $6, 'Historical replacement is forbidden')`,
+          [
+            g1.id,
+            fx.approvalPackage.id,
+            fx.approvalPackage.targetIdentitySha256,
+            USERS.owner.id,
+            USERS.owner.name,
+            USERS.owner.email,
+          ],
+        ),
+        /current DAMM methodology/i,
+      );
+
+      for (const assignment of [g1, g2]) {
+        const affirmation = HUMAN_REVIEW_AFFIRMATIONS[assignment.gate];
+        const rowReviews = assignment.scope.map((row) => ({
+          indicatorId: row.indicatorId,
+          rowSha256: row.rowSha256,
+          decision: "approved",
+          notes: "",
+        }));
+        await assert.rejects(
+          fx.sql.query(
+          `insert into workflow_approval_decisions
+            (id, package_id, target_identity_sha256, assignment_id, gate, actor_kind,
+             reviewer_user_id, reviewer_name, reviewer_email, declared_role, decision,
+             notes, reviewer_affirmation, reviewer_affirmation_version,
+             reviewer_affirmation_text, reviewer_affirmation_sha256, row_reviews,
+             affirmations)
+           values ($1, $2, $3, $4, $5, 'human', $6, $7, $8,
+                   $9, 'approved', '', true, $10, $11, $12, $13::jsonb,
+                   '{}'::jsonb)`,
+            [
+              `historical-sql-${assignment.gate}`,
+              fx.approvalPackage.id,
+              fx.approvalPackage.targetIdentitySha256,
+              assignment.id,
+              assignment.gate,
+              assignment.reviewerUserId,
+              assignment.reviewerName,
+              assignment.reviewerEmail,
+              assignment.declaredRole,
+              affirmation.version,
+              affirmation.text,
+              affirmation.sha256,
+              JSON.stringify(rowReviews),
+            ],
+          ),
+          /current DAMM methodology/i,
+        );
+      }
+      await assert.rejects(
+        fx.sql.query(
+          `insert into workflow_approval_decisions
+            (id, package_id, target_identity_sha256, assignment_id, gate, actor_kind,
+             reviewer_user_id, reviewer_name, reviewer_email, declared_role, decision,
+             notes, reviewer_affirmation, row_reviews, affirmations)
+           values ('historical-sql-g3', $1, $2, null, 'g3', 'human', $3, $4, $5,
+                   'ttl_country_owner', 'approved', 'No historical sign-off', true,
+                   '[]'::jsonb, $6::jsonb)`,
+          [
+            fx.approvalPackage.id,
+            fx.approvalPackage.targetIdentitySha256,
+            USERS.owner.id,
+            USERS.owner.name,
+            USERS.owner.email,
+            JSON.stringify(allAffirmations()),
+          ],
+        ),
+        /current DAMM methodology/i,
+      );
+      await assert.rejects(
+        fx.sql.query(
+          `insert into workflow_approval_releases
+            (id, package_id, target_identity_sha256, country_id, version_number,
+             lifecycle, external_circulation_authorized, g1_decision_id,
+             g2_decision_id, g3_decision_id, manifest_json, manifest_sha256)
+           values ('historical-sql-release', $1, $2, $3, 1, 'approved_draft', true,
+                   'missing-g1', 'missing-g2', 'missing-g3', '{}'::jsonb, $4)`,
+          [
+            fx.approvalPackage.id,
+            fx.approvalPackage.targetIdentitySha256,
+            fx.countryId,
+            "f".repeat(64),
+          ],
+        ),
+        /current DAMM methodology/i,
       );
     } finally {
       await fx.pg.close();
@@ -1777,20 +2332,45 @@ describe("post-completion human approval store", () => {
         );
 
       const missingId = "approval-package-that-does-not-exist";
-      const [existingAssignment, missingAssignment, existingG3, missingG3] = await Promise.all([
+      const [
+        existingAssignment,
+        missingAssignment,
+        existingG3,
+        missingG3,
+        existingState,
+        missingState,
+      ] = await Promise.all([
         assignmentProbe(fx.approvalPackage.id),
         assignmentProbe(missingId),
         g3Probe(fx.approvalPackage.id),
         g3Probe(missingId),
+        getOwnerApprovalState(fx.countryId, USERS.other.id, fx.sql, fx.approvalPackage.id),
+        getOwnerApprovalState(fx.countryId, USERS.other.id, fx.sql, missingId),
       ]);
-      for (const result of [existingAssignment, missingAssignment, existingG3, missingG3]) {
+      for (const result of [
+        existingAssignment,
+        missingAssignment,
+        existingG3,
+        missingG3,
+        existingState,
+        missingState,
+      ]) {
         assert.equal(result.ok, false);
       }
-      if (!existingAssignment.ok && !missingAssignment.ok && !existingG3.ok && !missingG3.ok) {
+      if (
+        !existingAssignment.ok &&
+        !missingAssignment.ok &&
+        !existingG3.ok &&
+        !missingG3.ok &&
+        !existingState.ok &&
+        !missingState.ok
+      ) {
         assert.deepEqual(existingAssignment.error, missingAssignment.error);
         assert.deepEqual(existingG3.error, missingG3.error);
+        assert.deepEqual(existingState.error, missingState.error);
         assert.equal(existingAssignment.error.code, "NOT_FOUND");
         assert.equal(existingG3.error.code, "NOT_FOUND");
+        assert.equal(existingState.error.code, "NOT_FOUND");
       }
     } finally {
       await fx.pg.close();

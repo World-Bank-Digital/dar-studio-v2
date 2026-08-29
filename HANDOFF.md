@@ -110,6 +110,14 @@ commit that creates its successor. Decided assignments cannot be superseded,
 and reviewers receive only their own decision record rather than the package's
 complete human audit.
 
+A canonical source-pin cutover does not rewrite an older package. Completed
+prior-pin decisions and releases remain integrity-verified and audit-readable;
+an incomplete prior-pin chain becomes historical read-only and cannot acquire
+another assignment, supersession, decision, or release. Generate a new Draft at
+the current pin for any further approval activity. The owner package-history
+selector addresses each immutable package by its own package ID, so a newer
+Draft never hides the older package's exact audit record.
+
 G3 creates a separately versioned release record and manifest tied to the exact
 Draft and its three decision records. It never mutates Stage 8 bytes. A model
 whose recorded status is not ratified or whose `ratified` flag is false can
@@ -168,12 +176,13 @@ they can appear in Documents or become a review target; failed checks remain
 hidden. Downloads always recheck the requested bytes before serving them.
 
 Migration `0011` refuses to install while any pre-methodology workflow is still
-active, and migration `0013` applies the same boundary when advancing the pinned
-DAMM source/renderer. Let the existing release finish those runs, then retry
-deployment; a migration must never terminate or relaunch an in-flight workflow.
-The deferred database invariant also rejects old-version launches during a
-rolling deployment unless the launch transaction contains the exact current
-methodology snapshot.
+active, migration `0013` applies the same boundary when advancing the pinned
+DAMM source/renderer, and append-only migration `0014` advances only the source
+commit containing the foresight candidate-register repair. Let the existing
+release finish those runs, then retry deployment; a migration must never
+terminate or relaunch an in-flight workflow. The deferred database invariant
+also rejects stale launches, newly inserted stale terminal rows, and transitions
+that would turn a failed/cancelled stale run into a completed workflow.
 
 Stage 8 must provide:
 

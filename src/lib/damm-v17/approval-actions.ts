@@ -133,15 +133,22 @@ async function gatePresentation(gate: AssignedApprovalGate): Promise<{
 // so this is intentionally POST rather than a cacheable/safe GET.
 export const getOwnerApprovalStateAction = createServerFn({ method: "POST" })
   .middleware([authMiddleware])
-  .validator((input: { countryId: string }) => ({
+  .validator((input: { countryId: string; packageId?: string }) => ({
     countryId: requiredText(input.countryId, "Country ID"),
+    packageId:
+      input.packageId === undefined
+        ? undefined
+        : requiredText(input.packageId, "Approval package ID"),
   }))
   .handler(async ({ context, data }): Promise<ApprovalActionResult<OwnerApprovalView>> => {
     if (context.userId === DEV_USER_ID) return humanRequired();
     const store = await import("./approval-store.ts");
-    const prepared = await store.ensureApprovalPackage(data.countryId, context.userId);
-    if (!prepared.ok) return prepared;
-    const state = await store.getOwnerApprovalState(data.countryId, context.userId);
+    const state = await store.openOwnerApprovalState(
+      data.countryId,
+      context.userId,
+      undefined,
+      data.packageId,
+    );
     if (!state.ok) return state;
     const { G3_AFFIRMATIONS } = await import("./approvals.ts");
     return {

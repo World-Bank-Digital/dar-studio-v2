@@ -560,6 +560,17 @@ describe("honest Draft lifecycle", () => {
       deriveApprovalLifecycle({
         ...base,
         decisions: [g1, g2, g3],
+        methodologyStatus: "historical_verified",
+        methodologyModelStatus: "ratified",
+        methodologyRatified: true,
+      }),
+      "approved_draft",
+      "an integrity-verified historical pin is still ineligible for canonical Final",
+    );
+    assert.equal(
+      deriveApprovalLifecycle({
+        ...base,
+        decisions: [g1, g2, g3],
         methodologyModelStatus: "ratified",
         methodologyRatified: true,
       }),

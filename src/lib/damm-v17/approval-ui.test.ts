@@ -56,6 +56,10 @@ describe("the post-completion human-control surface", () => {
     assert.match(reviewer, /evidence quality and scale/);
     assert.match(reviewer, /reviewerAffirmationSha256/);
     assert.match(owner, /G1, G2, and G3 occur after—not as stages/);
+    assert.match(owner, /Exact Draft package and approval history/);
+    assert.match(owner, /Historical · read only/);
+    assert.match(owner, /Historical approvals never transfer to another artifact set/);
+    assert.match(owner, /activityLockedReason/);
     assert.match(owner, /reviewerAffirmationVersion/);
     assert.match(identity, /approved Draft release—not a canonical Final/);
     for (const clientSource of [reviewer, owner, identity]) {
@@ -80,5 +84,8 @@ describe("the post-completion human-control surface", () => {
     assert.match(owner, /state\.assignmentSupersessions\.map/);
     assert.match(actions, /Reviewer replacement requires a reason/);
     assert.match(actions, /expectedActiveAssignmentId: data\.expectedActiveAssignmentId/);
+    assert.match(actions, /packageId:\s*input\.packageId === undefined/);
+    assert.match(actions, /data\.packageId/);
+    assert.match(actions, /openOwnerApprovalState/);
   });
 });
