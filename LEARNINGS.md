@@ -783,3 +783,28 @@ different state machines and must have different identities, records, and
 terminology.**
 **Pinned by:** `approvals.test.ts`, `approval-store.test.ts`, exact-package
 document-set regressions, and the white-background contract.
+
+### L28 — A reported validation error still fell through into `math.isfinite(None)`
+
+**Incident:** the Nigeria workflow completed five stages, then Stage 6
+(`investment_options`) failed with `TypeError: must be real number, not
+NoneType`. The generated product contained a quantified benefit with one numeric
+range bound and one `null` bound. The controlled validation error never reached
+the workflow surface because the validator itself crashed.
+**Root cause:** the paired-bound checks for costs and quantified benefits
+recorded an error when exactly one bound was missing, but a second independent
+`if` still evaluated the range. That fallthrough called `math.isfinite` with
+`None`. Validation detected the bad value but did not short-circuit the unsafe
+numeric operation.
+**Fix:** the numeric/order check is now an `elif` after the paired-bound check,
+so half-null cost and benefit ranges return explicit validation errors without
+crashing. DAR Studio pins canonical DAMM merge
+`2efb26607acc29a687a82a56edc85f53c4a6da69` through append-only migration
+`0015`; migration `0014` remains immutable evidence of the preceding source
+cutover.
+**Pinned by:** upstream DAMM
+`gauntlet/loop-1/research_pipeline/test_investment_options.py` covers both
+half-null directions for costs and benefits, plus both-null, valid finite, and
+reversed ranges. DAR Studio's methodology-integrity, source-pin migration, and
+`scripts/deployment-wizard.test.mjs` regressions require the merged commit and
+the `0015` cutover before the worker is accepted.

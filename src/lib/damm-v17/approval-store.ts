@@ -33,11 +33,18 @@ import { DAR_WORKFLOW, DAR_WORKFLOW_SHA256 } from "./workflow.ts";
 
 export const APPROVAL_OBSERVATIONS_ARTIFACT_KEY = "data-damm_diagnostic-damm_observations-json";
 export const APPROVAL_ASSESSMENT_INPUT_ARTIFACT_KEY = "assessment-input";
-const PREVIOUS_DAMM_SOURCE_COMMIT = "92c6ffe8b331347bc05f345785fe409753401a24";
-const PREVIOUS_DAMM_WORKFLOW_METHODOLOGY: Readonly<WorkflowMethodologyIdentity> = Object.freeze({
-  ...DAMM_WORKFLOW_METHODOLOGY,
-  sourceCommit: PREVIOUS_DAMM_SOURCE_COMMIT,
-});
+const HISTORICAL_DAMM_SOURCE_COMMITS = [
+  "d4c659f5873f3a891634c8edf6b7166cb2eb374c",
+  "92c6ffe8b331347bc05f345785fe409753401a24",
+] as const;
+const HISTORICAL_DAMM_WORKFLOW_METHODOLOGIES = Object.freeze(
+  HISTORICAL_DAMM_SOURCE_COMMITS.map((sourceCommit) =>
+    Object.freeze({
+      ...DAMM_WORKFLOW_METHODOLOGY,
+      sourceCommit,
+    }),
+  ),
+);
 
 export type ApprovalStoreErrorCode =
   | "AUTH_REQUIRED"
@@ -1615,10 +1622,12 @@ export async function ensureApprovalPackage(
       await registeredUser(ownerUserId, transaction);
       const candidate = await latestCandidate(countryId, ownerUserId, transaction);
       const candidateMethodology = methodologyFromDbRow(candidate);
-      if (
-        candidateMethodology &&
-        methodologyIdentitiesMatch(candidateMethodology, PREVIOUS_DAMM_WORKFLOW_METHODOLOGY)
-      ) {
+      const historicalMethodology = candidateMethodology
+        ? HISTORICAL_DAMM_WORKFLOW_METHODOLOGIES.find((methodology) =>
+            methodologyIdentitiesMatch(candidateMethodology, methodology),
+          )
+        : undefined;
+      if (historicalMethodology) {
         if (candidate.artifact_set_id) {
           const historical = await transaction.query<DbPackageRow>(
             `select * from workflow_approval_packages
@@ -1629,10 +1638,10 @@ export async function ensureApprovalPackage(
             return packageById(historical[0].id, transaction, { ownerUserId });
           }
         }
-        verifyCandidate(candidate, PREVIOUS_DAMM_WORKFLOW_METHODOLOGY);
+        verifyCandidate(candidate, historicalMethodology);
         throw new StoreRefusal(
           "HISTORICAL_SOURCE_PIN",
-          "The latest completed Draft uses the exact preceding DAMM source pin and cannot start a new approval chain",
+          "The latest completed Draft uses a recognized historical DAMM source pin and cannot start a new approval chain",
         );
       }
       const verified = verifyCandidate(candidate);
