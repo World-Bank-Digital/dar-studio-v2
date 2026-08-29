@@ -176,13 +176,16 @@ they can appear in Documents or become a review target; failed checks remain
 hidden. Downloads always recheck the requested bytes before serving them.
 
 Migration `0011` refuses to install while any pre-methodology workflow is still
-active, migration `0013` applies the same boundary when advancing the pinned
-DAMM source/renderer, and append-only migration `0014` advances only the source
-commit containing the foresight candidate-register repair. Let the existing
-release finish those runs, then retry deployment; a migration must never
-terminate or relaunch an in-flight workflow. The deferred database invariant
-also rejects stale launches, newly inserted stale terminal rows, and transitions
-that would turn a failed/cancelled stale run into a completed workflow.
+active, and migration `0013` applies the same boundary when advancing the pinned
+DAMM source/renderer. Append-only migration `0014` is the immutable source
+cutover containing the foresight candidate-register repair; migration `0015`
+advances only the source commit to the canonical DAMM merge
+`2efb26607acc29a687a82a56edc85f53c4a6da69`, containing the Stage 6
+partial-range validation fix. Let the existing release finish those runs, then
+retry deployment; a migration must never terminate or relaunch an in-flight
+workflow. The deferred database invariant also rejects stale launches, newly
+inserted stale terminal rows, and transitions that would turn a failed/cancelled
+stale run into a completed workflow.
 
 Stage 8 must provide:
 
