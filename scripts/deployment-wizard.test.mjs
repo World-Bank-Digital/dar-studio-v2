@@ -65,9 +65,11 @@ test("the deployment wizard verifies the append-only DAMM source repin", () => {
   assert.match(wizard, /migrations\/0013_damm_methodology_pin_cutover\.sql/);
   assert.match(wizard, /migrations\/0014_damm_source_pin_cutover\.sql/);
   assert.match(wizard, /migrations\/0015_damm_source_pin_cutover\.sql/);
-  assert.match(wizard, /MIGRATION_0015_VERIFIED/);
-  assert.match(wizard, /0015_damm_source_pin_cutover\.sql/);
-  assert.match(wizard, /2efb26607acc29a687a82a56edc85f53c4a6da69/);
+  assert.match(wizard, /migrations\/0016_damm_source_pin_cutover\.sql/);
+  assert.match(wizard, /MIGRATION_0016_VERIFIED/);
+  assert.match(wizard, /0016_damm_source_pin_cutover\.sql/);
+  assert.match(wizard, /1b1734c8a8017cda488b77cf0594b0ca82dae6ee/);
+  assert.doesNotMatch(wizard, /2efb26607acc29a687a82a56edc85f53c4a6da69/);
   assert.doesNotMatch(wizard, /d4c659f5873f3a891634c8edf6b7166cb2eb374c/);
   assert.doesNotMatch(wizard, /92c6ffe8b331347bc05f345785fe409753401a24/);
 });
