@@ -840,3 +840,36 @@ integrity, approval-history, and deployment-wizard tests require migration
 `0016` and the exact merged commit before a new worker is accepted.
 **Meta-lesson:** when input volume varies, scale the number of bounded,
 checkpointed calls—not the maximum size of one opaque response.
+
+### L30 — Repair a length-only defect without replaying accepted paid work
+
+**Incident:** Stage 6 could receive a complete candidate register whose shape,
+candidate count, title uniqueness, source references, and substantive fields
+were valid, while a `title`, `problem`, or `recommendation_rationale` exceeded
+its local character limit. Rejecting or replaying the whole candidate call would
+discard accepted work, spend again, and allow unrelated fields to drift merely
+to shorten a small number of prose values.
+**Root cause:** the candidate boundary treated every local schema failure alike.
+It did not distinguish an otherwise-valid response with only repairable length
+violations from a response with structural, evidence, or mixed defects, and it
+had no narrowly scoped checkpoint identity for a paid repair.
+**Fix:** candidate validation now first identifies only overlength `title`,
+`problem`, and `recommendation_rationale` fields, then proves the response passes
+the rest of the candidate contract before authorizing one exact patch request.
+The repair schema names every offending field and its maximum length, accepts no
+extra patch, preserves all other candidate content, and revalidates the complete
+result. The repair is checkpointed separately, and cached candidate responses
+are cross-bound to their paid-ledger outcome so a crash resumes the accepted
+response and repair rather than replaying either call. Mixed defects, missing or
+extra patches, and still-overlength replacements remain terminal. DAR Studio
+pins canonical DAMM merge
+`4b97b2c9090204dfba3aa7c44f41d558005982ee` through append-only migration
+`0017`; migrations `0014`, `0015`, and `0016` remain immutable evidence of the
+earlier source cutovers.
+**Pinned by:** upstream DAMM investment-option regressions cover sparse
+multi-candidate repairs, title repair, invalid and mixed-defect refusal, paid
+ledger cross-binding, and crash recovery without replay. DAR Studio's migration,
+methodology-integrity, approval-history, and deployment-wizard tests require
+migration `0017` and the exact merged commit before a new worker is accepted.
+**Meta-lesson:** when paid output is valid except for a bounded local prose
+contract, checkpoint and patch only the named defect; never replay accepted work.

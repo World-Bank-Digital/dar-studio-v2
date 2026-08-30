@@ -136,22 +136,26 @@ includes the model, schema, generated census, export manifest, and a per-run
 methodology manifest. The model remains honestly labelled `draft for review`
 and `ratified: false`; provenance does not imply ratification.
 
-On methodology upgrades, migrations `0011`, `0013`, `0014`, `0015`, and
-`0016` stop before changing the schema or active source pin if an older workflow
-is still active. Migration `0014` is the immutable source cutover for the
-foresight candidate-register repair. Migration `0015` advances only the upstream source
-commit to the canonical DAMM merge
+On methodology upgrades, migrations `0011`, `0013`, `0014`, `0015`, `0016`,
+and `0017` stop before changing the schema or active source pin if an older
+workflow is still active. Migration `0014` is the immutable source cutover for
+the foresight candidate-register repair. Migration `0015` advances only the
+upstream source commit to the canonical DAMM merge
 `2efb26607acc29a687a82a56edc85f53c4a6da69`, containing the Stage 6
 partial-range validation fix. Migration `0016` advances only the upstream
 source commit to canonical DAMM merge
 `1b1734c8a8017cda488b77cf0594b0ca82dae6ee`, containing bounded adaptive
-Stage 6 output and crash-safe spend/checkpoint recovery; the model, workflow,
-engine, renderer, and ratification fields remain unchanged. Allow an in-flight
-workflow to finish under the prior release, then retry the deployment; no run is
-failed or relaunched. A deferred database invariant prevents a still-running old app
-process from committing a missing or stale methodology snapshot, manufacturing
-a terminal stale run, or promoting a failed/cancelled stale run during a rolling
-deployment.
+Stage 6 output and crash-safe spend/checkpoint recovery. Migration `0017`
+advances only the upstream source commit to canonical DAMM merge
+`4b97b2c9090204dfba3aa7c44f41d558005982ee`, containing a checkpointed,
+length-only repair for otherwise-valid overlength Stage 6 candidate `title`,
+`problem`, and `recommendation_rationale` fields without replaying the completed
+candidate call; the model, workflow, engine, renderer, and ratification fields
+remain unchanged. Allow an in-flight workflow to finish under the prior release,
+then retry the deployment; no run is failed or relaunched. A deferred database
+invariant prevents a still-running old app process from committing a missing or
+stale methodology snapshot, manufacturing a terminal stale run, or promoting a
+failed/cancelled stale run during a rolling deployment.
 
 ## Running locally
 

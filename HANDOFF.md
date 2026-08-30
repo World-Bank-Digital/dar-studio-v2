@@ -184,11 +184,16 @@ advances only the source commit to the canonical DAMM merge
 partial-range validation fix. Append-only migration `0016` advances only the
 source commit to canonical DAMM merge
 `1b1734c8a8017cda488b77cf0594b0ca82dae6ee`, containing bounded adaptive
-Stage 6 output plus durable spend/checkpoint recovery. Let the existing release
-finish those runs, then retry deployment; a migration must never terminate or
-relaunch an in-flight workflow. The deferred database invariant also rejects stale launches, newly
-inserted stale terminal rows, and transitions that would turn a failed/cancelled
-stale run into a completed workflow.
+Stage 6 output plus durable spend/checkpoint recovery. Append-only migration
+`0017` advances only the source commit to canonical DAMM merge
+`4b97b2c9090204dfba3aa7c44f41d558005982ee`, containing a checkpointed,
+length-only repair for otherwise-valid overlength Stage 6 candidate `title`,
+`problem`, and `recommendation_rationale` fields without replaying the completed
+candidate call. Let the existing release finish those runs, then retry
+deployment; a migration must never terminate or relaunch an in-flight workflow.
+The deferred database invariant also rejects stale launches, newly inserted
+stale terminal rows, and transitions that would turn a failed/cancelled stale
+run into a completed workflow.
 
 Stage 8 must provide:
 
