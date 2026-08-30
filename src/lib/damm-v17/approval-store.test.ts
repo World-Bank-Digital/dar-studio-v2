@@ -116,6 +116,7 @@ const USERS = {
 
 const PRE_0014_DAMM_SOURCE_COMMIT = "92c6ffe8b331347bc05f345785fe409753401a24";
 const PRE_0015_DAMM_SOURCE_COMMIT = "d4c659f5873f3a891634c8edf6b7166cb2eb374c";
+const PRE_0016_DAMM_SOURCE_COMMIT = "2efb26607acc29a687a82a56edc85f53c4a6da69";
 
 interface Fixture {
   pg: PGlite;
@@ -146,7 +147,7 @@ function canonicalJson(value: unknown): string {
 
 function historicalTargetIdentity(
   approvalPackage: ApprovalPackage,
-  sourceCommit = PRE_0015_DAMM_SOURCE_COMMIT,
+  sourceCommit = PRE_0016_DAMM_SOURCE_COMMIT,
 ): {
   methodology: ApprovalPackage["methodology"];
   targetIdentitySha256: string;
@@ -190,7 +191,7 @@ function historicalTargetIdentity(
  */
 async function makePackageHistorical(
   fx: Fixture,
-  sourceCommit = PRE_0015_DAMM_SOURCE_COMMIT,
+  sourceCommit = PRE_0016_DAMM_SOURCE_COMMIT,
 ): Promise<Fixture> {
   const { methodology, targetIdentitySha256 } = historicalTargetIdentity(
     fx.approvalPackage,
@@ -682,7 +683,7 @@ describe("post-completion human approval store", () => {
       const beforeCutover = await approvalAuditSnapshot(fx);
       await fx.pg.exec(
         await readFile(
-          new URL("../../../migrations/0015_damm_source_pin_cutover.sql", import.meta.url),
+          new URL("../../../migrations/0016_damm_source_pin_cutover.sql", import.meta.url),
           "utf8",
         ),
       );
@@ -695,9 +696,9 @@ describe("post-completion human approval store", () => {
         await ensureApprovalPackage(fx.countryId, USERS.owner.id, fx.sql),
       );
       assert.equal(reopened.id, fx.approvalPackage.id);
-      assert.equal(reopened.methodology.sourceCommit, PRE_0015_DAMM_SOURCE_COMMIT);
+      assert.equal(reopened.methodology.sourceCommit, PRE_0016_DAMM_SOURCE_COMMIT);
       const state = unwrap(await getOwnerApprovalState(fx.countryId, USERS.owner.id, fx.sql));
-      assert.equal(state.package.methodology.sourceCommit, PRE_0015_DAMM_SOURCE_COMMIT);
+      assert.equal(state.package.methodology.sourceCommit, PRE_0016_DAMM_SOURCE_COMMIT);
       assert.notEqual(state.package.targetIdentitySha256, originalTarget);
       assert.deepEqual(
         state.decisions.map((decision) => decision.id),
@@ -707,7 +708,7 @@ describe("post-completion human approval store", () => {
       assert.equal(state.release?.targetIdentitySha256, state.package.targetIdentitySha256);
       assert.equal(
         (state.release?.manifest.methodology as Record<string, unknown>).sourceCommit,
-        PRE_0015_DAMM_SOURCE_COMMIT,
+        PRE_0016_DAMM_SOURCE_COMMIT,
       );
       assert.equal(state.lifecycle, "approved_draft");
 
@@ -750,36 +751,41 @@ describe("post-completion human approval store", () => {
     }
   });
 
-  it("keeps a two-generation-old package addressable without reopening approval activity", async () => {
-    let fx = await fixture("historical-two-generations");
-    try {
-      fx = await makePackageHistorical(fx, PRE_0014_DAMM_SOURCE_COMMIT);
+  it("keeps older recognized packages addressable without reopening approval activity", async () => {
+    for (const [generation, sourceCommit] of [
+      ["two", PRE_0015_DAMM_SOURCE_COMMIT],
+      ["three", PRE_0014_DAMM_SOURCE_COMMIT],
+    ] as const) {
+      let fx = await fixture(`historical-${generation}-generations`);
+      try {
+        fx = await makePackageHistorical(fx, sourceCommit);
 
-      const reopened = unwrap(await ensureApprovalPackage(fx.countryId, USERS.owner.id, fx.sql));
-      assert.equal(reopened.id, fx.approvalPackage.id);
-      assert.equal(reopened.methodology.sourceCommit, PRE_0014_DAMM_SOURCE_COMMIT);
+        const reopened = unwrap(await ensureApprovalPackage(fx.countryId, USERS.owner.id, fx.sql));
+        assert.equal(reopened.id, fx.approvalPackage.id);
+        assert.equal(reopened.methodology.sourceCommit, sourceCommit);
 
-      const state = unwrap(await getOwnerApprovalState(fx.countryId, USERS.owner.id, fx.sql));
-      assert.equal(state.package.id, fx.approvalPackage.id);
-      assert.equal(state.package.methodology.sourceCommit, PRE_0014_DAMM_SOURCE_COMMIT);
-      assert.equal(state.packageHistory[0].currentMethodology, false);
+        const state = unwrap(await getOwnerApprovalState(fx.countryId, USERS.owner.id, fx.sql));
+        assert.equal(state.package.id, fx.approvalPackage.id);
+        assert.equal(state.package.methodology.sourceCommit, sourceCommit);
+        assert.equal(state.packageHistory[0].currentMethodology, false);
 
-      assertMethodologyRefusal(
-        await assignApprovalReviewer(
-          {
-            packageId: fx.approvalPackage.id,
-            expectedTargetIdentitySha256: fx.approvalPackage.targetIdentitySha256,
-            expectedBundleSha256: fx.approvalPackage.bundleSha256,
-            gate: "g1",
-            reviewerEmail: USERS.assessor.email,
-            declaredRole: "assessor",
-            ownerUserId: USERS.owner.id,
-          },
-          fx.sql,
-        ),
-      );
-    } finally {
-      await fx.pg.close();
+        assertMethodologyRefusal(
+          await assignApprovalReviewer(
+            {
+              packageId: fx.approvalPackage.id,
+              expectedTargetIdentitySha256: fx.approvalPackage.targetIdentitySha256,
+              expectedBundleSha256: fx.approvalPackage.bundleSha256,
+              gate: "g1",
+              reviewerEmail: USERS.assessor.email,
+              declaredRole: "assessor",
+              ownerUserId: USERS.owner.id,
+            },
+            fx.sql,
+          ),
+        );
+      } finally {
+        await fx.pg.close();
+      }
     }
   });
 
@@ -790,7 +796,7 @@ describe("post-completion human approval store", () => {
       fx = await makePackageHistorical(fx);
 
       const state = unwrap(await getOwnerApprovalState(fx.countryId, USERS.owner.id, fx.sql));
-      assert.equal(state.package.methodology.sourceCommit, PRE_0015_DAMM_SOURCE_COMMIT);
+      assert.equal(state.package.methodology.sourceCommit, PRE_0016_DAMM_SOURCE_COMMIT);
       assert.deepEqual(state.decisions, []);
       assert.equal(state.lifecycle, "g1_pending");
 
@@ -877,11 +883,11 @@ describe("post-completion human approval store", () => {
       try {
         await fx.sql.query(
           "update workflow_run_methodology set source_commit = $2 where run_id = $1",
-          [newerRunId, PRE_0015_DAMM_SOURCE_COMMIT],
+          [newerRunId, PRE_0016_DAMM_SOURCE_COMMIT],
         );
         await fx.sql.query(
           "update workflow_run_artifacts set damm_source_commit = $2 where run_id = $1",
-          [newerRunId, PRE_0015_DAMM_SOURCE_COMMIT],
+          [newerRunId, PRE_0016_DAMM_SOURCE_COMMIT],
         );
       } finally {
         await fx.sql.query("set session_replication_role = origin");
@@ -926,7 +932,7 @@ describe("post-completion human approval store", () => {
           `update workflow_run_artifacts
            set damm_source_commit = $3
            where run_id = $1 and artifact_set_id = $2 and artifact_key = 'bundle'`,
-          [newerRunId, newerArtifactSetId, PRE_0015_DAMM_SOURCE_COMMIT],
+          [newerRunId, newerArtifactSetId, PRE_0016_DAMM_SOURCE_COMMIT],
         );
       } finally {
         await fx.sql.query("set session_replication_role = origin");

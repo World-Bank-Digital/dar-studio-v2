@@ -808,3 +808,35 @@ half-null directions for costs and benefits, plus both-null, valid finite, and
 reversed ranges. DAR Studio's methodology-integrity, source-pin migration, and
 `scripts/deployment-wizard.test.mjs` regressions require the merged commit and
 the `0015` cutover before the worker is accepted.
+
+### L29 — Variable country evidence needs bounded adaptive work, not unbounded output
+
+**Incident:** after five successful stages, Nigeria Stage 6 failed because
+`claude-opus-5` returned an unterminated JSON string. The provider had consumed
+the configured output allowance without producing a complete parseable object,
+so the entire investment appraisal was discarded.
+**Root cause:** one monolithic structured response coupled country-dependent
+evidence volume to a fixed output allowance. Simply removing token limits would
+not remove provider context limits or truncation risk, and it would surrender a
+critical spend bound. The paid-call boundary was also not durable enough to
+prove that a crash between provider completion and the next checkpoint could
+resume without replaying spend.
+**Fix:** Stage 6 now scales by the number of bounded work units: evidence is
+mapped in character-bounded batches, candidates are reduced in bounded groups,
+options are appraised separately, and a final comparison assembles the result.
+Each structured call validates its schema locally and distinguishes completion,
+provider rejection, invalid output, and truncation. Truncation receives only
+bounded adaptive retries; exhaustion becomes an explicit terminal failure.
+Provider outcomes and spend are journaled at the paid-call boundary, while
+durable step checkpoints and reservation accounting make crash recovery resume
+completed work without silently paying twice. DAR Studio pins canonical DAMM
+merge `1b1734c8a8017cda488b77cf0594b0ca82dae6ee` through append-only migration
+`0016`; migrations `0014` and `0015` remain immutable evidence of their earlier
+source cutovers.
+**Pinned by:** upstream DAMM investment-option, vendor, and workflow regressions
+cover batching, schema validation, truncation retries, provider rejection,
+checkpoint recovery, and spend accounting. DAR Studio's migration, methodology
+integrity, approval-history, and deployment-wizard tests require migration
+`0016` and the exact merged commit before a new worker is accepted.
+**Meta-lesson:** when input volume varies, scale the number of bounded,
+checkpointed calls—not the maximum size of one opaque response.

@@ -27,7 +27,7 @@ describe("DAMM build-time methodology integrity", () => {
       modelId: "DAMM",
       version: "1.7",
       revision: 2,
-      sourceCommit: "2efb26607acc29a687a82a56edc85f53c4a6da69",
+      sourceCommit: "1b1734c8a8017cda488b77cf0594b0ca82dae6ee",
     });
   });
 
@@ -41,11 +41,19 @@ describe("DAMM build-time methodology integrity", () => {
     );
   });
 
-  it("preserves the preceding DAMM source cutover migration byte for byte", async () => {
+  it("preserves DAMM source cutover migration 0014 byte for byte", async () => {
     const migration = await readFile(join(ROOT, "migrations/0014_damm_source_pin_cutover.sql"));
     assert.equal(
       createHash("sha256").update(migration).digest("hex"),
       "8cc52a34509c38c2043afd8f4188218155761c169ddeedf97d54f07eedf6a199",
+    );
+  });
+
+  it("preserves DAMM source cutover migration 0015 byte for byte", async () => {
+    const migration = await readFile(join(ROOT, "migrations/0015_damm_source_pin_cutover.sql"));
+    assert.equal(
+      createHash("sha256").update(migration).digest("hex"),
+      "7d146e443bec3870fed283ade99ebf0530957b0d741a4cca23308f01ff613627",
     );
   });
 
