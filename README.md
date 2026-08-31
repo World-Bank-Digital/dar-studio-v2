@@ -137,7 +137,7 @@ methodology manifest. The model remains honestly labelled `draft for review`
 and `ratified: false`; provenance does not imply ratification.
 
 On methodology upgrades, migrations `0011`, `0013`, `0014`, `0015`, `0016`,
-and `0017` stop before changing the schema or active source pin if an older
+`0017`, and `0018` stop before changing the schema or active source pin if an older
 workflow is still active. Migration `0014` is the immutable source cutover for
 the foresight candidate-register repair. Migration `0015` advances only the
 upstream source commit to the canonical DAMM merge
@@ -151,8 +151,12 @@ advances only the upstream source commit to canonical DAMM merge
 length-only repair for otherwise-valid overlength Stage 6 candidate `title`,
 `problem`, and `recommendation_rationale` fields without replaying the completed
 candidate call; the model, workflow, engine, renderer, and ratification fields
-remain unchanged. Allow an in-flight workflow to finish under the prior release,
-then retry the deployment; no run is failed or relaunched. A deferred database
+remain unchanged. Migration `0018` advances only the upstream source commit to
+canonical DAMM merge `386ccb90904de4109b64b7c62d4ed7beed8daede`, containing
+one checkpointed, original-text-anchored residual-length recovery after the first
+repair, with bounded per-field targets and no replay of accepted paid work; all
+methodology and ratification fields remain unchanged. Allow an in-flight workflow
+to finish under the prior release, then retry the deployment; no run is failed or relaunched. A deferred database
 invariant prevents a still-running old app process from committing a missing or
 stale methodology snapshot, manufacturing a terminal stale run, or promoting a
 failed/cancelled stale run during a rolling deployment.
@@ -201,12 +205,13 @@ npm run sim:happy
 npm run sim:dense
 ```
 
-`sim:replay` reproduces the Stage 6 overlength-repair failure class using
-synthetic, hash-bound responses. `sim:happy` runs the real eight-stage
-coordinator and the real Stage 6 appraisal logic with a typical synthetic
-country workload; `sim:dense` exercises the same path with a larger synthetic
-evidence inventory. A different synthetic country can be selected without changing the
-committed fixture:
+`sim:replay` drives the exact observed Stage 6 overlength vector through its
+checkpointed repair and one bounded, original-text-anchored recovery call, then
+requires the real appraisal assembler to complete with six valid options.
+`sim:happy` runs the real eight-stage coordinator and the real Stage 6 appraisal
+logic with a typical synthetic country workload; `sim:dense` exercises the same
+path with a larger synthetic evidence inventory. A different synthetic country
+can be selected without changing the committed fixture:
 
 ```bash
 node scripts/simulate-workflow.mjs \

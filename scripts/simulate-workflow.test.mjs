@@ -41,10 +41,10 @@ function report(overrides = {}) {
     profile: "typical",
     harness_verdict: "pass",
     observed: {
-      workflow_status: "failed",
-      failed_stage: "investment_options",
-      error_code: "appraisal_output_invalid",
-      error_sha256: "b".repeat(64),
+      workflow_status: "complete",
+      failed_stage: null,
+      error_code: null,
+      error_sha256: null,
     },
     external_spend_usd: 0,
     external_io: {
@@ -53,10 +53,10 @@ function report(overrides = {}) {
       capabilities_minted: 0,
       subprocess_calls: 0,
     },
-    fixture_call_count: 2,
+    fixture_call_count: 13,
     stages: [],
     artifacts: [],
-    assertions: [{ id: "expected_failure", ok: true }],
+    assertions: [{ id: "expected_completion", ok: true }],
     ...overrides,
   };
   value.report_sha256 = sha256Json(value);

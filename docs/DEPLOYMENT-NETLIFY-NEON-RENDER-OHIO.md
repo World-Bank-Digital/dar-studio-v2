@@ -23,7 +23,7 @@ This topology is not ready merely because the web build and worker start. Do not
 3. **Deploy Previews must not share staging secrets.** `DATABASE_URL`, authentication secrets, encryption keys, email credentials, and platform AI keys belong only to the production deploy context of this staging project. Disable Deploy Previews and branch deploys. The committed build preflight additionally requires Netlify `CONTEXT=production` and `BRANCH=main`, so a preview or branch build fails even if secrets were scoped incorrectly. A preview that can read or write the staging database is a hard stop.
 4. **Deployed social sign-in must be honest.** The baked Grok preview OAuth client accepts only `*.grok-sandbox.com` callbacks. It is not a Netlify credential. Either register a per-app broker client with the two exact callbacks in this guide, or use a committed deployment mode that keeps email/password auth enabled while hiding Google and X. `VITE_AUTH_ENABLED=false` is not an email-only mode: with a hosted database it intentionally fails closed, and without that guard it would collapse users into the shared development identity.
 5. **Public self-sign-up exposes platform spend.** A registered user can create a country and launch the country-only autonomous workflow, which consumes the worker's platform vendor keys. Keep the staging Netlify project Private unless an application-level invitation/launch authorization and abuse controls have been implemented. Use one authorized Netlify member session to switch among the three application test identities, or invite each intended reviewer through Netlify on a plan that supports it.
-6. **Migration 0017 precedes the repinned Render worker.** Take a Neon recovery snapshot, prove there are no active workflows, run migrations with the direct Neon connection, verify exactly one migration ledger row for `0017_damm_source_pin_cutover.sql`, and only then deploy the Render worker and artifact gateway. This append-only cutover advances the worker to the canonical DAMM merge with a checkpointed length-only repair for otherwise-valid overlength Stage 6 candidate `title`, `problem`, and `recommendation_rationale` fields without replaying the completed candidate call; neither Render service runs migrations.
+6. **Migration 0018 precedes the repinned Render worker.** Take a Neon recovery snapshot, prove there are no active workflows, run migrations with the direct Neon connection, verify exactly one migration ledger row for `0018_damm_source_pin_cutover.sql`, and only then deploy the Render worker and artifact gateway. This append-only cutover advances the worker to the canonical DAMM merge with one checkpointed, original-text-anchored residual-length recovery after the first Stage 6 repair, bounded per-field targets, and no replay of accepted paid work; neither Render service runs migrations.
 7. **An automated success is still a Draft.** The completed eight-stage package must say `Draft · pre-review`. Automated derivation, vendor challenge, and machine QC must not create G1 or G2 decisions. A release remains an `Approved Draft release` while DAMM is unratified.
 
 Relevant platform documentation:
@@ -74,7 +74,7 @@ The wizard writes an ignored, mode-`0600` operator file. Never commit it. In the
 | `DATABASE_URL` | Neon **pooled** Connect string (`-pooler`) | Netlify Production/Builds and Functions; both Render services; local operator file | secret |
 | `MIGRATION_DATABASE_URL` / local `DATABASE_URL_DIRECT` | Neon direct Connect string (no `-pooler`) | Netlify Production/Builds only and local migration | secret |
 | `NEON_SNAPSHOT_NAME` | Neon Backup & Restore | local recovery record | confidential operational metadata |
-| `MIGRATION_0017_VERIFIED` | exact Neon ledger/function checks | local deployment record | integrity evidence; fixed `true` only after verification |
+| `MIGRATION_0018_VERIFIED` | exact Neon ledger/function checks | local deployment record | integrity evidence; fixed `true` only after verification |
 | `DAR_KEY_SECRET` | generated locally, 48 random bytes encoded as base64 | Netlify Production/Builds and Functions | secret; keep stable or stored BYOK values become unreadable |
 | `BETTER_AUTH_SECRET` | generated locally, 48 random bytes encoded as base64 | Netlify Production/Builds and Functions | secret; keep stable or sessions are invalidated |
 | `BETTER_AUTH_URL` | fixed Netlify production URL | Netlify Production/Builds and Functions | public configuration; full `https://` URL, no trailing slash |
@@ -134,7 +134,7 @@ Do not put any of these values in GitHub Actions secrets unless a later, reviewe
 1. Merge the deployment-readiness pull request to `main`.
 2. In the repository run `git fetch origin main`, check out `main`, and fast-forward it.
 3. Require a clean worktree and `HEAD == origin/main`.
-4. Confirm the merged tree contains `netlify.toml`, `render.yaml`, both `Dockerfile.worker` and `Dockerfile.artifact-gateway`, the worker entrypoint/preflight files, `deploy/artifact-gateway/package.json` and its lockfile, `scripts/artifact-gateway.ts`, immutable historical migrations `0013_damm_methodology_pin_cutover.sql`, `0014_damm_source_pin_cutover.sql`, `0015_damm_source_pin_cutover.sql`, and `0016_damm_source_pin_cutover.sql`, current migration `0017_damm_source_pin_cutover.sql`, and this runbook.
+4. Confirm the merged tree contains `netlify.toml`, `render.yaml`, both `Dockerfile.worker` and `Dockerfile.artifact-gateway`, the worker entrypoint/preflight files, `deploy/artifact-gateway/package.json` and its lockfile, `scripts/artifact-gateway.ts`, immutable historical migrations `0013_damm_methodology_pin_cutover.sql`, `0014_damm_source_pin_cutover.sql`, `0015_damm_source_pin_cutover.sql`, `0016_damm_source_pin_cutover.sql`, and `0017_damm_source_pin_cutover.sql`, current migration `0018_damm_source_pin_cutover.sql`, and this runbook.
 5. Run `npm test`, `npm run typecheck`, `npm run lint`, `npm run build:dev`, and `npm run verify:netlify`. The last command exercises the committed Netlify adapter wrapper and PWA route/output contract without using the production build command.
 6. Inspect the production build command. It must not silently run migrations against a preview database. This runbook applies migrations explicitly with `DATABASE_URL_DIRECT`.
 
@@ -201,11 +201,11 @@ order by r.created_at;
 
 Require zero rows. The migration itself refuses stale or missing-pin active workflows, but the staging cutover is deliberately stricter: do not change schema while any workflow is active.
 
-Then go to **Backup & Restore**, enable **Enhanced view** if shown, make sure the root `production` branch is selected, and click **Create snapshot**. Name it with UTC date/time and the first eight characters of the merged deploy commit, for example `pre-0017-YYYYMMDD-HHMM-<DEPLOY_GIT_SHA[:8]>`. Capture the snapshot name. Snapshots are only offered on root branches and plan limits apply.
+Then go to **Backup & Restore**, enable **Enhanced view** if shown, make sure the root `production` branch is selected, and click **Create snapshot**. Name it with UTC date/time and the first eight characters of the merged deploy commit, for example `pre-0018-YYYYMMDD-HHMM-<DEPLOY_GIT_SHA[:8]>`. Capture the snapshot name. Snapshots are only offered on root branches and plan limits apply.
 
 Stop if there is an active workflow, snapshot creation fails, the snapshot limit is exhausted, or the snapshot is for another branch.
 
-### 7. Apply and verify migrations, including 0017
+### 7. Apply and verify migrations, including 0018
 
 Only after the snapshot, run from the clean merged checkout:
 
@@ -213,7 +213,7 @@ Only after the snapshot, run from the clean merged checkout:
 DATABASE_URL="$DATABASE_URL" MIGRATION_DATABASE_URL="$DATABASE_URL_DIRECT" npm run db:migrate
 ```
 
-The migrator applies sorted SQL files one at a time, each in its own transaction, and records the filename in `_migrations`. A failure rolls back that file. Migrations `0013`, `0014`, `0015`, and `0016` remain immutable historical evidence; migration `0017` performs the new source-pin cutover to the canonical DAMM merge containing a checkpointed length-only repair for otherwise-valid overlength Stage 6 candidate `title`, `problem`, and `recommendation_rationale` fields without replaying the completed candidate call. If migration 0017 reports:
+The migrator applies sorted SQL files one at a time, each in its own transaction, and records the filename in `_migrations`. A failure rolls back that file. Migrations `0013`, `0014`, `0015`, `0016`, and `0017` remain immutable historical evidence; migration `0018` performs the new source-pin cutover to the canonical DAMM merge containing one checkpointed, original-text-anchored residual-length recovery after the first Stage 6 repair, with bounded per-field targets and no replay of accepted paid work. If migration 0018 reports:
 
 > Cannot install the current DAMM source pin while stale or missing-pin workflows are active; allow them to finish and retry the deployment.
 
@@ -224,14 +224,14 @@ Verify in Neon SQL Editor:
 ```sql
 select name, applied_at
 from _migrations
-where name = '0017_damm_source_pin_cutover.sql';
+where name = '0018_damm_source_pin_cutover.sql';
 ```
 
 Require exactly one row. Also verify that the installed function retains the unratified identity and pinned DAMM commit:
 
 ```sql
 select pg_get_functiondef('require_active_workflow_methodology()'::regprocedure)
-  like '%4b97b2c9090204dfba3aa7c44f41d558005982ee%' as pinned_commit,
+  like '%386ccb90904de4109b64b7c62d4ed7beed8daede%' as pinned_commit,
        pg_get_functiondef('require_active_workflow_methodology()'::regprocedure)
   like '%methodology.model_ratified = false%' as remains_unratified;
 ```
@@ -307,7 +307,7 @@ Render prompts for `sync: false` values only on initial creation. If a value is 
 
 For `dar-studio-worker`, open **Logs**. Require `[worker-checkout] installed DAMM <commit>` (or `reusing`) followed by `[worker-preflight] ready ...` and the existing `[worker] ...`, `[worker] pipeline ...`, `[worker] interpreter ...`, and `[worker] watching the run queue` lines. It must prove:
 
-- the DAMM checkout is exactly commit `4b97b2c9090204dfba3aa7c44f41d558005982ee`;
+- the DAMM checkout is exactly commit `386ccb90904de4109b64b7c62d4ed7beed8daede`;
 - its tracked tree is clean and prohibited untracked/ignored executable source is absent;
 - the checkout lives under `/var/data/checkouts/<pinned-commit>`;
 - Python is `/opt/damm-venv/bin/python`;

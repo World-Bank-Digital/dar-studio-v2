@@ -308,6 +308,7 @@ required_files=(
   migrations/0015_damm_source_pin_cutover.sql
   migrations/0016_damm_source_pin_cutover.sql
   migrations/0017_damm_source_pin_cutover.sql
+  migrations/0018_damm_source_pin_cutover.sql
   docs/DEPLOYMENT-NETLIFY-NEON-RENDER-OHIO.md
 )
 for required_file in "${required_files[@]}"; do
@@ -473,7 +474,7 @@ say "If it is non-null, run the active-workflow query in docs/DEPLOYMENT-NETLIFY
 confirm_or_stop "Did the active-workflow query return zero rows?" \
   "Do not migrate while any workflow is queued, running, or otherwise nonterminal."
 step "Open Backup & Restore, enable Enhanced view if shown, select the root production branch, and click Create snapshot."
-step "Name it with UTC time and the deploy commit, for example pre-0017-YYYYMMDD-HHMM-${DEPLOY_GIT_SHA:0:8}."
+step "Name it with UTC time and the deploy commit, for example pre-0018-YYYYMMDD-HHMM-${DEPLOY_GIT_SHA:0:8}."
 ask NEON_SNAPSHOT_NAME "Exact pre-migration snapshot name:"
 require_value NEON_SNAPSHOT_NAME "$NEON_SNAPSHOT_NAME"
 write_env NEON_SNAPSHOT_NAME "$NEON_SNAPSHOT_NAME"
@@ -481,18 +482,18 @@ confirm_or_stop "Is that snapshot complete and visibly tied to the root producti
   "A recoverable snapshot is required before migration."
 
 # ── 7 ─────────────────────────────────────────────────────────────────────
-stage "Apply and verify migration 0017"
-warn "This is the database mutation for the checkpointed Stage 6 overlength-candidate repair source cutover. The direct URL is used, and the migrator takes its Postgres advisory lock."
+stage "Apply and verify migration 0018"
+warn "This is the database mutation for the bounded residual Stage 6 overlength-recovery source cutover. The direct URL is used, and the migrator takes its Postgres advisory lock."
 confirm_or_stop "Run the idempotent migration set against this Neon staging database now?" \
   "Migration was not authorized. No worker may be deployed yet."
 DATABASE_URL="$DATABASE_URL" MIGRATION_DATABASE_URL="$DATABASE_URL_DIRECT" npm run db:migrate ||
   stop "Migration failed. Keep the snapshot, read the exact error, and do not deploy the worker."
 open_url "https://console.neon.tech/app/projects/$NEON_PROJECT_ID"
-step "In SQL Editor, query _migrations for 0017_damm_source_pin_cutover.sql. Require exactly one row."
+step "In SQL Editor, query _migrations for 0018_damm_source_pin_cutover.sql. Require exactly one row."
 step "Run the function checks in the guide. Require pinned_commit=true and remains_unratified=true."
 confirm_or_stop "Did both migration verification queries return the exact expected result?" \
   "A worker cannot start on an unverified schema or methodology pin."
-write_env MIGRATION_0017_VERIFIED "true"
+write_env MIGRATION_0018_VERIFIED "true"
 
 # ── 8 ─────────────────────────────────────────────────────────────────────
 stage "Import the main branch into Netlify"
@@ -596,7 +597,7 @@ chmod 600 "$ENV_FILE"
 # ── 11 ────────────────────────────────────────────────────────────────────
 stage "Render Ohio Blueprint: worker and artifact gateway"
 open_url "https://dashboard.render.com/"
-say "Migration 0017 must already be verified. Render does not run database migrations."
+say "Migration 0018 must already be verified. Render does not run database migrations."
 step "New > Blueprint > Connect the exact repository; select branch main and path render.yaml."
 step "Review dar-studio-worker: worker/docker, region ohio, plan 1c-2g, auto deploy off, one instance, and no max shutdown delay field."
 step "Review disk dar-studio-worker-data at /var/data, 10 GB. Render forbids a custom max shutdown delay on a disk-backed service, so its documented 30-second default applies; checkpoints and the claim lease provide automatic recovery."
@@ -647,7 +648,7 @@ write_env ARTIFACT_GATEWAY_URL "$ARTIFACT_GATEWAY_URL"
 stage "Render worker and artifact gateway verification"
 open_url "https://dashboard.render.com/worker/$RENDER_WORKER_SERVICE_ID"
 step "Open worker Logs. Require [worker-checkout] installed/reusing, [worker-preflight] ready, and [worker] host/pipeline/interpreter/watching queue lines."
-step "Require DAMM commit 4b97b2c9090204dfba3aa7c44f41d558005982ee, clean source, /var/data/checkouts/<commit>, and /opt/damm-venv/bin/python."
+step "Require DAMM commit 386ccb90904de4109b64b7c62d4ed7beed8daede, clean source, /var/data/checkouts/<commit>, and /opt/damm-venv/bin/python."
 step "Require Pandoc, LibreOffice/soffice, six nonempty vendor variables with pinned SDK imports, blank mode-0600 upstream .env, and queue watching."
 warn "Any worker-checkout, worker-preflight, or worker-entrypoint failed line, checkout drift, missing renderer/vendor, or crash loop is a hard stop."
 ask RENDER_WORKER_DEPLOY_ID "Successful Render worker deploy ID:"
