@@ -23,6 +23,7 @@ import {
   CANONICAL_PIPELINE_METHODOLOGY_FILES,
   defaultDeps,
   degradationNotes,
+  isSimulationIdentity,
   passFilePaths,
   drain,
   collectWorkflowArtifacts,
@@ -70,6 +71,43 @@ function run(over: Partial<ClaimedRun> = {}): ClaimedRun {
 }
 
 describe("how the worker invokes the pipeline", () => {
+  it("reserves simulation identities outside the production worker and verifier", async () => {
+    const simulated = run({
+      id: "sim-nigeria-stage6-overlength-v1-aaaaaaaaaaaa",
+      pass: "workflow",
+      vendor: "fixture/nigeria-stage6-overlength-v1",
+    });
+    assert.equal(isSimulationIdentity(simulated), true);
+    assert.deepEqual(verifyWorkflowCompletion(simulated), {
+      ok: false,
+      reason: "Simulation output is not eligible for workflow acceptance or artifact publication.",
+    });
+    const f = fakeStore();
+    const p = fakeProcess([], 0);
+    await assert.rejects(
+      runOne(simulated, "w1", deps(f.store, p.proc)),
+      /Simulation identities cannot enter the production worker/,
+    );
+    assert.equal(f.calls.finished.length, 0);
+
+    const misclassified = run({
+      id: "sim-misclassified-aaaaaaaaaaaa",
+      pass: "research",
+      vendor: "anthropic/claude-opus-5",
+    });
+    let spawned = false;
+    const blockedDeps = deps(f.store, p.proc);
+    blockedDeps.spawnPipeline = () => {
+      spawned = true;
+      return p.proc;
+    };
+    await assert.rejects(
+      runOne(misclassified, "w1", blockedDeps),
+      /Simulation identities cannot enter the production worker/,
+    );
+    assert.equal(spawned, false);
+  });
+
   it("always passes --resume, on a first run as much as a retaken one", () => {
     // One code path rather than a decision about whether this is a fresh start. On a
     // first run there is no state file and the pipeline begins at zero; on a retaken

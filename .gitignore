@@ -15,6 +15,7 @@ coverage/
 *.log
 /tmp/
 artifacts/
+.simulation/
 screenshots/
 attachments/
 .grok/

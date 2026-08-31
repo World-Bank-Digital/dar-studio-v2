@@ -173,6 +173,11 @@ export function workflowRunDir(run: Pick<Run, "outBasename">): string {
   return path.join(pipelineDir(), "gauntlet/loop-1", `${run.outBasename}_workflow`);
 }
 
+/** Simulation identities are permanently ineligible for workflow acceptance or publication. */
+export function isSimulationIdentity(run: Pick<Run, "id" | "vendor">): boolean {
+  return run.id.startsWith("sim-") || Boolean(run.vendor?.startsWith("fixture/"));
+}
+
 /** A workflow workspace must be one real, direct child of the pinned executable tree. */
 function safeWorkflowRunDir(
   run: Pick<Run, "outBasename">,
@@ -1229,6 +1234,12 @@ function verifyStageManifest(
 export function verifyWorkflowCompletion(
   run: Pick<Run, "id" | "countryName" | "iso3" | "outBasename" | "ceilingUsd" | "vendor">,
 ): { ok: true; value: VerifiedWorkflow } | { ok: false; reason: string } {
+  if (isSimulationIdentity(run)) {
+    return {
+      ok: false,
+      reason: "Simulation output is not eligible for workflow acceptance or artifact publication.",
+    };
+  }
   const root = safeWorkflowRunDir(run, true);
   if (!root) {
     return { ok: false, reason: "The workflow workspace is not inside the pipeline tree." };
@@ -2026,6 +2037,9 @@ export function degradationNotes(
 
 /** Follow one claimed run to its end. Returns the status it settled on. */
 export async function runOne(run: ClaimedRun, workerId: string, deps: WorkerDeps): Promise<string> {
+  if (isSimulationIdentity(run)) {
+    throw new Error("Simulation identities cannot enter the production worker.");
+  }
   const seen = {
     exhausted: false,
     incomplete: false,
