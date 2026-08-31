@@ -189,6 +189,46 @@ bytecode generation for its own runs. The worker resumes from durable
 checkpoints and persists verified artifacts in the database, so completion does
 not depend on a particular worker's local filesystem.
 
+### Zero-spend workflow simulation
+
+Do not use repeated paid staging launches to diagnose deterministic workflow,
+schema, checkpoint, or artifact defects. DAR Studio exposes three local commands
+backed by the versioned simulation module in the adjacent DAMM source checkout:
+
+```bash
+npm run sim:replay
+npm run sim:happy
+npm run sim:dense
+```
+
+`sim:replay` reproduces the Stage 6 overlength-repair failure class using
+synthetic, hash-bound responses. `sim:happy` runs the real eight-stage
+coordinator and the real Stage 6 appraisal logic with a typical synthetic
+country workload; `sim:dense` exercises the same path with a larger synthetic
+evidence inventory. A different synthetic country can be selected without changing the
+committed fixture:
+
+```bash
+node scripts/simulate-workflow.mjs \
+  --scenario eight-stage-happy-v1 \
+  --country Exampleland --iso EXP --profile dense
+```
+
+Set `DAMM_SIMULATION_SOURCE` only when the DAMM checkout is not the adjacent
+`../DAMM-foresight-candidate-register` directory. The adapter passes an
+allowlisted child environment rather than loading `.env` or `.env.staging`;
+database URLs, vendor credentials, auth secrets, and artifact-delivery secrets
+never reach the simulation. Reports are written under ignored `.simulation/`
+directories and must prove zero external spend and zero external I/O.
+
+Every report and generated artifact is labelled **SIMULATED — NOT ACCEPTANCE
+EVIDENCE** and uses reserved `sim-`/`fixture/` identities. The production worker
+rejects those identities before execution or publication. Simulation proves
+deterministic code and contract behavior; it does not prove live provider
+behavior or Render, Neon, Netlify, browser-auth, CORS, or gateway deployment
+wiring. After both simulation gates and the repository suite pass, retain one
+fresh authorized paid staging smoke as the final deployment canary.
+
 ## Verification
 
 ```bash
