@@ -189,7 +189,11 @@ Stage 6 output plus durable spend/checkpoint recovery. Append-only migration
 `4b97b2c9090204dfba3aa7c44f41d558005982ee`, containing a checkpointed,
 length-only repair for otherwise-valid overlength Stage 6 candidate `title`,
 `problem`, and `recommendation_rationale` fields without replaying the completed
-candidate call. Let the existing release finish those runs, then retry
+candidate call. Append-only migration `0018` advances only the source commit to
+canonical DAMM merge `386ccb90904de4109b64b7c62d4ed7beed8daede`, containing
+one checkpointed, original-text-anchored residual-length recovery after the first
+repair, with bounded per-field targets and no replay of accepted paid work. Let
+the existing release finish those runs, then retry
 deployment; a migration must never terminate or relaunch an in-flight workflow.
 The deferred database invariant also rejects stale launches, newly inserted
 stale terminal rows, and transitions that would turn a failed/cancelled stale

@@ -34,6 +34,7 @@ import { DAR_WORKFLOW, DAR_WORKFLOW_SHA256 } from "./workflow.ts";
 export const APPROVAL_OBSERVATIONS_ARTIFACT_KEY = "data-damm_diagnostic-damm_observations-json";
 export const APPROVAL_ASSESSMENT_INPUT_ARTIFACT_KEY = "assessment-input";
 const HISTORICAL_DAMM_SOURCE_COMMITS = [
+  "4b97b2c9090204dfba3aa7c44f41d558005982ee",
   "1b1734c8a8017cda488b77cf0594b0ca82dae6ee",
   "2efb26607acc29a687a82a56edc85f53c4a6da69",
   "d4c659f5873f3a891634c8edf6b7166cb2eb374c",

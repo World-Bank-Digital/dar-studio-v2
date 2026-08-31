@@ -873,3 +873,30 @@ methodology-integrity, approval-history, and deployment-wizard tests require
 migration `0017` and the exact merged commit before a new worker is accepted.
 **Meta-lesson:** when paid output is valid except for a bounded local prose
 contract, checkpoint and patch only the named defect; never replay accepted work.
+
+### L31 — A repair needs a bounded residual path, not a replay loop
+
+**Incident:** Nigeria Stage 6 still failed after the targeted length repair. The
+provider returned all requested patches, but several fields remained only a few
+characters above their hard limits; local structured-output validation therefore
+rejected the repaired candidate batch.
+**Root cause:** the first repair asked for values at the schema maximum and
+treated any residual overlength as terminal. Replaying that repair would compound
+semantic drift because it would shorten already-shortened text, while replaying
+the accepted candidate synthesis would spend again and discard valid work.
+**Fix:** when—and only when—the first repaired register remains otherwise valid
+with residual length violations, Stage 6 permits one second checkpointed repair.
+That call is anchored to the original evidence-derived wording, targets 90% of
+each schema bound, derives a bounded output allowance from the named fields, and
+patches the already accepted register without replaying candidate synthesis. A
+second residual failure is terminal. The durable checkpoint and paid-ledger
+binding apply on fresh, pending, and cached recovery paths. DAR Studio pins
+canonical DAMM merge `386ccb90904de4109b64b7c62d4ed7beed8daede` through
+append-only migration `0018`; migrations `0014`–`0017` remain immutable evidence
+of earlier source cutovers.
+**Pinned by:** the exact synthetic Nigeria overlength vector, upstream repair
+budget/checkpoint/crash-recovery regressions, the zero-spend DAR replay scenario,
+and DAR Studio's migration, methodology-integrity, approval-history, and
+deployment-wizard tests.
+**Meta-lesson:** give a narrowly scoped repair one smaller, original-text-anchored
+landing zone; never turn validation repair into an unbounded or paid replay loop.
