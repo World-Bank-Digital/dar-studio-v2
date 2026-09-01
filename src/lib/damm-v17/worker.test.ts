@@ -362,6 +362,7 @@ function deps(store: RunStore, proc: SpawnedProcess, ledger: number | null = nul
     readLedger: async () => ledger,
     verifyWorkflow: () => ({ ok: true }),
     prepareWorkflowInputs: async () => {},
+    reconcileCompletedStageArtifacts: async () => {},
     publishWorkflowArtifacts: async () => {},
     heartbeatMs: 5,
   };
@@ -515,6 +516,64 @@ describe("following a run", () => {
     );
     assert.equal(f.calls.rows.at(-1)?.rowsDone, 8);
     assert.equal(f.calls.finished[0].spentUsd, 8);
+  });
+
+  it("reconciles completed-stage downloads on claim recovery, stage checkpoints, and exit", async () => {
+    const f = fakeStore();
+    const base = {
+      schema_version: "damm.workflow-event/v1",
+      run_id: "r1",
+      workflow_id: DAR_WORKFLOW.workflow_id,
+      workflow_version: DAR_WORKFLOW.workflow_version,
+    };
+    const output = [
+      JSON.stringify({
+        ...base,
+        sequence: 1,
+        timestamp: "2026-09-02T00:00:01Z",
+        event: "stage_complete",
+        stage_id: "damm_diagnostic",
+        stage_ordinal: 1,
+        attempt: 1,
+        elapsed_seconds: 10,
+        spent_usd: 0,
+        cumulative_spent_usd: 0,
+        artifacts: [],
+      }),
+      JSON.stringify({
+        ...base,
+        sequence: 2,
+        timestamp: "2026-09-02T00:00:02Z",
+        event: "failure",
+        stage_id: "country_research",
+        stage_ordinal: 2,
+        error: { type: "SyntheticFailure", message: "later stage failed" },
+      }),
+    ].join("\n");
+    const p = fakeProcess([`${output}\n`], 78);
+    const d = deps(f.store, p.proc);
+    const lifecycle: string[] = [];
+    d.prepareWorkflowInputs = async () => {
+      lifecycle.push("prepared");
+    };
+    d.reconcileCompletedStageArtifacts = async () => {
+      lifecycle.push("reconciled");
+    };
+    d.spawnPipeline = () => {
+      lifecycle.push("spawned");
+      return p.proc;
+    };
+
+    const status = await runOne(run({ pass: "workflow", vendor: null }), "w1", d);
+
+    assert.equal(status, "failed");
+    assert.deepEqual(lifecycle, [
+      "prepared",
+      "reconciled",
+      "spawned",
+      "reconciled",
+      "reconciled",
+    ]);
   });
 
   it("turns workflow budget exhaustion into a terminal failure, not a top-up state", async () => {

@@ -1,7 +1,183 @@
 # HANDOFF — DAR Studio v2
 
-_Updated 2026-08-27. Read this document and [LEARNINGS.md](LEARNINGS.md) before
+_Updated 2026-09-02. Read this document and [LEARNINGS.md](LEARNINGS.md) before
 changing retrieval, scoring, drafting, or export behavior._
+
+## Continuation checkpoint — 2026-09-02
+
+This section records the completed local investigation and implementation. It
+does not supersede the immutable 2026-09-01 evidence below.
+
+### Evidence-backed diagnosis
+
+- A fresh read-only Neon transaction reconfirmed run
+  `e96a93fd-d4a9-4c83-96d9-3488483729a9` as terminal `failed`, with
+  `rows_done=5`, `rows_total=8`, exact spend `$29.64701`, null
+  `workflow_artifact_set_id`, and zero artifact rows. There are zero active
+  workflows. Only migration `0018_damm_source_pin_cutover.sql` is applied.
+- The preserved Stage 6 checkpoint proves that four overlength fields shared
+  one atomic repair request. Both bounded attempts spent their entire 4,000 and
+  8,000 output allowances on reasoning and emitted no patch text. This is a
+  paid-failure-domain problem, not a local schema rejection or a simple
+  request-size problem.
+
+### Completed local implementation
+
+- DAMM local commit `16d869a` on `fix/stage6-repair-chunking` partitions the
+  Stage 6 repair into independently checkpointed, bounded chunks while
+  retaining hard output limits and terminal exhaustion. Stage 6 remains before
+  Stage 7 because the integrated DAR consumes its appraisal; moving it after
+  Stage 7 would make the main report incomplete rather than make the failure
+  safe.
+- The production-shaped Nigeria simulation now exercises Stage 6 recovery,
+  Stage 7 gates, and Stage 8 packaging after deterministic synthetic
+  predecessors. It completes 8/8 stages in 18 fixture calls with exact
+  `$0` spend and zero network calls, database writes, subprocesses, or
+  capability minting. It is visibly ineligible as acceptance evidence.
+  Identical runs produce identical reports and complete-bundle ZIP bytes. The
+  bound code identity is
+  `ed3d9ce0788cad5cc04a0ef8779cb5d8b78db61bd888b2aeae4242b162c63db6`.
+- DAMM now emits standalone offline consulting reports for Stages 1–7,
+  including accessible visualizations, explicit evidence/proposal boundaries,
+  print-safe pagination, a styled Stage 6 workbook, and a reader-oriented
+  Stage 7 annex. Real Pandoc plus LibreOffice 26.2 and LibreOfficeDev 26.8
+  rendering verifies a balanced three-page A4 integrated report with visible
+  forest table headers, embedded visualizations, no duplicate title, no noisy
+  accessibility captions, and no trailing blank page.
+- Stage 8 preserves exact HTML, derives DOCX/PDF/Markdown with the consulting
+  style, and neutralizes spreadsheet formulas in both consolidated CSV and
+  XLSX source inventories while retaining genuine numeric negatives.
+- DAR Studio migration `0019_progressive_stage_artifacts.sql` and the worker,
+  gateway, route, and UI changes publish each canonical completed Stage 1–7
+  prefix as an immutable, hash-verified, owner-only download set. Later failure
+  no longer hides already completed reports. Publication is claim- and
+  methodology-bound, transactionally sealed, symlink/FIFO safe, per-file and
+  aggregate bounded, and reauthorized on every gateway chunk. Reviewer access
+  is not inherited by these progressive owner downloads.
+
+### Validation and release boundary
+
+- DAMM passes 204 discovered tests, 470 model-parity checks, 11 workflow tests,
+  all 17 machine-pass checks, all 16 survey-pass checks, six workbook-parity
+  tests, and independent correctness/security review.
+- DAR Studio passes 503 tests, typecheck, lint with the same five pre-existing
+  warnings and zero errors, `build:dev`, and independent
+  correctness/security review.
+- DAMM commit `16d869a` is local only. The attempted outbound push was stopped
+  by the execution safety gate pending a more explicit user authorization.
+  DAR changes are ready for a local commit. No GitHub push, merge, source-pin
+  migration, database migration, deployment, credential, or paid workflow has
+  occurred.
+- After explicit push/merge authorization, land DAMM first, then create an
+  append-only DAR source cutover using the resulting canonical
+  `github/main` merge commit and the new renderer digest. Repeat all DAR
+  validation before landing it. Do not apply migrations or start a production
+  cutover until the worker can be rebuilt atomically. That build requires a
+  fresh shortest-expiry DAMM-only Contents-read credential and separate
+  explicit authorization; revoke it immediately after the build settles. Do
+  not launch another paid workflow without a new, separate authorization.
+
+## Current continuation checkpoint — 2026-09-01
+
+Treat this section as the entry point for the next task. It preserves the
+failed-run evidence and records the uncommitted local fix; do not treat either
+as authorization to mutate production or launch another workflow.
+
+### Deployed identity
+
+- DAR Studio `HEAD` and `origin/main` were both
+  `d5e1ee444d4c07f7b88354f0e3b9ed952c5903c6` before this handoff-only edit.
+- The pinned DAMM source is
+  `386ccb90904de4109b64b7c62d4ed7beed8daede`; migration `0018` is applied and
+  verified.
+- Netlify production deploy `6a95fef78aba370008ccc9ae` serves the same DAR
+  commit.
+- Render worker deploy `dep-dabas5p42hec73admcsg` and artifact-gateway deploy
+  `dep-dabauo4s728c73a5eo90` are Live on the same DAR commit.
+- Worker logs verify the exact DAMM pin, migrations `18`, the pipeline at
+  `/var/data/checkouts/386ccb90904de4109b64b7c62d4ed7beed8daede`, the
+  `/opt/damm-venv/bin/python` interpreter, and queue watching.
+- Gateway probes verified exact `200 {"status":"ok"}` health with `no-store`,
+  anonymous and wrong-origin non-disclosing `404` responses, and the exact
+  Netlify-origin `204` CORS preflight.
+- The one-attempt GitHub build PAT was revoked immediately after the worker
+  build. The Render `damm_git_netrc` file therefore contains a revoked
+  credential; another worker image build requires a new shortest-expiry,
+  DAMM-only Contents-read token and immediate post-build revocation.
+- `.env.staging` records the deployment IDs and the Neon connection. Read it
+  without printing secrets.
+
+### Terminal Stage 16 evidence
+
+- Fresh country workspace:
+  `43fda6cd-c62c-46f2-bcbb-f746af3516bc` (`Nigeria`, `NGA`).
+- Single canonical run:
+  `e96a93fd-d4a9-4c83-96d9-3488483729a9`.
+- The run started at `2026-09-01T14:10:19.797Z`, failed at
+  `2026-09-01T15:31:00.096Z`, completed 5 of 8 stages, and spent
+  `$29.64701` of its `$500` ceiling.
+- No artifact set was published, so Stage 17 human review is not available.
+- Exact terminal reason:
+
+  ```text
+  Investment options and cost-benefit analysis: command for investment_options exited 78: !! investment appraisal failed terminally: investment candidate map batch 2/3 [local-length repair 1/1] exhausted 2 bounded output attempts; last stop_reason=max_tokens, output_tokens=8000
+  ```
+
+### Read-only diagnosis and local fix — 2026-09-01
+
+- Read-only Neon queries through `.env.staging` reconfirmed the terminal run,
+  exact `$29.64701` spend, five completed stages, null artifact-set identity,
+  and zero workflow artifact rows. Stage 6 accounted for `$0.790575` across six
+  provider calls. No run, workspace, budget, row, or artifact was mutated.
+- The preserved worker checkpoint at the deployed DAMM pin records four repair
+  targets in candidate-map batch 2/3. Its two repair attempts had 2,741 input
+  tokens and 4,000 then 8,000 output tokens; thinking consumed the full output
+  allowance both times and the provider emitted zero patch characters. The
+  smaller input falsifies a simple request-size explanation: batch 1's
+  four-target repair used 2,848 input tokens and succeeded on its second bounded
+  attempt. With no output text, local schema and residual-length validation
+  were never reached.
+- DAMM owned the failed seam: all four fields shared one atomic repair request
+  and one checkpoint identity. A provider failure on that request therefore
+  discarded the opportunity to retain any independently completed repair.
+- The DAMM checkout was confirmed clean at `fb52fc0`; its tree matched
+  `github/main` at `386ccb90904de4109b64b7c62d4ed7beed8daede`. The uncommitted
+  branch `fix/stage6-repair-chunking` was created from that exact `github/main`
+  commit.
+- The local fix partitions candidate repairs into stable chunks of at most two
+  fields and 1,000 contractual replacement characters, projects only relevant
+  candidate context, and checkpoints each chunk independently. Initial chunks
+  retain two bounded 4,000→8,000 attempts; residual chunks retain one bounded
+  derived-token attempt; exhaustion remains terminal. A completed chunk is
+  resumed without replay, and complete-register semantic validation is journaled
+  as part of the final chunk rather than performed outside the durable outcome.
+  The local planner identity is `bounded-appraisal/v4`.
+- The recorded Nigeria vector first failed deterministically against the old
+  atomic behavior with the production terminal message, then passed through two
+  bounded repair chunks. Regressions also prove continuation after a crash
+  between chunks and durable non-replay of a semantically invalid combined
+  repair. The zero-spend Nigeria simulation completes in 18 fixture calls with
+  1,156-token residual chunks and no external I/O.
+- Full offline DAMM validation passes: 180 discovered tests, 470 model-parity
+  checks, seven workflow-contract tests, all 17 machine-pass checks, all 16
+  survey-pass checks, and six workbook-parity tests. DAR Studio passes typecheck,
+  lint (five existing warnings, zero errors), 497 tests, `build:dev`, and the
+  replay/happy/dense zero-spend simulations against the local DAMM checkout.
+- No DAMM commit, push, merge, DAR source-pin migration, deployment, credential,
+  or paid workflow was created. DAR production remains at `d5e1ee4` and still
+  pins DAMM `386ccb9`. The only DAR tracked edits are this preserved handoff and
+  the appended L32 learning-ledger entry.
+
+### Next task
+
+Review the uncommitted DAMM branch and local validation evidence. Only after
+explicit authorization, commit/push/merge the DAMM fix, then repin its resulting
+merged commit through a new append-only DAR migration and repeat the deployment
+gates. Verify no active workflow exists before any source-cutover migration.
+Keep the failed run immutable: no retry, resume, reuse, cancellation, row
+mutation, budget change, or artifact reconstruction. Even after merge and
+deployment, a fresh paid run requires a new country workspace and separate
+explicit user authorization.
 
 ## Normative product contract
 

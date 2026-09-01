@@ -37,6 +37,10 @@ import {
   type WorkflowDocumentState,
 } from "./worker-artifacts.ts";
 import { DAR_WORKFLOW, canonicalWorkflowLaunchRequest } from "./workflow.ts";
+import {
+  listCompletedStageArtifacts,
+  type CompletedStageArtifactMetadata,
+} from "./completed-stage-artifacts.server.ts";
 import { decodeWorkflowUploadBase64, extractWorkflowUploadText } from "./workflow-upload.ts";
 import { model } from "./model.ts";
 import {
@@ -72,10 +76,22 @@ const PASSES: readonly RunPass[] = [
 export interface RunView extends Run {
   progress: ReturnType<typeof progressOf>;
   summary: string;
+  completedStageArtifacts: CompletedStageArtifactMetadata[];
 }
 
-function view(run: Run): RunView {
-  return { ...run, progress: progressOf(run), summary: stoppedSummary(run) };
+function view(run: Run, completedStageArtifacts: CompletedStageArtifactMetadata[] = []): RunView {
+  return {
+    ...run,
+    progress: progressOf(run),
+    summary: stoppedSummary(run),
+    completedStageArtifacts,
+  };
+}
+
+async function ownerView(run: Run): Promise<RunView> {
+  const artifacts =
+    run.pass === "workflow" ? await listCompletedStageArtifacts(run.id, run.userId) : [];
+  return view(run, artifacts);
 }
 
 /** A run the caller owns, or a reason not to touch it. Never one they do not own. */
@@ -239,7 +255,7 @@ async function queueRun(userId: string, data: StartRunInput) {
     }
     throw error;
   }
-  return { ok: true as const, run: view(run) };
+  return { ok: true as const, run: await ownerView(run) };
 }
 
 /**
@@ -443,7 +459,7 @@ export const listCountryRuns = createServerFn({ method: "GET" })
   .handler(async ({ context, data }) => {
     const runs = await listRuns(context.userId);
     const mine = data.countryId ? runs.filter((r) => r.countryId === data.countryId) : runs;
-    return { runs: mine.map(view) };
+    return { runs: await Promise.all(mine.map(ownerView)) };
   });
 
 /**
@@ -462,7 +478,7 @@ export const getRunDetail = createServerFn({ method: "GET" })
       context.userId,
       data.sinceEventId ?? 0,
     );
-    return { ok: true as const, run: view(owned.run), events };
+    return { ok: true as const, run: await ownerView(owned.run), events };
   });
 
 /** Pause or cancel. Both are refusals to continue; only one of them is reversible. */
@@ -495,7 +511,7 @@ export const stopRun = createServerFn({ method: "POST" })
     });
     if (!changed) return { ok: false as const, error: "The run changed before cancellation." };
     const after = await getRun(data.runId, context.userId);
-    return { ok: true as const, run: after ? view(after) : null };
+    return { ok: true as const, run: after ? await ownerView(after) : null };
   });
 
 /**
@@ -526,7 +542,7 @@ export const resumeRun = createServerFn({ method: "POST" })
     });
     if (!changed) return { ok: false as const, error: "The run changed before it was re-queued." };
     const after = await getRun(data.runId, context.userId);
-    return { ok: true as const, run: after ? view(after) : null };
+    return { ok: true as const, run: after ? await ownerView(after) : null };
   });
 
 /**

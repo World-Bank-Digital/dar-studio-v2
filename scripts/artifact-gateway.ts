@@ -59,6 +59,7 @@ export interface ArtifactRepository {
 }
 
 interface ArtifactMetadataRow {
+  artifact_scope?: "stage8" | "stage";
   run_id: string;
   artifact_set_id: string;
   artifact_key: string;
@@ -75,7 +76,8 @@ interface ArtifactMetadataRow {
 }
 
 const ARTIFACT_METADATA_SQL = `
-  select workflow_run.id as run_id,
+  select 'stage8'::text as artifact_scope,
+         workflow_run.id as run_id,
          workflow_run.workflow_artifact_set_id as artifact_set_id,
          artifact.artifact_key, artifact.filename, artifact.content_type,
          artifact.sha256, artifact.byte_size::text,
@@ -172,6 +174,53 @@ const ARTIFACT_METADATA_SQL = `
     )
   limit 1`;
 
+const STAGE_ARTIFACT_METADATA_SQL = `
+  select 'stage'::text as artifact_scope,
+         workflow_run.id as run_id,
+         publication.stage_id as artifact_set_id,
+         artifact.artifact_id as artifact_key,
+         artifact.filename, artifact.content_type, artifact.sha256,
+         artifact.byte_size::text,
+         octet_length(artifact.content)::text as actual_byte_size,
+         encode(sha256(artifact.content), 'hex') as actual_sha256,
+         (
+           select coalesce(sum(sibling.byte_size), 0)::text
+           from workflow_stage_artifacts sibling
+           where sibling.run_id = workflow_run.id
+         ) as artifact_set_byte_size,
+         (
+           select coalesce(sum(octet_length(sibling.content)), 0)::text
+           from workflow_stage_artifacts sibling
+           where sibling.run_id = workflow_run.id
+         ) as actual_artifact_set_byte_size,
+         artifact.content_verified_at,
+         'canonical'::text as methodology_status
+  from runs workflow_run
+  join workflow_run_methodology methodology on methodology.run_id = workflow_run.id
+  join workflow_stage_publications publication on publication.run_id = workflow_run.id
+  join workflow_stage_artifacts artifact
+    on artifact.run_id = publication.run_id and artifact.stage_id = publication.stage_id
+  where workflow_run.id = $1
+    and publication.stage_id = $2
+    and artifact.artifact_id = $3
+    and artifact.sha256 = $4
+    and workflow_run.pass = 'workflow'
+    and publication.workflow_id = $5
+    and publication.workflow_version = $6
+    and publication.workflow_contract_sha256 = $7
+    and publication.damm_model_version = methodology.model_version
+    and publication.damm_model_revision = methodology.model_revision
+    and publication.damm_model_sha256 = methodology.app_model_sha256
+    and publication.damm_source_commit = methodology.source_commit
+    and artifact.content_verified_at is not null
+    and $8 = 'country_owner'
+    and workflow_run.user_id = $9
+    and $10::text is null
+    and $11::text is null
+    and $12::text is null
+    and $13::text is null
+  limit 1`;
+
 const VERIFY_LEGACY_ARTIFACT_SQL = `
   update workflow_run_artifacts artifact
      set content_verified_at = now()
@@ -244,6 +293,30 @@ const ARTIFACT_CHUNK_SQL = `
     )
   limit 1`;
 
+const STAGE_ARTIFACT_CHUNK_SQL = `
+  select substring(artifact.content from $5::int for $6::int) as chunk
+  from runs workflow_run
+  join workflow_run_methodology methodology on methodology.run_id = workflow_run.id
+  join workflow_stage_publications publication on publication.run_id = workflow_run.id
+  join workflow_stage_artifacts artifact
+    on artifact.run_id = publication.run_id and artifact.stage_id = publication.stage_id
+  where workflow_run.id = $1
+    and publication.stage_id = $2
+    and artifact.artifact_id = $3
+    and artifact.sha256 = $4
+    and workflow_run.pass = 'workflow'
+    and publication.damm_model_version = methodology.model_version
+    and publication.damm_model_revision = methodology.model_revision
+    and publication.damm_model_sha256 = methodology.app_model_sha256
+    and publication.damm_source_commit = methodology.source_commit
+    and $8 = 'country_owner'
+    and workflow_run.user_id = $7
+    and $9::text is null
+    and $10::text is null
+    and $11::text is null
+    and $12::text is null
+  limit 1`;
+
 function safeInteger(value: unknown): number | null {
   const parsed = typeof value === "number" ? value : Number(value);
   return Number.isSafeInteger(parsed) && parsed >= 0 ? parsed : null;
@@ -300,7 +373,7 @@ export function createPostgresArtifactRepository(
 
   return {
     async open(identity): Promise<ArtifactOpenResult> {
-      const result = await database.query<ArtifactMetadataRow>(ARTIFACT_METADATA_SQL, [
+      const parameters = [
         identity.runId,
         identity.artifactSetId,
         identity.key,
@@ -314,9 +387,14 @@ export function createPostgresArtifactRepository(
         identity.assignmentId,
         identity.targetIdentitySha256,
         identity.bundleSha256,
-      ]);
-      const row = result.rows[0];
+      ];
+      const result = await database.query<ArtifactMetadataRow>(ARTIFACT_METADATA_SQL, parameters);
+      const stageResult = result.rows[0]
+        ? null
+        : await database.query<ArtifactMetadataRow>(STAGE_ARTIFACT_METADATA_SQL, parameters);
+      const row = result.rows[0] ?? stageResult?.rows[0];
       if (!row) return { ok: false, reason: "not_found" };
+      const artifactScope = row.artifact_scope === "stage" ? "stage" : "stage8";
 
       const byteSize = safeInteger(row.byte_size);
       const actualByteSize = safeInteger(row.actual_byte_size);
@@ -340,7 +418,11 @@ export function createPostgresArtifactRepository(
         return { ok: false, reason: "integrity" };
       }
 
-      if (row.methodology_status === "legacy_unverified" && row.content_verified_at === null) {
+      if (
+        artifactScope === "stage8" &&
+        row.methodology_status === "legacy_unverified" &&
+        row.content_verified_at === null
+      ) {
         // The immutable-artifact trigger permits only this null-to-timestamp transition.
         // Delivery remains available if the bookkeeping write races or transiently fails:
         // Neon has already verified the exact bytes, size, and digest above.
@@ -368,7 +450,9 @@ export function createPostgresArtifactRepository(
           while (offset < byteSize) {
             const length = Math.min(chunkBytes, byteSize - offset);
             // PostgreSQL bytea substring positions are one-based.
-            const chunkResult = await database.query<{ chunk: unknown }>(ARTIFACT_CHUNK_SQL, [
+            const chunkResult = await database.query<{ chunk: unknown }>(
+              artifactScope === "stage" ? STAGE_ARTIFACT_CHUNK_SQL : ARTIFACT_CHUNK_SQL,
+              [
               identity.runId,
               identity.artifactSetId,
               identity.key,
@@ -381,7 +465,8 @@ export function createPostgresArtifactRepository(
               identity.assignmentId,
               identity.targetIdentitySha256,
               identity.bundleSha256,
-            ]);
+              ],
+            );
             const chunk = byteArray(chunkResult.rows[0]?.chunk);
             if (!chunk || chunk.byteLength !== length) {
               throw new Error("The immutable artifact changed while it was being delivered.");

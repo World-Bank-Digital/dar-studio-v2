@@ -56,9 +56,11 @@ import {
   type WorkflowPackageSelector,
 } from "./worker-artifacts.ts";
 import {
+  CANONICAL_STAGE_IDS,
   DAR_WORKFLOW,
   DAR_WORKFLOW_SHA256,
   frozenWorkflowUploadViolations,
+  type DarWorkflowStageId,
   type FrozenWorkflowUpload,
 } from "./workflow.ts";
 
@@ -162,6 +164,8 @@ export interface WorkerDeps {
   prepareWorkflowInputs?(run: ClaimedRun): Promise<void>;
   /** Root-manifest proof required before a workflow may settle as done. */
   verifyWorkflow?(run: Run): { ok: true } | { ok: false; reason: string };
+  /** Archive the manifest-verified completed Stage 1-7 prefix under the current claim. */
+  reconcileCompletedStageArtifacts?(run: ClaimedRun, workerId: string): Promise<void>;
   /** Copy the already hash-verified download set into storage shared with web hosts. */
   publishWorkflowArtifacts?(run: ClaimedRun, workerId: string): Promise<void>;
   /** Overridden in tests; a run that takes minutes should not be watched by the second. */
@@ -489,6 +493,12 @@ export function defaultDeps(): WorkerDeps {
     verifyWorkflow(run) {
       const verified = verifyWorkflowCompletion(run);
       return verified.ok ? { ok: true } : verified;
+    },
+    async reconcileCompletedStageArtifacts(run, workerId) {
+      const { reconcileCompletedStageArtifacts } = await import(
+        "./completed-stage-artifacts.server.ts"
+      );
+      await reconcileCompletedStageArtifacts(run, workerId);
     },
     async publishWorkflowArtifacts(run, workerId) {
       const methodology = verifyPipelineMethodology();
@@ -2054,7 +2064,14 @@ export async function runOne(run: ClaimedRun, workerId: string, deps: WorkerDeps
     if (!deps.prepareWorkflowInputs) {
       throw new Error("The worker cannot materialize the durable workflow input snapshot.");
     }
+    if (!deps.reconcileCompletedStageArtifacts) {
+      throw new Error("The worker cannot archive completed workflow stages.");
+    }
     await deps.prepareWorkflowInputs(run);
+    // A recovered coordinator skips already-complete stages and does not re-emit their
+    // completion events. Reconcile before spending so those checkpointed bytes cannot be
+    // lost merely because the preceding worker died after its atomic manifest write.
+    await deps.reconcileCompletedStageArtifacts(run, workerId);
   }
   const proc = deps.spawnPipeline(run);
 
@@ -2071,6 +2088,23 @@ export async function runOne(run: ClaimedRun, workerId: string, deps: WorkerDeps
   };
 
   const pending: Promise<unknown>[] = [];
+  let stageReconciliation = Promise.resolve();
+  let stageReconciliationFailure: unknown = null;
+  const queueStageReconciliation = (after?: Promise<unknown>) => {
+    if (run.pass !== "workflow" || !deps.reconcileCompletedStageArtifacts) return;
+    stageReconciliation = stageReconciliation.then(async () => {
+      if (after) await after;
+      try {
+        await deps.reconcileCompletedStageArtifacts!(run, workerId);
+        stageReconciliationFailure = null;
+      } catch (error) {
+        // A later checkpoint or the unconditional post-exit scan may repair a transient
+        // storage failure. Preserve the latest error without rejecting an unobserved
+        // stream callback promise.
+        stageReconciliationFailure = error;
+      }
+    });
+  };
   const handle = (events: RunEvent[], isErr: boolean) => {
     for (const e of events) {
       switch (e.kind) {
@@ -2080,7 +2114,19 @@ export async function runOne(run: ClaimedRun, workerId: string, deps: WorkerDeps
           );
           break;
         case "row":
-          pending.push(deps.store.recordRow(run.id, workerId, run.claimToken, e));
+          {
+            const recorded = deps.store.recordRow(run.id, workerId, run.claimToken, e);
+            pending.push(recorded);
+            if (
+              run.pass === "workflow" &&
+              e.outcome === "complete" &&
+              CANONICAL_STAGE_IDS.includes(e.indicatorId as DarWorkflowStageId)
+            ) {
+              // The coordinator checkpoints the root manifest before emitting this
+              // event. Scan the filesystem proof; never trust stdout's artifact list.
+              queueStageReconciliation(recorded);
+            }
+          }
           break;
         case "exhausted":
           seen.exhausted = true;
@@ -2134,6 +2180,24 @@ export async function runOne(run: ClaimedRun, workerId: string, deps: WorkerDeps
   if (stdoutBuf.trim()) handle(parseChunk(stdoutBuf, expectedWorkflowRunId), false);
   if (stderrBuf.trim()) handle(parseChunk(stderrBuf, expectedWorkflowRunId), true);
   await Promise.allSettled(pending);
+  await stageReconciliation;
+
+  if (run.pass === "workflow" && deps.reconcileCompletedStageArtifacts) {
+    try {
+      // Unconditional: catches a process that exited after an atomic stage checkpoint
+      // but before stdout delivered its stage_complete event.
+      await deps.reconcileCompletedStageArtifacts(run, workerId);
+      stageReconciliationFailure = null;
+    } catch (error) {
+      stageReconciliationFailure = error;
+    }
+    if (stageReconciliationFailure) {
+      const archiveFailure =
+        `Verified completed-stage downloads could not be archived: ${String(stageReconciliationFailure)}`;
+      seen.failure = seen.failure ? `${seen.failure} ${archiveFailure}` : archiveFailure;
+      seen.finished = false;
+    }
+  }
 
   if (run.pass === "workflow" && seen.finished) {
     const verified =
