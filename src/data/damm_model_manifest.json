@@ -7,7 +7,7 @@
   "ratified": false,
   "source": {
     "repository": "https://github.com/World-Bank-Digital/DAMM",
-    "commit": "e866e7a1fffd5edb14f53da5e038f69b2ec29af2",
+    "commit": "f7dfbbb647e0a45d996e94f62d49f2218d518c94",
     "model_path": "model/DAMM-v1.7-model.json",
     "schema_path": "model/DAMM-v1.7-model.schema.json"
   },

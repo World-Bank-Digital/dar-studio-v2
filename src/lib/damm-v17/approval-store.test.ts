@@ -122,6 +122,9 @@ const PRE_0018_DAMM_SOURCE_COMMIT = "4b97b2c9090204dfba3aa7c44f41d558005982ee";
 const PRE_0020_DAMM_SOURCE_COMMIT = "386ccb90904de4109b64b7c62d4ed7beed8daede";
 const PRE_0020_DAMM_RENDERER_SHA256 =
   "9dc5d6169c2ae6694d9a0dbc165e61d6557b2589075b962e8def98ec13fd6ba8";
+const PRE_0021_DAMM_SOURCE_COMMIT = "e866e7a1fffd5edb14f53da5e038f69b2ec29af2";
+const PRE_0021_DAMM_RENDERER_SHA256 =
+  "95dcef014086f6c01f58678db426fb48d87546b8b6a4315c530801b1ff74c5be";
 
 interface Fixture {
   pg: PGlite;
@@ -152,7 +155,10 @@ function canonicalJson(value: unknown): string {
 
 function historicalTargetIdentity(
   approvalPackage: ApprovalPackage,
-  sourceCommit = PRE_0020_DAMM_SOURCE_COMMIT,
+  sourceCommit = PRE_0021_DAMM_SOURCE_COMMIT,
+  rendererSha256 = sourceCommit === PRE_0021_DAMM_SOURCE_COMMIT
+    ? PRE_0021_DAMM_RENDERER_SHA256
+    : PRE_0020_DAMM_RENDERER_SHA256,
 ): {
   methodology: ApprovalPackage["methodology"];
   targetIdentitySha256: string;
@@ -160,7 +166,7 @@ function historicalTargetIdentity(
   const methodology = Object.freeze({
     ...approvalPackage.methodology,
     sourceCommit,
-    rendererSha256: PRE_0020_DAMM_RENDERER_SHA256,
+    rendererSha256,
   });
   const identity = {
     schemaVersion: "damm.approval-package/v1",
@@ -197,11 +203,15 @@ function historicalTargetIdentity(
  */
 async function makePackageHistorical(
   fx: Fixture,
-  sourceCommit = PRE_0020_DAMM_SOURCE_COMMIT,
+  sourceCommit = PRE_0021_DAMM_SOURCE_COMMIT,
+  rendererSha256 = sourceCommit === PRE_0021_DAMM_SOURCE_COMMIT
+    ? PRE_0021_DAMM_RENDERER_SHA256
+    : PRE_0020_DAMM_RENDERER_SHA256,
 ): Promise<Fixture> {
   const { methodology, targetIdentitySha256 } = historicalTargetIdentity(
     fx.approvalPackage,
     sourceCommit,
+    rendererSha256,
   );
   await fx.sql.query("set session_replication_role = replica");
   try {
@@ -209,7 +219,7 @@ async function makePackageHistorical(
       `update workflow_run_methodology
        set source_commit = $2, renderer_sha256 = $3
        where run_id = $1`,
-      [fx.runId, sourceCommit, PRE_0020_DAMM_RENDERER_SHA256],
+      [fx.runId, sourceCommit, rendererSha256],
     );
     await fx.sql.query(
       "update workflow_run_artifacts set damm_source_commit = $2 where run_id = $1",
@@ -235,7 +245,7 @@ async function makePackageHistorical(
       manifest.targetIdentitySha256 = targetIdentitySha256;
       const manifestMethodology = manifest.methodology as Record<string, unknown>;
       manifestMethodology.sourceCommit = sourceCommit;
-      manifestMethodology.rendererSha256 = PRE_0020_DAMM_RENDERER_SHA256;
+      manifestMethodology.rendererSha256 = rendererSha256;
       await fx.sql.query(
         `update workflow_approval_releases
          set target_identity_sha256 = $2, manifest_json = $3::jsonb,
@@ -253,7 +263,7 @@ async function makePackageHistorical(
       `update workflow_approval_packages
        set damm_source_commit = $2, renderer_sha256 = $3, target_identity_sha256 = $4
        where id = $1`,
-      [fx.approvalPackage.id, sourceCommit, PRE_0020_DAMM_RENDERER_SHA256, targetIdentitySha256],
+      [fx.approvalPackage.id, sourceCommit, rendererSha256, targetIdentitySha256],
     );
   } finally {
     await fx.sql.query("set session_replication_role = origin");
@@ -692,7 +702,7 @@ describe("post-completion human approval store", () => {
       const beforeCutover = await approvalAuditSnapshot(fx);
       await fx.pg.exec(
         await readFile(
-          new URL("../../../migrations/0020_damm_source_pin_cutover.sql", import.meta.url),
+          new URL("../../../migrations/0021_damm_source_pin_cutover.sql", import.meta.url),
           "utf8",
         ),
       );
@@ -705,11 +715,11 @@ describe("post-completion human approval store", () => {
         await ensureApprovalPackage(fx.countryId, USERS.owner.id, fx.sql),
       );
       assert.equal(reopened.id, fx.approvalPackage.id);
-      assert.equal(reopened.methodology.sourceCommit, PRE_0020_DAMM_SOURCE_COMMIT);
-      assert.equal(reopened.methodology.rendererSha256, PRE_0020_DAMM_RENDERER_SHA256);
+      assert.equal(reopened.methodology.sourceCommit, PRE_0021_DAMM_SOURCE_COMMIT);
+      assert.equal(reopened.methodology.rendererSha256, PRE_0021_DAMM_RENDERER_SHA256);
       const state = unwrap(await getOwnerApprovalState(fx.countryId, USERS.owner.id, fx.sql));
-      assert.equal(state.package.methodology.sourceCommit, PRE_0020_DAMM_SOURCE_COMMIT);
-      assert.equal(state.package.methodology.rendererSha256, PRE_0020_DAMM_RENDERER_SHA256);
+      assert.equal(state.package.methodology.sourceCommit, PRE_0021_DAMM_SOURCE_COMMIT);
+      assert.equal(state.package.methodology.rendererSha256, PRE_0021_DAMM_RENDERER_SHA256);
       assert.notEqual(state.package.targetIdentitySha256, originalTarget);
       assert.deepEqual(
         state.decisions.map((decision) => decision.id),
@@ -719,11 +729,11 @@ describe("post-completion human approval store", () => {
       assert.equal(state.release?.targetIdentitySha256, state.package.targetIdentitySha256);
       assert.equal(
         (state.release?.manifest.methodology as Record<string, unknown>).sourceCommit,
-        PRE_0020_DAMM_SOURCE_COMMIT,
+        PRE_0021_DAMM_SOURCE_COMMIT,
       );
       assert.equal(
         (state.release?.manifest.methodology as Record<string, unknown>).rendererSha256,
-        PRE_0020_DAMM_RENDERER_SHA256,
+        PRE_0021_DAMM_RENDERER_SHA256,
       );
       assert.equal(state.lifecycle, "approved_draft");
 
@@ -767,21 +777,22 @@ describe("post-completion human approval store", () => {
   });
 
   it("keeps older recognized packages addressable without reopening approval activity", async () => {
-    for (const [generation, sourceCommit] of [
-      ["three", PRE_0018_DAMM_SOURCE_COMMIT],
-      ["four", PRE_0017_DAMM_SOURCE_COMMIT],
-      ["five", PRE_0016_DAMM_SOURCE_COMMIT],
-      ["six", PRE_0015_DAMM_SOURCE_COMMIT],
-      ["seven", PRE_0014_DAMM_SOURCE_COMMIT],
+    for (const [generation, sourceCommit, rendererSha256] of [
+      ["two", PRE_0020_DAMM_SOURCE_COMMIT, PRE_0020_DAMM_RENDERER_SHA256],
+      ["three", PRE_0018_DAMM_SOURCE_COMMIT, PRE_0020_DAMM_RENDERER_SHA256],
+      ["four", PRE_0017_DAMM_SOURCE_COMMIT, PRE_0020_DAMM_RENDERER_SHA256],
+      ["five", PRE_0016_DAMM_SOURCE_COMMIT, PRE_0020_DAMM_RENDERER_SHA256],
+      ["six", PRE_0015_DAMM_SOURCE_COMMIT, PRE_0020_DAMM_RENDERER_SHA256],
+      ["seven", PRE_0014_DAMM_SOURCE_COMMIT, PRE_0020_DAMM_RENDERER_SHA256],
     ] as const) {
       let fx = await fixture(`historical-${generation}-generations`);
       try {
-        fx = await makePackageHistorical(fx, sourceCommit);
+        fx = await makePackageHistorical(fx, sourceCommit, rendererSha256);
 
         const reopened = unwrap(await ensureApprovalPackage(fx.countryId, USERS.owner.id, fx.sql));
         assert.equal(reopened.id, fx.approvalPackage.id);
         assert.equal(reopened.methodology.sourceCommit, sourceCommit);
-        assert.equal(reopened.methodology.rendererSha256, PRE_0020_DAMM_RENDERER_SHA256);
+        assert.equal(reopened.methodology.rendererSha256, rendererSha256);
 
         const state = unwrap(await getOwnerApprovalState(fx.countryId, USERS.owner.id, fx.sql));
         assert.equal(state.package.id, fx.approvalPackage.id);
@@ -808,6 +819,21 @@ describe("post-completion human approval store", () => {
     }
   });
 
+  it("refuses recognized source and renderer hashes when they form an unrecognized pair", async () => {
+    for (const [suffix, sourceCommit, rendererSha256] of [
+      ["new-source-old-renderer", PRE_0021_DAMM_SOURCE_COMMIT, PRE_0020_DAMM_RENDERER_SHA256],
+      ["old-source-new-renderer", PRE_0020_DAMM_SOURCE_COMMIT, PRE_0021_DAMM_RENDERER_SHA256],
+    ] as const) {
+      let fx = await fixture(`historical-mismatch-${suffix}`);
+      try {
+        fx = await makePackageHistorical(fx, sourceCommit, rendererSha256);
+        assertMethodologyRefusal(await ensureApprovalPackage(fx.countryId, USERS.owner.id, fx.sql));
+      } finally {
+        await fx.pg.close();
+      }
+    }
+  });
+
   it("keeps an incomplete prior-pin chain readable but rejects every new API decision", async () => {
     let fx = await fixture("historical-pending");
     try {
@@ -815,8 +841,8 @@ describe("post-completion human approval store", () => {
       fx = await makePackageHistorical(fx);
 
       const state = unwrap(await getOwnerApprovalState(fx.countryId, USERS.owner.id, fx.sql));
-      assert.equal(state.package.methodology.sourceCommit, PRE_0020_DAMM_SOURCE_COMMIT);
-      assert.equal(state.package.methodology.rendererSha256, PRE_0020_DAMM_RENDERER_SHA256);
+      assert.equal(state.package.methodology.sourceCommit, PRE_0021_DAMM_SOURCE_COMMIT);
+      assert.equal(state.package.methodology.rendererSha256, PRE_0021_DAMM_RENDERER_SHA256);
       assert.deepEqual(state.decisions, []);
       assert.equal(state.lifecycle, "g1_pending");
 
@@ -905,11 +931,11 @@ describe("post-completion human approval store", () => {
           `update workflow_run_methodology
            set source_commit = $2, renderer_sha256 = $3
            where run_id = $1`,
-          [newerRunId, PRE_0020_DAMM_SOURCE_COMMIT, PRE_0020_DAMM_RENDERER_SHA256],
+          [newerRunId, PRE_0021_DAMM_SOURCE_COMMIT, PRE_0021_DAMM_RENDERER_SHA256],
         );
         await fx.sql.query(
           "update workflow_run_artifacts set damm_source_commit = $2 where run_id = $1",
-          [newerRunId, PRE_0020_DAMM_SOURCE_COMMIT],
+          [newerRunId, PRE_0021_DAMM_SOURCE_COMMIT],
         );
       } finally {
         await fx.sql.query("set session_replication_role = origin");
