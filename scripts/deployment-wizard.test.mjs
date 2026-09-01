@@ -80,6 +80,8 @@ test("the deployment wizard verifies progressive storage and the prior cutover b
   assert.match(wizard, /0020_damm_source_pin_cutover\.sql/);
   assert.match(wizard, /0021_damm_source_pin_cutover\.sql/);
   assert.match(wizard, /pre-0021-YYYYMMDD-HHMM/);
+  assert.match(wizard, /suspend the preceding-pin Render worker before merging or applying 0021/);
+  assert.match(wizard, /existing worker visibly suspended/);
   assert.match(wizard, /f7dfbbb647e0a45d996e94f62d49f2218d518c94/);
   assert.match(wizard, /95dcef014086f6c01f58678db426fb48d87546b8b6a4315c530801b1ff74c5be/);
   assert.doesNotMatch(wizard, /e866e7a1fffd5edb14f53da5e038f69b2ec29af2/);

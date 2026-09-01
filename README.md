@@ -181,6 +181,12 @@ old app process from committing a missing or stale methodology snapshot,
 manufacturing a terminal stale run, or promoting a failed/cancelled stale run
 during a rolling deployment.
 
+For an existing auto-published deployment, take the pre-cutover Neon snapshot
+and suspend the preceding-pin Render worker before merging or applying the new
+migration. Keep it suspended until the exact repinned worker image is live. This
+closes the interval in which an older worker could claim a newly queued run whose
+methodology identity it cannot execute; queued arrivals remain unspent meanwhile.
+
 ## Running locally
 
 ```bash

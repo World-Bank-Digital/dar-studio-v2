@@ -490,6 +490,9 @@ require_value NEON_SNAPSHOT_NAME "$NEON_SNAPSHOT_NAME"
 write_env NEON_SNAPSHOT_NAME "$NEON_SNAPSHOT_NAME"
 confirm_or_stop "Is that snapshot complete and visibly tied to the root production branch?" \
   "A recoverable snapshot is required before migration."
+warn "Existing deployment only: suspend the preceding-pin Render worker before merging or applying 0021. Leave it suspended until the exact repinned worker image is Live; queued arrivals must remain unclaimed and unspent meanwhile."
+confirm_or_stop "Is there no preceding-pin worker because this is a new environment, or is the existing worker visibly suspended?" \
+  "Do not merge or migrate while a preceding-pin worker can claim newly pinned runs."
 
 # ── 7 ─────────────────────────────────────────────────────────────────────
 stage "Apply and verify migration 0021 after 0019 and 0020"

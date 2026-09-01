@@ -131,9 +131,27 @@ Do not put any of these values in GitHub Actions secrets unless a later, reviewe
 
 ## Stage-by-stage procedure
 
+### Existing auto-published source-pin upgrades: pre-merge gate
+
+For an existing public environment, do not begin with the merge in step 1. Validate
+the release branch first, prove that no workflow is nonterminal, and create the
+named recovery snapshot on the root production branch while the prior release is
+still authoritative. Then suspend the preceding-pin Render worker and verify that
+it is visibly suspended. Only then merge the release PR and allow Netlify to apply
+the append-only migration. Keep the old worker suspended until an image built from
+the exact merged DAR commit and exact new DAMM pin is Live. Queued arrivals may wait
+unclaimed during this interval; do not cancel, mutate, or manually fail them.
+
+This order is mandatory because a preceding-pin worker can otherwise claim a run
+created after the database cutover and reject that run against its older local
+methodology manifest. Netlify auto-publishing makes the merge itself part of the
+cutover, so the snapshot and worker suspension must precede it.
+
 ### 1. Merge and local preflight
 
-1. Merge the deployment-readiness pull request to `main`.
+1. For a new environment, merge the deployment-readiness pull request to `main`.
+   For an existing auto-published source-pin upgrade, complete the pre-merge gate
+   above first and merge only after its snapshot and worker-suspension checks pass.
 2. In the repository run `git fetch origin main`, check out `main`, and fast-forward it.
 3. Require a clean worktree and `HEAD == origin/main`.
 4. Confirm the merged tree contains `netlify.toml`, `render.yaml`, both `Dockerfile.worker` and `Dockerfile.artifact-gateway`, the worker entrypoint/preflight files, `deploy/artifact-gateway/package.json` and its lockfile, `scripts/artifact-gateway.ts`, immutable historical migrations `0013_damm_methodology_pin_cutover.sql` and `0014`–`0018` DAMM source-pin cutovers, current migrations `0019_progressive_stage_artifacts.sql`, `0020_damm_source_pin_cutover.sql`, and `0021_damm_source_pin_cutover.sql`, and this runbook.
