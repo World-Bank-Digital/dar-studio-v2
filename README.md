@@ -103,6 +103,12 @@ canonical Final release or a claim of methodological ratification.
 
 ### Download contract
 
+Each completed canonical Stage 1–7 prefix is independently published as an
+immutable, hash-verified, owner-only download set. Those reports remain
+available if a later stage fails; they are stored in PostgreSQL rather than
+served from a worker filesystem. Reviewer package access does not imply access
+to these progressive owner publications.
+
 Stage 8 exports narrative products as Markdown, DOCX, PDF, and HTML, and
 meaningful structured products and source inventories as XLSX, CSV, and JSON.
 It also produces a ZIP bundle and SHA-256 manifest. When files were uploaded
@@ -137,8 +143,8 @@ methodology manifest. The model remains honestly labelled `draft for review`
 and `ratified: false`; provenance does not imply ratification.
 
 On methodology upgrades, migrations `0011`, `0013`, `0014`, `0015`, `0016`,
-`0017`, and `0018` stop before changing the schema or active source pin if an older
-workflow is still active. Migration `0014` is the immutable source cutover for
+`0017`, `0018`, and `0020` stop before changing the schema or active source pin
+if an older workflow is still active. Migration `0014` is the immutable source cutover for
 the foresight candidate-register repair. Migration `0015` advances only the
 upstream source commit to the canonical DAMM merge
 `2efb26607acc29a687a82a56edc85f53c4a6da69`, containing the Stage 6
@@ -155,11 +161,20 @@ remain unchanged. Migration `0018` advances only the upstream source commit to
 canonical DAMM merge `386ccb90904de4109b64b7c62d4ed7beed8daede`, containing
 one checkpointed, original-text-anchored residual-length recovery after the first
 repair, with bounded per-field targets and no replay of accepted paid work; all
-methodology and ratification fields remain unchanged. Allow an in-flight workflow
-to finish under the prior release, then retry the deployment; no run is failed or relaunched. A deferred database
-invariant prevents a still-running old app process from committing a missing or
-stale methodology snapshot, manufacturing a terminal stale run, or promoting a
-failed/cancelled stale run during a rolling deployment.
+methodology and ratification fields remain unchanged. Migration `0019` then adds
+the sealed progressive Stage 1–7 publication schema without backfilling or
+rewriting any historical run. Migration `0020` advances the source pin to
+canonical DAMM merge `e866e7a1fffd5edb14f53da5e038f69b2ec29af2` (PR #8) and
+renderer SHA-256
+`95dcef014086f6c01f58678db426fb48d87546b8b6a4315c530801b1ff74c5be`.
+That release deterministically chunks and checkpoints Stage 6 length repair,
+adds the zero-spend production-shaped simulation, and ships bounded offline
+consulting-report exports. Deploy `0019` before `0020`. Allow an in-flight
+workflow to finish under the prior release, then retry the deployment; no run
+is failed or relaunched. A deferred database invariant prevents a still-running
+old app process from committing a missing or stale methodology snapshot,
+manufacturing a terminal stale run, or promoting a failed/cancelled stale run
+during a rolling deployment.
 
 ## Running locally
 
@@ -206,7 +221,7 @@ npm run sim:dense
 ```
 
 `sim:replay` drives the exact observed Stage 6 overlength vector through its
-checkpointed repair and one bounded, original-text-anchored recovery call, then
+deterministically chunked, independently checkpointed bounded repairs, then
 requires the real appraisal assembler to complete with six valid options.
 `sim:happy` runs the real eight-stage coordinator and the real Stage 6 appraisal
 logic with a typical synthetic country workload; `sim:dense` exercises the same

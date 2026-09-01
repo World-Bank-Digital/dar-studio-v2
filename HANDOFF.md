@@ -5,8 +5,8 @@ changing retrieval, scoring, drafting, or export behavior._
 
 ## Continuation checkpoint — 2026-09-02
 
-This section records the completed local investigation and implementation. It
-does not supersede the immutable 2026-09-01 evidence below.
+This section records the completed investigation, implementation, and DAMM
+upstream merge. It does not supersede the immutable 2026-09-01 evidence below.
 
 ### Evidence-backed diagnosis
 
@@ -21,14 +21,15 @@ does not supersede the immutable 2026-09-01 evidence below.
   paid-failure-domain problem, not a local schema rejection or a simple
   request-size problem.
 
-### Completed local implementation
+### Completed implementation and upstream landing
 
-- DAMM local commit `16d869a` on `fix/stage6-repair-chunking` partitions the
+- DAMM fix commit `16d869a` on `fix/stage6-repair-chunking` partitions the
   Stage 6 repair into independently checkpointed, bounded chunks while
-  retaining hard output limits and terminal exhaustion. Stage 6 remains before
-  Stage 7 because the integrated DAR consumes its appraisal; moving it after
-  Stage 7 would make the main report incomplete rather than make the failure
-  safe.
+  retaining hard output limits and terminal exhaustion. GitHub PR #8 merged it
+  into canonical `github/main` as
+  `e866e7a1fffd5edb14f53da5e038f69b2ec29af2`. Stage 6 remains before Stage 7
+  because the integrated DAR consumes its appraisal; moving it after Stage 7
+  would make the main report incomplete rather than make the failure safe.
 - The production-shaped Nigeria simulation now exercises Stage 6 recovery,
   Stage 7 gates, and Stage 8 packaging after deterministic synthetic
   predecessors. It completes 8/8 stages in 18 fixture calls with exact
@@ -60,22 +61,29 @@ does not supersede the immutable 2026-09-01 evidence below.
 - DAMM passes 204 discovered tests, 470 model-parity checks, 11 workflow tests,
   all 17 machine-pass checks, all 16 survey-pass checks, six workbook-parity
   tests, and independent correctness/security review.
-- DAR Studio passes 503 tests, typecheck, lint with the same five pre-existing
-  warnings and zero errors, `build:dev`, and independent
+- DAR Studio passes 506 tests, typecheck, lint with the same five pre-existing
+  warnings and zero errors, `build:dev`, Netlify adapter/output verification, and independent
   correctness/security review.
-- DAMM commit `16d869a` is local only. The attempted outbound push was stopped
-  by the execution safety gate pending a more explicit user authorization.
-  The DAR implementation is committed locally on top of deployed
-  `d5e1ee4`. No GitHub push, merge, source-pin migration, database migration,
-  deployment, credential, or paid workflow has occurred.
-- After explicit push/merge authorization, land DAMM first, then create an
-  append-only DAR source cutover using the resulting canonical
-  `github/main` merge commit and the new renderer digest. Repeat all DAR
-  validation before landing it. Do not apply migrations or start a production
-  cutover until the worker can be rebuilt atomically. That build requires a
-  fresh shortest-expiry DAMM-only Contents-read credential and separate
-  explicit authorization; revoke it immediately after the build settles. Do
-  not launch another paid workflow without a new, separate authorization.
+- This pre-deployment checkpoint records DAMM PR #8 as merged. DAR
+  progressive-stage implementation commits `e4bf1f6` and `ad6a217` were still
+  local on top of deployed `d5e1ee4`; the app manifest and append-only migration
+  `0020_damm_source_pin_cutover.sql` target the canonical merge and renderer SHA-256
+  `95dcef014086f6c01f58678db426fb48d87546b8b6a4315c530801b1ff74c5be`.
+  Migrations `0019` and `0020` are not yet applied, and Netlify/Render still
+  serve the older release recorded below.
+- On 2026-09-02 the user explicitly authorized pushing and merging both
+  repositories, preparing and pushing the DAR source-pin migration, applying
+  the Neon migrations, deploying Netlify and Render, and creating/using then
+  immediately revoking the shortest-expiry DAMM-only Contents-read GitHub
+  credential needed for the worker rebuild. This authorization does **not**
+  authorize another paid workflow.
+- Finish the reviewed DAR changes and full validation, land the DAR merge, then
+  confirm zero active workflows and take a Neon snapshot. Apply sorted migration
+  `0019` first to install sealed progressive publications and `0020` second to
+  cut the worker pin to DAMM PR #8. Deploy both Render services and Netlify on
+  the same DAR `main` commit. Revoke the one-attempt DAMM build credential as
+  soon as its worker build reaches Live, Failed, or Canceled. Do not launch a
+  paid workflow without new, separate authorization.
 
 ## Current continuation checkpoint — 2026-09-01
 
@@ -368,8 +376,15 @@ length-only repair for otherwise-valid overlength Stage 6 candidate `title`,
 candidate call. Append-only migration `0018` advances only the source commit to
 canonical DAMM merge `386ccb90904de4109b64b7c62d4ed7beed8daede`, containing
 one checkpointed, original-text-anchored residual-length recovery after the first
-repair, with bounded per-field targets and no replay of accepted paid work. Let
-the existing release finish those runs, then retry
+repair, with bounded per-field targets and no replay of accepted paid work.
+Append-only migration `0019` adds transactionally sealed, owner-only progressive
+Stage 1–7 publications without backfilling historical runs. Append-only
+migration `0020` advances the source commit to canonical DAMM PR #8 merge
+`e866e7a1fffd5edb14f53da5e038f69b2ec29af2` and renderer SHA-256
+`95dcef014086f6c01f58678db426fb48d87546b8b6a4315c530801b1ff74c5be`,
+containing independently checkpointed bounded Stage 6 repair chunks, the
+zero-spend production-shaped simulation, and consulting-report exports. Apply
+`0019` before `0020`. Let the existing release finish older-pin runs, then retry
 deployment; a migration must never terminate or relaunch an in-flight workflow.
 The deferred database invariant also rejects stale launches, newly inserted
 stale terminal rows, and transitions that would turn a failed/cancelled stale

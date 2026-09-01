@@ -918,8 +918,8 @@ terminal. The preserved checkpoint falsified simple request-size and
 local-validation explanations: the failed request had 2,741 input tokens,
 smaller than the 2,848-token batch-1 repair that succeeded, and no patch text
 existed for schema or residual-length validation to reject.
-**Fix:** on the uncommitted local DAMM branch `fix/stage6-repair-chunking`,
-candidate repairs are deterministically partitioned into units of at most two
+**Fix:** developed on DAMM branch `fix/stage6-repair-chunking`, candidate
+repairs are deterministically partitioned into units of at most two
 fields and 1,000 contractual replacement characters, with only the relevant
 candidate context in each prompt. Every chunk has its own stable checkpoint;
 completed chunks resume without replay. Initial chunks retain the bounded
@@ -927,9 +927,14 @@ completed chunks resume without replay. Initial chunks retain the bounded
 attempt, and exhaustion remains terminal. Combined candidate semantics are
 validated inside the final chunk checkpoint so an invalid merged repair is
 durably terminal rather than a bare post-checkpoint error. The appraisal planner
-identity advances locally from `bounded-appraisal/v3` to `/v4`. No commit,
-source repin, migration, push, deployment, credential, or paid run has been
-created.
+identity advances from `bounded-appraisal/v3` to `/v4`. At the initial diagnosis
+checkpoint no commit, source repin, migration, push, deployment, credential, or
+paid run had been created. After explicit authorization on 2026-09-02, fix
+commit `16d869a` merged through DAMM PR #8 as canonical `github/main`
+`e866e7a1fffd5edb14f53da5e038f69b2ec29af2`. DAR's append-only migration
+`0020` pins that merge and renderer SHA-256
+`95dcef014086f6c01f58678db426fb48d87546b8b6a4315c530801b1ff74c5be`;
+historical migration `0018` remains immutable.
 **Pinned by:** the exact recorded Nigeria length-vector regression, a simulated
 crash after repair chunk 1 that resumes at chunk 2, a durable duplicate-title
 rejection regression, and the zero-spend Nigeria simulation (18 fixture calls,
@@ -1008,7 +1013,9 @@ prefixes after leading whitespace/control characters while preserving real
 numeric values. Exact stage HTML remains untouched.
 **Pinned by:** real-Pandoc DOCX tests, LibreOffice 26.2 and LibreOfficeDev 26.8
 three-page visual inspection, package conversion validation, and public-boundary
-CSV/XLSX injection regressions.
+CSV/XLSX injection regressions. The released upstream implementation is DAMM
+PR #8 merge `e866e7a1fffd5edb14f53da5e038f69b2ec29af2`, carried into DAR by
+append-only migration `0020` after progressive-publication migration `0019`.
 **Meta-lesson:** document quality is an end-format property; render and inspect
 the actual DOCX/PDF/XLSX/CSV artifacts, not only their HTML source or test
 stubs.
