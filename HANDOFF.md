@@ -61,7 +61,7 @@ upstream merge. It does not supersede the immutable 2026-09-01 evidence below.
 - DAMM passes 204 discovered tests, 470 model-parity checks, 11 workflow tests,
   all 17 machine-pass checks, all 16 survey-pass checks, six workbook-parity
   tests, and independent correctness/security review.
-- DAR Studio passes 506 tests, typecheck, lint with the same five pre-existing
+- DAR Studio passes 507 tests, typecheck, lint with the same five pre-existing
   warnings and zero errors, `build:dev`, Netlify adapter/output verification, and independent
   correctness/security review.
 - This pre-deployment checkpoint records DAMM PR #8 as merged. DAR

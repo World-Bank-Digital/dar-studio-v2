@@ -81,6 +81,14 @@ describe("DAMM build-time methodology integrity", () => {
     );
   });
 
+  it("preserves progressive stage artifact migration 0019 byte for byte", async () => {
+    const migration = await readFile(join(ROOT, "migrations/0019_progressive_stage_artifacts.sql"));
+    assert.equal(
+      createHash("sha256").update(migration).digest("hex"),
+      "8d4d63c79663cd2ab370e69d97355189255c6e66ec1c669ecf311b8d7c10d8fe",
+    );
+  });
+
   it("pins DAMM source cutover migration 0020 byte for byte", async () => {
     const migration = await readFile(join(ROOT, "migrations/0020_damm_source_pin_cutover.sql"));
     assert.equal(
