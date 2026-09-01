@@ -399,6 +399,83 @@ describe("Render artifact delivery gateway", () => {
 });
 
 describe("Neon immutable artifact repository", () => {
+  it("streams an owner-only completed-stage artifact without requiring Stage 8", async () => {
+    const content = Buffer.from("completed stage report");
+    const stageSha256 = createHash("sha256").update(content).digest("hex");
+    const stageIdentity = {
+      ...identity,
+      artifactSetId: "damm_diagnostic",
+      key: "a".repeat(64),
+      sha256: stageSha256,
+    };
+    const queries = [];
+    const database = {
+      async query(text, params) {
+        queries.push({ text, params });
+        if (text.includes("workflow_stage_publications") && text.includes("substring")) {
+          const offset = Number(params[4]) - 1;
+          const length = Number(params[5]);
+          return { rows: [{ chunk: content.subarray(offset, offset + length) }] };
+        }
+        if (text.includes("workflow_stage_publications")) {
+          return {
+            rows: [
+              {
+                artifact_scope: "stage",
+                run_id: stageIdentity.runId,
+                artifact_set_id: stageIdentity.artifactSetId,
+                artifact_key: stageIdentity.key,
+                filename: "diagnostic-report.html",
+                content_type: "text/html",
+                sha256: stageSha256,
+                byte_size: String(content.byteLength),
+                actual_byte_size: String(content.byteLength),
+                actual_sha256: stageSha256,
+                artifact_set_byte_size: String(content.byteLength),
+                actual_artifact_set_byte_size: String(content.byteLength),
+                content_verified_at: now,
+                methodology_status: "canonical",
+              },
+            ],
+          };
+        }
+        return { rows: [] };
+      },
+    };
+
+    const opened = await createPostgresArtifactRepository(database, { chunkBytes: 7 }).open({
+      ...stageIdentity,
+      exp: 1787875260,
+      v: 2,
+    });
+
+    assert.equal(opened.ok, true);
+    assert.ok(opened.ok);
+    const chunks = [];
+    for await (const chunk of opened.artifact.chunks()) chunks.push(chunk);
+    assert.equal(Buffer.concat(chunks).toString(), content.toString());
+    assert.equal(queries.length, 6);
+    assert.match(queries[0].text, /workflow_run_artifacts/);
+    assert.match(queries[1].text, /workflow_stage_publications/);
+    for (const query of queries.slice(2)) {
+      assert.match(query.text, /workflow_stage_publications/);
+      assert.deepEqual(query.params.slice(0, 4), [
+        stageIdentity.runId,
+        stageIdentity.artifactSetId,
+        stageIdentity.key,
+        stageIdentity.sha256,
+      ]);
+      assert.deepEqual(query.params.slice(6), [
+        stageIdentity.subjectUserId,
+        "country_owner",
+        null,
+        null,
+        null,
+        null,
+      ]);
+    }
+  });
+
   it("binds metadata and chunks to the exact currently-published run/set/key/SHA", async () => {
     const queries = [];
     const bytes = Buffer.from("bundle bytes");

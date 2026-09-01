@@ -162,13 +162,25 @@ const PRE_0015_DAMM_SOURCE_COMMIT = "d4c659f5873f3a891634c8edf6b7166cb2eb374c";
 const PRE_0016_DAMM_SOURCE_COMMIT = "2efb26607acc29a687a82a56edc85f53c4a6da69";
 const PRE_0017_DAMM_SOURCE_COMMIT = "1b1734c8a8017cda488b77cf0594b0ca82dae6ee";
 const PRE_0018_DAMM_SOURCE_COMMIT = "4b97b2c9090204dfba3aa7c44f41d558005982ee";
+const PRE_0020_DAMM_SOURCE_COMMIT = "386ccb90904de4109b64b7c62d4ed7beed8daede";
+const PRE_0020_DAMM_RENDERER_SHA256 =
+  "9dc5d6169c2ae6694d9a0dbc165e61d6557b2589075b962e8def98ec13fd6ba8";
 
 async function insertWorkflowMethodology(
   sql: Sql,
   runId: string,
   overrides: Partial<WorkflowMethodologyIdentity> = {},
 ) {
-  const value = { ...DAMM_WORKFLOW_METHODOLOGY, ...overrides };
+  // Source-only cutovers 0014-0018 all retained the pre-0020 renderer. Replaying
+  // those migrations after the app manifest advances therefore needs the complete
+  // historical pair, not a mixed identity assembled from today's renderer.
+  const historicalRenderer =
+    overrides.sourceCommit &&
+    overrides.sourceCommit !== DAMM_WORKFLOW_METHODOLOGY.sourceCommit &&
+    overrides.rendererSha256 === undefined
+      ? { rendererSha256: PRE_0020_DAMM_RENDERER_SHA256 }
+      : {};
+  const value = { ...DAMM_WORKFLOW_METHODOLOGY, ...historicalRenderer, ...overrides };
   await sql.query(
     `insert into workflow_run_methodology
       (run_id, manifest_schema_version, model_id, model_version, model_revision,
@@ -1081,9 +1093,143 @@ describe("0018 DAMM source pin cutover", () => {
            values ('current-0018-launch', 'user-1', 'Egypt', 'EGY', 'workflow',
                    'queued', 500, 'EGY_current_0018_launch')`,
         );
-        await insertWorkflowMethodology(transaction, "current-0018-launch");
+        await insertWorkflowMethodology(transaction, "current-0018-launch", {
+          sourceCommit: PRE_0020_DAMM_SOURCE_COMMIT,
+          rendererSha256: PRE_0020_DAMM_RENDERER_SHA256,
+        });
       });
-      assert.equal(await workflowRunUsesCanonicalMethodology("current-0018-launch", sql), true);
+      assert.deepEqual(await workflowMethodologySnapshot("current-0018-launch", sql), {
+        ...DAMM_WORKFLOW_METHODOLOGY,
+        sourceCommit: PRE_0020_DAMM_SOURCE_COMMIT,
+        rendererSha256: PRE_0020_DAMM_RENDERER_SHA256,
+      });
+    } finally {
+      await pg.close();
+    }
+  });
+});
+
+describe("0020 DAMM source and renderer pin cutover", () => {
+  it("waits for the preceding pin and admits only the merged source-renderer identity afterward", async () => {
+    const { pg, sql } = await databaseThroughMigration("0019_progressive_stage_artifacts.sql");
+    try {
+      await sql.transaction(async (transaction) => {
+        await transaction.query(
+          `insert into runs
+            (id, user_id, country_name, iso3, pass, status, ceiling_usd, out_basename)
+           values ('pre-0020-active', 'user-1', 'Egypt', 'EGY', 'workflow',
+                   'queued', 500, 'EGY_pre_0020_active')`,
+        );
+        await insertWorkflowMethodology(transaction, "pre-0020-active", {
+          sourceCommit: PRE_0020_DAMM_SOURCE_COMMIT,
+          rendererSha256: PRE_0020_DAMM_RENDERER_SHA256,
+        });
+      });
+
+      const migration = await readFile(
+        new URL("../../../migrations/0020_damm_source_pin_cutover.sql", import.meta.url),
+        "utf8",
+      );
+      await assert.rejects(pg.exec(migration), /current DAMM source pin/i);
+      assert.deepEqual(
+        (
+          await sql.query<{
+            status: string;
+            source_commit: string;
+            renderer_sha256: string;
+          }>(
+            `select workflow_run.status, methodology.source_commit,
+                    methodology.renderer_sha256
+             from runs workflow_run
+             join workflow_run_methodology methodology on methodology.run_id = workflow_run.id
+             where workflow_run.id = 'pre-0020-active'`,
+          )
+        )[0],
+        {
+          status: "queued",
+          source_commit: PRE_0020_DAMM_SOURCE_COMMIT,
+          renderer_sha256: PRE_0020_DAMM_RENDERER_SHA256,
+        },
+        "a blocked cutover must not rewrite or terminate the preceding workflow",
+      );
+
+      await sql.query(
+        `update runs set status = 'cancelled', finished_at = now(), updated_at = now()
+         where id = 'pre-0020-active'`,
+      );
+      await pg.exec(migration);
+
+      assert.deepEqual(
+        (
+          await sql.query<{
+            status: string;
+            source_commit: string;
+            renderer_sha256: string;
+          }>(
+            `select workflow_run.status, methodology.source_commit,
+                    methodology.renderer_sha256
+             from runs workflow_run
+             join workflow_run_methodology methodology on methodology.run_id = workflow_run.id
+             where workflow_run.id = 'pre-0020-active'`,
+          )
+        )[0],
+        {
+          status: "cancelled",
+          source_commit: PRE_0020_DAMM_SOURCE_COMMIT,
+          renderer_sha256: PRE_0020_DAMM_RENDERER_SHA256,
+        },
+        "the cutover must preserve the terminal workflow's complete frozen identity",
+      );
+
+      await assert.rejects(
+        sql.transaction(async (transaction) => {
+          await transaction.query(
+            `insert into runs
+              (id, user_id, country_name, iso3, pass, status, ceiling_usd, out_basename)
+             values ('stale-0020-launch', 'user-1', 'Egypt', 'EGY', 'workflow',
+                     'queued', 500, 'EGY_stale_0020_launch')`,
+          );
+          await insertWorkflowMethodology(transaction, "stale-0020-launch", {
+            sourceCommit: PRE_0020_DAMM_SOURCE_COMMIT,
+            rendererSha256: PRE_0020_DAMM_RENDERER_SHA256,
+          });
+        }),
+        /current DAMM methodology pin/i,
+      );
+      await assert.rejects(
+        sql.transaction(async (transaction) => {
+          await transaction.query(
+            `insert into runs
+              (id, user_id, country_name, iso3, pass, status, ceiling_usd, out_basename)
+             values ('stale-0020-renderer', 'user-1', 'Egypt', 'EGY', 'workflow',
+                     'queued', 500, 'EGY_stale_0020_renderer')`,
+          );
+          await insertWorkflowMethodology(transaction, "stale-0020-renderer", {
+            rendererSha256: PRE_0020_DAMM_RENDERER_SHA256,
+          });
+        }),
+        /current DAMM methodology pin/i,
+      );
+      await assert.rejects(
+        sql.query(
+          `insert into runs
+            (id, user_id, country_name, iso3, pass, status, ceiling_usd, out_basename)
+           values ('missing-0020-pin', 'user-1', 'Egypt', 'EGY', 'workflow',
+                   'queued', 500, 'EGY_missing_0020_pin')`,
+        ),
+        /current DAMM methodology pin/i,
+      );
+
+      await sql.transaction(async (transaction) => {
+        await transaction.query(
+          `insert into runs
+            (id, user_id, country_name, iso3, pass, status, ceiling_usd, out_basename)
+           values ('current-0020-launch', 'user-1', 'Egypt', 'EGY', 'workflow',
+                   'queued', 500, 'EGY_current_0020_launch')`,
+        );
+        await insertWorkflowMethodology(transaction, "current-0020-launch");
+      });
+      assert.equal(await workflowRunUsesCanonicalMethodology("current-0020-launch", sql), true);
     } finally {
       await pg.close();
     }

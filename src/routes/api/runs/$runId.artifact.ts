@@ -17,6 +17,10 @@ import type { ApprovalArtifactAccess } from "@/lib/damm-v17/approval-store";
 import { ARTIFACT_DELIVERY_GRANT_MEDIA_TYPE } from "@/lib/damm-v17/artifact-delivery-contract";
 import { artifactDeliveryGrant } from "@/lib/damm-v17/artifact-delivery";
 import {
+  getCompletedStageArtifactMetadata,
+  resolveCompletedStageArtifactDownload,
+} from "@/lib/damm-v17/completed-stage-artifacts.server";
+import {
   getPublishedWorkflowArtifactContent,
   getPublishedWorkflowArtifactMetadata,
   getRun,
@@ -32,7 +36,12 @@ export const Route = createFileRoute("/api/runs/$runId/artifact")({
         const session = await auth.api.getSession({ headers: request.headers });
         if (!session?.user?.id) return new Response("Sign in first.", { status: 401 });
 
-        const key = new URL(request.url).searchParams.get("key") ?? "";
+        const search = new URL(request.url).searchParams;
+        const key = search.get("key") ?? "";
+        const stageArtifactId = search.get("stageArtifact") ?? "";
+        if (key && stageArtifactId) {
+          return new Response("Choose one artifact identity.", { status: 400 });
+        }
         const ownedRun = await getRun(params.runId, session.user.id);
         let run = ownedRun;
         let artifactOwnerUserId = session.user.id;
@@ -56,6 +65,68 @@ export const Route = createFileRoute("/api/runs/$runId/artifact")({
         }
 
         if (run.pass === "workflow") {
+          if (stageArtifactId) {
+            // Progressive stage outputs are country-owner working papers. They are not
+            // part of the exact Stage 8 package assigned at G1/G2 and therefore never
+            // inherit reviewer access.
+            if (!ownedRun || exactAccess) return new Response("Not found.", { status: 404 });
+            const stored = await getCompletedStageArtifactMetadata(
+              run.id,
+              stageArtifactId,
+              session.user.id,
+            );
+            if (!stored) return new Response("Completed-stage artifact not found.", { status: 404 });
+            const safeFilename = stored.filename.replace(/[^A-Za-z0-9._-]/g, "_");
+            try {
+              const grant = artifactDeliveryGrant({
+                runId: stored.runId,
+                artifactSetId: stored.stageId,
+                key: stored.artifactId,
+                sha256: stored.sha256,
+                subjectUserId: session.user.id,
+                accessAs: "country_owner",
+                packageId: null,
+                assignmentId: null,
+                targetIdentitySha256: null,
+                bundleSha256: null,
+              });
+              if (grant) {
+                return new Response(JSON.stringify(grant), {
+                  status: 200,
+                  headers: {
+                    "content-type": `${ARTIFACT_DELIVERY_GRANT_MEDIA_TYPE}; charset=utf-8`,
+                    "cache-control": "no-store",
+                    "referrer-policy": "no-referrer",
+                    "x-content-sha256": stored.sha256,
+                    "x-damm-stage-id": stored.stageId,
+                  },
+                });
+              }
+            } catch {
+              return new Response("Artifact delivery is not configured safely.", { status: 503 });
+            }
+            const download = await resolveCompletedStageArtifactDownload(
+              run.id,
+              stageArtifactId,
+              session.user.id,
+            );
+            if (!download) {
+              return new Response("The stored completed-stage artifact failed its integrity check.", {
+                status: 409,
+              });
+            }
+            const body = new ArrayBuffer(download.content.byteLength);
+            new Uint8Array(body).set(download.content);
+            return new Response(body, {
+              headers: {
+                "content-type": download.contentType,
+                "content-disposition": `attachment; filename="${safeFilename}"`,
+                "cache-control": "no-store",
+                "x-content-sha256": download.sha256,
+                "x-damm-stage-id": download.stageId,
+              },
+            });
+          }
           const advertised = artifactsFor("workflow").some((artifact) => artifact.key === key);
           const stored = advertised
             ? await getPublishedWorkflowArtifactMetadata(run.id, key, artifactOwnerUserId)

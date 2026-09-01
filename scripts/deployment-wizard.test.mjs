@@ -43,10 +43,7 @@ test("the wizard validator rejects mismatched or incomplete details without disc
 });
 
 test("the deployment wizard delegates Neon URL validation to the shared parsed policy", () => {
-  const wizard = readFileSync(
-    join(root, "scripts/deploy/netlify-neon-render-ohio.sh"),
-    "utf8",
-  );
+  const wizard = readFileSync(join(root, "scripts/deploy/netlify-neon-render-ohio.sh"), "utf8");
 
   assert.match(wizard, /set \+x/);
   assert.match(wizard, /node scripts\/validate-neon-deployment-urls\.mjs/);
@@ -56,11 +53,8 @@ test("the deployment wizard delegates Neon URL validation to the shared parsed p
   assert.doesNotMatch(wizard, /-pooler\.us-east-2\.aws\.neon\.tech/);
 });
 
-test("the deployment wizard verifies the append-only DAMM source repin", () => {
-  const wizard = readFileSync(
-    join(root, "scripts/deploy/netlify-neon-render-ohio.sh"),
-    "utf8",
-  );
+test("the deployment wizard verifies progressive storage before the DAMM source repin", () => {
+  const wizard = readFileSync(join(root, "scripts/deploy/netlify-neon-render-ohio.sh"), "utf8");
 
   assert.match(wizard, /migrations\/0013_damm_methodology_pin_cutover\.sql/);
   assert.match(wizard, /migrations\/0014_damm_source_pin_cutover\.sql/);
@@ -68,9 +62,19 @@ test("the deployment wizard verifies the append-only DAMM source repin", () => {
   assert.match(wizard, /migrations\/0016_damm_source_pin_cutover\.sql/);
   assert.match(wizard, /migrations\/0017_damm_source_pin_cutover\.sql/);
   assert.match(wizard, /migrations\/0018_damm_source_pin_cutover\.sql/);
-  assert.match(wizard, /MIGRATION_0018_VERIFIED/);
-  assert.match(wizard, /0018_damm_source_pin_cutover\.sql/);
-  assert.match(wizard, /386ccb90904de4109b64b7c62d4ed7beed8daede/);
+  assert.match(wizard, /migrations\/0019_progressive_stage_artifacts\.sql/);
+  assert.match(wizard, /migrations\/0020_damm_source_pin_cutover\.sql/);
+  assert.ok(
+    wizard.indexOf("migrations/0019_progressive_stage_artifacts.sql") <
+      wizard.indexOf("migrations/0020_damm_source_pin_cutover.sql"),
+  );
+  assert.match(wizard, /MIGRATION_0019_VERIFIED/);
+  assert.match(wizard, /MIGRATION_0020_VERIFIED/);
+  assert.match(wizard, /0019_progressive_stage_artifacts\.sql/);
+  assert.match(wizard, /0020_damm_source_pin_cutover\.sql/);
+  assert.match(wizard, /e866e7a1fffd5edb14f53da5e038f69b2ec29af2/);
+  assert.match(wizard, /95dcef014086f6c01f58678db426fb48d87546b8b6a4315c530801b1ff74c5be/);
+  assert.doesNotMatch(wizard, /386ccb90904de4109b64b7c62d4ed7beed8daede/);
   assert.doesNotMatch(wizard, /4b97b2c9090204dfba3aa7c44f41d558005982ee/);
   assert.doesNotMatch(wizard, /1b1734c8a8017cda488b77cf0594b0ca82dae6ee/);
   assert.doesNotMatch(wizard, /2efb26607acc29a687a82a56edc85f53c4a6da69/);
@@ -79,10 +83,7 @@ test("the deployment wizard verifies the append-only DAMM source repin", () => {
 });
 
 test("the deployment wizard keeps the private DAMM build credential out of env values", () => {
-  const wizard = readFileSync(
-    join(root, "scripts/deploy/netlify-neon-render-ohio.sh"),
-    "utf8",
-  );
+  const wizard = readFileSync(join(root, "scripts/deploy/netlify-neon-render-ohio.sh"), "utf8");
 
   assert.match(wizard, /Secret Files > Add Secret File/);
   assert.match(wizard, /damm_git_netrc/);
@@ -95,8 +96,7 @@ test("the deployment wizard keeps the private DAMM build credential out of env v
   assert.match(wizard, /Live, Failed, or Canceled/);
   assert.match(wizard, /delete\/revoke its fine-grained PAT/);
   assert.ok(
-    wizard.indexOf("set Auto Sync to No") <
-      wizard.indexOf("Secret Files > Add Secret File"),
+    wizard.indexOf("set Auto Sync to No") < wizard.indexOf("Secret Files > Add Secret File"),
   );
   assert.ok(
     wizard.indexOf("Save Changes. Render automatically starts the worker retry") <

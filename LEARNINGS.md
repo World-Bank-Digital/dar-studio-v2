@@ -900,3 +900,122 @@ and DAR Studio's migration, methodology-integrity, approval-history, and
 deployment-wizard tests.
 **Meta-lesson:** give a narrowly scoped repair one smaller, original-text-anchored
 landing zone; never turn validation repair into an unbounded or paid replay loop.
+
+### L32 — A multi-field repair needs independently checkpointed chunks
+
+**Incident:** the immutable Nigeria run
+`e96a93fd-d4a9-4c83-96d9-3488483729a9` completed five stages and spent
+`$29.64701`, then Stage 6 failed at candidate-map batch 2/3. Its first local
+length repair requested four fields atomically. Both bounded attempts ended at
+`max_tokens`; the 4,000-token attempt used 4,000 thinking tokens and the
+8,000-token attempt used 8,000 thinking tokens, while both emitted zero patch
+characters. The terminal run published no artifact set and remains immutable.
+**Root cause:** the repair path bounded retries and output tokens but not the
+number of fields sharing one paid failure domain. One opaque response had to
+repair all four fields before any result could be checkpointed, so a provider
+that consumed the allowance on reasoning made the whole accepted candidate map
+terminal. The preserved checkpoint falsified simple request-size and
+local-validation explanations: the failed request had 2,741 input tokens,
+smaller than the 2,848-token batch-1 repair that succeeded, and no patch text
+existed for schema or residual-length validation to reject.
+**Fix:** developed on DAMM branch `fix/stage6-repair-chunking`, candidate
+repairs are deterministically partitioned into units of at most two
+fields and 1,000 contractual replacement characters, with only the relevant
+candidate context in each prompt. Every chunk has its own stable checkpoint;
+completed chunks resume without replay. Initial chunks retain the bounded
+4,000→8,000 two-attempt safeguard, residual chunks retain one derived-token
+attempt, and exhaustion remains terminal. Combined candidate semantics are
+validated inside the final chunk checkpoint so an invalid merged repair is
+durably terminal rather than a bare post-checkpoint error. The appraisal planner
+identity advances from `bounded-appraisal/v3` to `/v4`. At the initial diagnosis
+checkpoint no commit, source repin, migration, push, deployment, credential, or
+paid run had been created. After explicit authorization on 2026-09-02, fix
+commit `16d869a` merged through DAMM PR #8 as canonical `github/main`
+`e866e7a1fffd5edb14f53da5e038f69b2ec29af2`. DAR's append-only migration
+`0020` pins that merge and renderer SHA-256
+`95dcef014086f6c01f58678db426fb48d87546b8b6a4315c530801b1ff74c5be`;
+historical migration `0018` remains immutable.
+**Pinned by:** the exact recorded Nigeria length-vector regression, a simulated
+crash after repair chunk 1 that resumes at chunk 2, a durable duplicate-title
+rejection regression, and the zero-spend Nigeria simulation (18 fixture calls,
+1,156-token residual chunks). DAMM passes 180 discovered tests, 470 model-parity
+checks, workflow-contract, machine, survey, and workbook-parity validation. DAR
+Studio passes typecheck, lint, 497 tests, `build:dev`, and replay/happy/dense
+zero-spend simulations against the local DAMM checkout.
+**Meta-lesson:** bound and checkpoint the smallest independently useful paid
+repair unit; a bounded retry around an unnecessarily atomic payload is still an
+unnecessarily large failure domain.
+
+### L33 — A zero-spend simulation must bind the production path and its own determinism
+
+**Incident:** the paid Nigeria workflow exposed a Stage 6 failure that could not
+be retried safely, while the first local simulation covered only selected
+behavior. A later review also found that Stage 8 temporary filenames and runtime
+timestamps entered simulated Markdown and ZIP identity, so two runs with the
+same deterministic run ID produced different package bytes.
+**Root cause:** a fixture that merely resembles a stage does not prove the
+coordinator, downstream gates, and packager agree. A simulation that does use
+those seams is still weak evidence when environmental names or clocks leak into
+its claimed deterministic identity.
+**Fix:** the Nigeria fixture now drives the real coordinator through Stage 6
+recovery, Stage 7 generation/gates, and Stage 8 packaging after explicitly
+synthetic predecessors. The boundary blocks network, database, subprocess, and
+capability paths; spend is exactly zero; simulation provenance is permanently
+ineligible for acceptance. Its clock, source labels, and ZIP metadata are
+stable, and a public-seam regression requires two runs in different directories
+to produce identical reports and complete-bundle ZIP bytes.
+**Pinned by:** `test_simulation.py` scenario, boundary, source-binding, and
+repeat-run tests; all three fixtures bind code identity
+`ed3d9ce0788cad5cc04a0ef8779cb5d8b78db61bd888b2aeae4242b162c63db6`.
+**Meta-lesson:** simulation is useful before another paid run only when it
+executes the production orchestration seam, proves prohibited I/O stayed at
+zero, and is itself reproducible.
+
+### L34 — Completed-stage downloads are immutable publications, not worker-disk previews
+
+**Incident:** the Nigeria run completed five valuable stages but failed before
+Stage 8, leaving the owner with no downloadable report despite durable stage
+completion events.
+**Root cause:** downloadability was coupled to the all-or-nothing Stage 8
+artifact set. Worker files were not a durable or authorization-safe substitute:
+they can disappear, change, be symlinked, block on special files, or outgrow
+memory limits before a later failure.
+**Fix:** the worker reconciles the canonical completed Stage 1–7 prefix into
+append-only Neon publications. Every artifact is matched to the root and stage
+manifests, exact bytes, workflow input, source pin, and active claim. Publication
+is transactionally sealed at its declared count and exposed only to the country
+owner through the existing capability gateway. Reads use no-follow/nonblocking
+opens, reject non-regular files, allocate the validated size only, probe for
+growth, recheck inode/device/size/mtime, and enforce per-file and aggregate caps
+during sequential verification. The UI uses the durable publication ordinal
+when an event counter lags.
+**Pinned by:** migration `0019_progressive_stage_artifacts.sql`,
+`completed-stage-artifacts.test.ts`, artifact-gateway authorization tests,
+worker reconciliation tests, and completed-stage progress tests.
+**Meta-lesson:** partial value survives a later failure only when each completed
+stage is independently verified, durably sealed, narrowly authorized, and
+resource-bounded.
+
+### L35 — “Consulting quality” must be tested in the exported office formats
+
+**Incident:** consulting HTML looked correct, but the first real DOCX/PDF
+conversion duplicated the title, hid white table-header text, concatenated
+notice labels, flattened cards, and left a mostly blank final page. Consolidated
+source inventories also accepted formula-leading text in downloadable CSV/XLSX.
+**Root cause:** structural converter stubs and browser-only inspection cannot
+prove Word/LibreOffice layout or spreadsheet safety. Pandoc and office renderers
+interpret HTML semantics and table styling differently, and spreadsheet apps
+interpret untrusted leading characters as formulas.
+**Fix:** Stage 8 prepares a deterministic office-specific semantic view, embeds
+SVGs, applies a patched consulting reference DOCX plus direct table-header
+formatting, and uses A4-balanced pagination. CSV/XLSX exports neutralize formula
+prefixes after leading whitespace/control characters while preserving real
+numeric values. Exact stage HTML remains untouched.
+**Pinned by:** real-Pandoc DOCX tests, LibreOffice 26.2 and LibreOfficeDev 26.8
+three-page visual inspection, package conversion validation, and public-boundary
+CSV/XLSX injection regressions. The released upstream implementation is DAMM
+PR #8 merge `e866e7a1fffd5edb14f53da5e038f69b2ec29af2`, carried into DAR by
+append-only migration `0020` after progressive-publication migration `0019`.
+**Meta-lesson:** document quality is an end-format property; render and inspect
+the actual DOCX/PDF/XLSX/CSV artifacts, not only their HTML source or test
+stubs.

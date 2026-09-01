@@ -197,6 +197,9 @@ if [[ "$ENV_FILE" == ".env" ]]; then
 fi
 umask 077
 
+DAMM_SOURCE_COMMIT="e866e7a1fffd5edb14f53da5e038f69b2ec29af2"
+DAMM_RENDERER_SHA256="95dcef014086f6c01f58678db426fb48d87546b8b6a4315c530801b1ff74c5be"
+
 stop() {
   printf '\n  %s%sSTOP:%s %s\n\n' "$BOLD" "$RED" "$RESET" "$1" >&2
   exit 1
@@ -309,11 +312,17 @@ required_files=(
   migrations/0016_damm_source_pin_cutover.sql
   migrations/0017_damm_source_pin_cutover.sql
   migrations/0018_damm_source_pin_cutover.sql
+  migrations/0019_progressive_stage_artifacts.sql
+  migrations/0020_damm_source_pin_cutover.sql
   docs/DEPLOYMENT-NETLIFY-NEON-RENDER-OHIO.md
 )
 for required_file in "${required_files[@]}"; do
   [[ -f "$required_file" ]] || stop "Merged deployment file $required_file is missing."
 done
+grep -Fq "\"commit\": \"$DAMM_SOURCE_COMMIT\"" src/data/damm_model_manifest.json ||
+  stop "The app manifest does not pin the authorized canonical DAMM merge."
+grep -Fq "\"sha256\": \"$DAMM_RENDERER_SHA256\"" src/data/damm_model_manifest.json ||
+  stop "The app manifest does not pin the authorized DAMM renderer digest."
 grep -q "name: dar-studio-artifacts" render.yaml || stop "render.yaml does not declare the artifact gateway."
 grep -q "healthCheckPath: /healthz" render.yaml || stop "render.yaml does not declare the artifact gateway health check."
 [[ "$(grep -c "region: ohio" render.yaml)" -eq 2 ]] || stop "render.yaml does not pin both Render services to Ohio."
@@ -474,7 +483,7 @@ say "If it is non-null, run the active-workflow query in docs/DEPLOYMENT-NETLIFY
 confirm_or_stop "Did the active-workflow query return zero rows?" \
   "Do not migrate while any workflow is queued, running, or otherwise nonterminal."
 step "Open Backup & Restore, enable Enhanced view if shown, select the root production branch, and click Create snapshot."
-step "Name it with UTC time and the deploy commit, for example pre-0018-YYYYMMDD-HHMM-${DEPLOY_GIT_SHA:0:8}."
+step "Name it with UTC time and the deploy commit, for example pre-0020-YYYYMMDD-HHMM-${DEPLOY_GIT_SHA:0:8}."
 ask NEON_SNAPSHOT_NAME "Exact pre-migration snapshot name:"
 require_value NEON_SNAPSHOT_NAME "$NEON_SNAPSHOT_NAME"
 write_env NEON_SNAPSHOT_NAME "$NEON_SNAPSHOT_NAME"
@@ -482,18 +491,19 @@ confirm_or_stop "Is that snapshot complete and visibly tied to the root producti
   "A recoverable snapshot is required before migration."
 
 # ── 7 ─────────────────────────────────────────────────────────────────────
-stage "Apply and verify migration 0018"
-warn "This is the database mutation for the bounded residual Stage 6 overlength-recovery source cutover. The direct URL is used, and the migrator takes its Postgres advisory lock."
+stage "Apply and verify migrations 0019 then 0020"
+warn "This installs sealed progressive Stage 1-7 publications before cutting the worker to the chunked Stage 6 repair and consulting-report source pin. The direct URL is used, and the migrator takes its Postgres advisory lock."
 confirm_or_stop "Run the idempotent migration set against this Neon staging database now?" \
   "Migration was not authorized. No worker may be deployed yet."
 DATABASE_URL="$DATABASE_URL" MIGRATION_DATABASE_URL="$DATABASE_URL_DIRECT" npm run db:migrate ||
   stop "Migration failed. Keep the snapshot, read the exact error, and do not deploy the worker."
 open_url "https://console.neon.tech/app/projects/$NEON_PROJECT_ID"
-step "In SQL Editor, query _migrations for 0018_damm_source_pin_cutover.sql. Require exactly one row."
-step "Run the function checks in the guide. Require pinned_commit=true and remains_unratified=true."
-confirm_or_stop "Did both migration verification queries return the exact expected result?" \
+step "In SQL Editor, query _migrations for 0019_progressive_stage_artifacts.sql and 0020_damm_source_pin_cutover.sql. Require exactly one row for each, in that order."
+step "Require both progressive-publication tables and their sealing triggers, then run the function checks in the guide. Require pinned_commit=true, renderer_digest=true, and remains_unratified=true."
+confirm_or_stop "Did every 0019 and 0020 migration verification query return the exact expected result?" \
   "A worker cannot start on an unverified schema or methodology pin."
-write_env MIGRATION_0018_VERIFIED "true"
+write_env MIGRATION_0019_VERIFIED "true"
+write_env MIGRATION_0020_VERIFIED "true"
 
 # ── 8 ─────────────────────────────────────────────────────────────────────
 stage "Import the main branch into Netlify"
@@ -597,7 +607,7 @@ chmod 600 "$ENV_FILE"
 # ── 11 ────────────────────────────────────────────────────────────────────
 stage "Render Ohio Blueprint: worker and artifact gateway"
 open_url "https://dashboard.render.com/"
-say "Migration 0018 must already be verified. Render does not run database migrations."
+say "Migrations 0019 and 0020 must already be verified. Render does not run database migrations."
 step "New > Blueprint > Connect the exact repository; select branch main and path render.yaml."
 step "Review dar-studio-worker: worker/docker, region ohio, plan 1c-2g, auto deploy off, one instance, and no max shutdown delay field."
 step "Review disk dar-studio-worker-data at /var/data, 10 GB. Render forbids a custom max shutdown delay on a disk-backed service, so its documented 30-second default applies; checkpoints and the claim lease provide automatic recovery."
@@ -648,8 +658,8 @@ write_env ARTIFACT_GATEWAY_URL "$ARTIFACT_GATEWAY_URL"
 stage "Render worker and artifact gateway verification"
 open_url "https://dashboard.render.com/worker/$RENDER_WORKER_SERVICE_ID"
 step "Open worker Logs. Require [worker-checkout] installed/reusing, [worker-preflight] ready, and [worker] host/pipeline/interpreter/watching queue lines."
-step "Require DAMM commit 386ccb90904de4109b64b7c62d4ed7beed8daede, clean source, /var/data/checkouts/<commit>, and /opt/damm-venv/bin/python."
-step "Require Pandoc, LibreOffice/soffice, six nonempty vendor variables with pinned SDK imports, blank mode-0600 upstream .env, and queue watching."
+step "Require DAMM commit $DAMM_SOURCE_COMMIT, clean source, /var/data/checkouts/$DAMM_SOURCE_COMMIT, and /opt/damm-venv/bin/python."
+step "Require renderer SHA-256 $DAMM_RENDERER_SHA256, Pandoc, LibreOffice/soffice, six nonempty vendor variables with pinned SDK imports, blank mode-0600 upstream .env, and queue watching."
 warn "Any worker-checkout, worker-preflight, or worker-entrypoint failed line, checkout drift, missing renderer/vendor, or crash loop is a hard stop."
 ask RENDER_WORKER_DEPLOY_ID "Successful Render worker deploy ID:"
 require_value RENDER_WORKER_DEPLOY_ID "$RENDER_WORKER_DEPLOY_ID"
@@ -750,6 +760,7 @@ confirm_or_stop "Is a complete eight-stage staging workflow spend authorized now
   "Do not launch without explicit vendor-spend authority."
 step "As the owner, create a new Nigeria country workspace, leave all optional upload categories empty, and click Launch Draft DAR workflow once. Never retry, resume, or reuse the failed Nigeria run; capture a new run ID and artifact-set identity."
 step "Observe all eight stages. There must be no human input, review gate, pause, approval, or budget top-up."
+step "As each Stage 1-7 publication appears, require its owner-only report downloads to remain available while later stages run; anonymous and reviewer-only accounts must be denied."
 step "At completion require Draft · pre-review and explicit wording that automation is not G1/G2/G3 or publication readiness."
 step "Download the bundle, Draft MD/DOCX/PDF, cost-benefit XLSX, source XLSX, manifests, and representative artifacts from every stage."
 step "Use the largest real artifact from this run: require Netlify 200 + no-store delivery-grant JSON, with a fixed HTTPS /v1/artifacts endpoint and no capability in any URL."

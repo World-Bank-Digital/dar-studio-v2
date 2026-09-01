@@ -27,7 +27,7 @@ describe("DAMM build-time methodology integrity", () => {
       modelId: "DAMM",
       version: "1.7",
       revision: 2,
-      sourceCommit: "386ccb90904de4109b64b7c62d4ed7beed8daede",
+      sourceCommit: "e866e7a1fffd5edb14f53da5e038f69b2ec29af2",
     });
   });
 
@@ -70,6 +70,30 @@ describe("DAMM build-time methodology integrity", () => {
     assert.equal(
       createHash("sha256").update(migration).digest("hex"),
       "59c4d1f9a8fe22629b56a6c31b386c95ddbf0616f25fbb3643abed826ec61a44",
+    );
+  });
+
+  it("preserves DAMM source cutover migration 0018 byte for byte", async () => {
+    const migration = await readFile(join(ROOT, "migrations/0018_damm_source_pin_cutover.sql"));
+    assert.equal(
+      createHash("sha256").update(migration).digest("hex"),
+      "0c7d56834ccac32996e36c17c593f1a92d3272b1824a2ae68ec0d6a171eaac36",
+    );
+  });
+
+  it("preserves progressive stage artifact migration 0019 byte for byte", async () => {
+    const migration = await readFile(join(ROOT, "migrations/0019_progressive_stage_artifacts.sql"));
+    assert.equal(
+      createHash("sha256").update(migration).digest("hex"),
+      "8d4d63c79663cd2ab370e69d97355189255c6e66ec1c669ecf311b8d7c10d8fe",
+    );
+  });
+
+  it("pins DAMM source cutover migration 0020 byte for byte", async () => {
+    const migration = await readFile(join(ROOT, "migrations/0020_damm_source_pin_cutover.sql"));
+    assert.equal(
+      createHash("sha256").update(migration).digest("hex"),
+      "7620ad00a35e6e4e4614151cad66fdd9d7f9ccaf9d307a2953238dcf07976a59",
     );
   });
 

@@ -28,6 +28,7 @@ import {
   type WorkflowUploadView,
 } from "@/lib/damm-v17/run-actions";
 import type { RunStatus } from "@/lib/damm-v17/runs";
+import { completedWorkflowStageCount } from "@/lib/damm-v17/completed-stage-progress";
 import { artifactsFor } from "@/lib/damm-v17/worker-artifacts";
 import { DAR_WORKFLOW } from "@/lib/damm-v17/workflow";
 import { cn } from "@/lib/utils";
@@ -243,7 +244,12 @@ function WorkflowRun({ run, onChange }: { run: RunView; onChange: () => Promise<
   const [showLog, setShowLog] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const active = ACTIVE.includes(run.status);
-  const completed = run.status === "done" ? DAR_WORKFLOW.stages.length : run.progress.rowsDone;
+  const completed = completedWorkflowStageCount(
+    run.status,
+    run.progress.rowsDone,
+    run.completedStageArtifacts ?? [],
+    DAR_WORKFLOW.stages.length,
+  );
 
   async function cancel() {
     setBusy(true);
@@ -280,6 +286,9 @@ function WorkflowRun({ run, onChange }: { run: RunView; onChange: () => Promise<
         {DAR_WORKFLOW.stages.map((stage) => {
           const done = completed >= stage.ordinal;
           const current = active && completed + 1 === stage.ordinal;
+          const stageArtifacts = (run.completedStageArtifacts ?? []).filter(
+            (artifact) => artifact.stageId === stage.id,
+          );
           return (
             <li key={stage.id} className="flex gap-2 rounded-sm border border-ink/10 p-2">
               {done ? (
@@ -289,13 +298,32 @@ function WorkflowRun({ run, onChange }: { run: RunView; onChange: () => Promise<
               ) : (
                 <Circle className="mt-0.5 size-4 shrink-0 text-subtle" />
               )}
-              <div>
+              <div className="min-w-0 flex-1">
                 <p className="text-xs font-semibold">
                   {stage.ordinal}. {stage.title}
                 </p>
                 <p className="mt-0.5 text-xs text-muted">
                   {done ? "Complete" : current ? "Running autonomously" : "Pending"}
                 </p>
+                {stageArtifacts.length ? (
+                  <details className="mt-2">
+                    <summary className="cursor-pointer text-xs font-medium text-forest">
+                      Download {stageArtifacts.length} verified stage output
+                      {stageArtifacts.length === 1 ? "" : "s"}
+                    </summary>
+                    <div className="mt-2 flex flex-wrap gap-1.5">
+                      {stageArtifacts.map((artifact) => (
+                        <ArtifactDownloadButton
+                          key={artifact.artifactId}
+                          href={`/api/runs/${run.id}/artifact?stageArtifact=${encodeURIComponent(artifact.artifactId)}`}
+                          className="inline-flex min-h-8 items-center gap-1 rounded-sm border border-border-strong px-2 text-xs font-medium hover:bg-moss"
+                        >
+                          <Download className="size-3" /> {completedStageArtifactLabel(artifact)}
+                        </ArtifactDownloadButton>
+                      ))}
+                    </div>
+                  </details>
+                ) : null}
               </div>
             </li>
           );
@@ -359,6 +387,19 @@ function WorkflowRun({ run, onChange }: { run: RunView; onChange: () => Promise<
       {showLog ? <EventLog runId={run.id} live={active} /> : null}
     </Card>
   );
+}
+
+function completedStageArtifactLabel(
+  artifact: RunView["completedStageArtifacts"][number],
+): string {
+  const format = artifact.filename.split(".").at(-1)?.toUpperCase() ?? "FILE";
+  if (artifact.key.endsWith("_report")) return `Report (${format})`;
+  if (artifact.key === "cost_benefit_workbook") return "Cost-benefit workbook";
+  if (artifact.key === "source_inventory") return `Source inventory (${format})`;
+  if (artifact.key === "stage_manifest") return "Stage manifest";
+  return artifact.key
+    .replaceAll("_", " ")
+    .replace(/^./, (character) => character.toUpperCase());
 }
 
 export function RunsTab({ countryId }: { countryId: string }) {
