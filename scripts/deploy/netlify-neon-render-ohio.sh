@@ -197,7 +197,7 @@ if [[ "$ENV_FILE" == ".env" ]]; then
 fi
 umask 077
 
-DAMM_SOURCE_COMMIT="e866e7a1fffd5edb14f53da5e038f69b2ec29af2"
+DAMM_SOURCE_COMMIT="f7dfbbb647e0a45d996e94f62d49f2218d518c94"
 DAMM_RENDERER_SHA256="95dcef014086f6c01f58678db426fb48d87546b8b6a4315c530801b1ff74c5be"
 
 stop() {
@@ -314,6 +314,7 @@ required_files=(
   migrations/0018_damm_source_pin_cutover.sql
   migrations/0019_progressive_stage_artifacts.sql
   migrations/0020_damm_source_pin_cutover.sql
+  migrations/0021_damm_source_pin_cutover.sql
   docs/DEPLOYMENT-NETLIFY-NEON-RENDER-OHIO.md
 )
 for required_file in "${required_files[@]}"; do
@@ -483,7 +484,7 @@ say "If it is non-null, run the active-workflow query in docs/DEPLOYMENT-NETLIFY
 confirm_or_stop "Did the active-workflow query return zero rows?" \
   "Do not migrate while any workflow is queued, running, or otherwise nonterminal."
 step "Open Backup & Restore, enable Enhanced view if shown, select the root production branch, and click Create snapshot."
-step "Name it with UTC time and the deploy commit, for example pre-0020-YYYYMMDD-HHMM-${DEPLOY_GIT_SHA:0:8}."
+step "Name it with UTC time and the deploy commit, for example pre-0021-YYYYMMDD-HHMM-${DEPLOY_GIT_SHA:0:8}."
 ask NEON_SNAPSHOT_NAME "Exact pre-migration snapshot name:"
 require_value NEON_SNAPSHOT_NAME "$NEON_SNAPSHOT_NAME"
 write_env NEON_SNAPSHOT_NAME "$NEON_SNAPSHOT_NAME"
@@ -491,19 +492,20 @@ confirm_or_stop "Is that snapshot complete and visibly tied to the root producti
   "A recoverable snapshot is required before migration."
 
 # ── 7 ─────────────────────────────────────────────────────────────────────
-stage "Apply and verify migrations 0019 then 0020"
-warn "This installs sealed progressive Stage 1-7 publications before cutting the worker to the chunked Stage 6 repair and consulting-report source pin. The direct URL is used, and the migrator takes its Postgres advisory lock."
+stage "Apply and verify migration 0021 after 0019 and 0020"
+warn "This preserves the sealed progressive Stage 1-7 schema and prior chunked Stage 6 source cutover before repinning the worker to deterministic timestamp-bound XLSX exports. The direct URL is used, and the migrator takes its Postgres advisory lock."
 confirm_or_stop "Run the idempotent migration set against this Neon staging database now?" \
   "Migration was not authorized. No worker may be deployed yet."
 DATABASE_URL="$DATABASE_URL" MIGRATION_DATABASE_URL="$DATABASE_URL_DIRECT" npm run db:migrate ||
   stop "Migration failed. Keep the snapshot, read the exact error, and do not deploy the worker."
 open_url "https://console.neon.tech/app/projects/$NEON_PROJECT_ID"
-step "In SQL Editor, query _migrations for 0019_progressive_stage_artifacts.sql and 0020_damm_source_pin_cutover.sql. Require exactly one row for each, in that order."
+step "In SQL Editor, query _migrations for 0019_progressive_stage_artifacts.sql, 0020_damm_source_pin_cutover.sql, and 0021_damm_source_pin_cutover.sql. Require exactly one row for each, in that order."
 step "Require both progressive-publication tables and their sealing triggers, then run the function checks in the guide. Require pinned_commit=true, renderer_digest=true, and remains_unratified=true."
-confirm_or_stop "Did every 0019 and 0020 migration verification query return the exact expected result?" \
+confirm_or_stop "Did every 0019, 0020, and 0021 migration verification query return the exact expected result?" \
   "A worker cannot start on an unverified schema or methodology pin."
 write_env MIGRATION_0019_VERIFIED "true"
 write_env MIGRATION_0020_VERIFIED "true"
+write_env MIGRATION_0021_VERIFIED "true"
 
 # ── 8 ─────────────────────────────────────────────────────────────────────
 stage "Import the main branch into Netlify"
@@ -607,7 +609,7 @@ chmod 600 "$ENV_FILE"
 # ── 11 ────────────────────────────────────────────────────────────────────
 stage "Render Ohio Blueprint: worker and artifact gateway"
 open_url "https://dashboard.render.com/"
-say "Migrations 0019 and 0020 must already be verified. Render does not run database migrations."
+say "Migrations 0019, 0020, and 0021 must already be verified. Render does not run database migrations."
 step "New > Blueprint > Connect the exact repository; select branch main and path render.yaml."
 step "Review dar-studio-worker: worker/docker, region ohio, plan 1c-2g, auto deploy off, one instance, and no max shutdown delay field."
 step "Review disk dar-studio-worker-data at /var/data, 10 GB. Render forbids a custom max shutdown delay on a disk-backed service, so its documented 30-second default applies; checkpoints and the claim lease provide automatic recovery."

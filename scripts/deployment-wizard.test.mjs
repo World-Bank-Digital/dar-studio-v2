@@ -53,7 +53,7 @@ test("the deployment wizard delegates Neon URL validation to the shared parsed p
   assert.doesNotMatch(wizard, /-pooler\.us-east-2\.aws\.neon\.tech/);
 });
 
-test("the deployment wizard verifies progressive storage before the DAMM source repin", () => {
+test("the deployment wizard verifies progressive storage and the prior cutover before the current DAMM source repin", () => {
   const wizard = readFileSync(join(root, "scripts/deploy/netlify-neon-render-ohio.sh"), "utf8");
 
   assert.match(wizard, /migrations\/0013_damm_methodology_pin_cutover\.sql/);
@@ -64,16 +64,25 @@ test("the deployment wizard verifies progressive storage before the DAMM source 
   assert.match(wizard, /migrations\/0018_damm_source_pin_cutover\.sql/);
   assert.match(wizard, /migrations\/0019_progressive_stage_artifacts\.sql/);
   assert.match(wizard, /migrations\/0020_damm_source_pin_cutover\.sql/);
+  assert.match(wizard, /migrations\/0021_damm_source_pin_cutover\.sql/);
   assert.ok(
     wizard.indexOf("migrations/0019_progressive_stage_artifacts.sql") <
       wizard.indexOf("migrations/0020_damm_source_pin_cutover.sql"),
   );
+  assert.ok(
+    wizard.indexOf("migrations/0020_damm_source_pin_cutover.sql") <
+      wizard.indexOf("migrations/0021_damm_source_pin_cutover.sql"),
+  );
   assert.match(wizard, /MIGRATION_0019_VERIFIED/);
   assert.match(wizard, /MIGRATION_0020_VERIFIED/);
+  assert.match(wizard, /MIGRATION_0021_VERIFIED/);
   assert.match(wizard, /0019_progressive_stage_artifacts\.sql/);
   assert.match(wizard, /0020_damm_source_pin_cutover\.sql/);
-  assert.match(wizard, /e866e7a1fffd5edb14f53da5e038f69b2ec29af2/);
+  assert.match(wizard, /0021_damm_source_pin_cutover\.sql/);
+  assert.match(wizard, /pre-0021-YYYYMMDD-HHMM/);
+  assert.match(wizard, /f7dfbbb647e0a45d996e94f62d49f2218d518c94/);
   assert.match(wizard, /95dcef014086f6c01f58678db426fb48d87546b8b6a4315c530801b1ff74c5be/);
+  assert.doesNotMatch(wizard, /e866e7a1fffd5edb14f53da5e038f69b2ec29af2/);
   assert.doesNotMatch(wizard, /386ccb90904de4109b64b7c62d4ed7beed8daede/);
   assert.doesNotMatch(wizard, /4b97b2c9090204dfba3aa7c44f41d558005982ee/);
   assert.doesNotMatch(wizard, /1b1734c8a8017cda488b77cf0594b0ca82dae6ee/);

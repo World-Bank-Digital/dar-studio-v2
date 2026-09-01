@@ -165,6 +165,9 @@ const PRE_0018_DAMM_SOURCE_COMMIT = "4b97b2c9090204dfba3aa7c44f41d558005982ee";
 const PRE_0020_DAMM_SOURCE_COMMIT = "386ccb90904de4109b64b7c62d4ed7beed8daede";
 const PRE_0020_DAMM_RENDERER_SHA256 =
   "9dc5d6169c2ae6694d9a0dbc165e61d6557b2589075b962e8def98ec13fd6ba8";
+const PRE_0021_DAMM_SOURCE_COMMIT = "e866e7a1fffd5edb14f53da5e038f69b2ec29af2";
+const PRE_0021_DAMM_RENDERER_SHA256 =
+  "95dcef014086f6c01f58678db426fb48d87546b8b6a4315c530801b1ff74c5be";
 
 async function insertWorkflowMethodology(
   sql: Sql,
@@ -1227,9 +1230,133 @@ describe("0020 DAMM source and renderer pin cutover", () => {
            values ('current-0020-launch', 'user-1', 'Egypt', 'EGY', 'workflow',
                    'queued', 500, 'EGY_current_0020_launch')`,
         );
-        await insertWorkflowMethodology(transaction, "current-0020-launch");
+        await insertWorkflowMethodology(transaction, "current-0020-launch", {
+          sourceCommit: PRE_0021_DAMM_SOURCE_COMMIT,
+          rendererSha256: PRE_0021_DAMM_RENDERER_SHA256,
+        });
       });
-      assert.equal(await workflowRunUsesCanonicalMethodology("current-0020-launch", sql), true);
+      assert.deepEqual(await workflowMethodologySnapshot("current-0020-launch", sql), {
+        ...DAMM_WORKFLOW_METHODOLOGY,
+        sourceCommit: PRE_0021_DAMM_SOURCE_COMMIT,
+        rendererSha256: PRE_0021_DAMM_RENDERER_SHA256,
+      });
+    } finally {
+      await pg.close();
+    }
+  });
+});
+
+describe("0021 DAMM source pin cutover", () => {
+  it("waits for the preceding pin and admits only the new source with the unchanged renderer", async () => {
+    const { pg, sql } = await databaseThroughMigration("0020_damm_source_pin_cutover.sql");
+    try {
+      await sql.transaction(async (transaction) => {
+        await transaction.query(
+          `insert into runs
+            (id, user_id, country_name, iso3, pass, status, ceiling_usd, out_basename)
+           values ('pre-0021-active', 'user-1', 'Egypt', 'EGY', 'workflow',
+                   'queued', 500, 'EGY_pre_0021_active')`,
+        );
+        await insertWorkflowMethodology(transaction, "pre-0021-active", {
+          sourceCommit: PRE_0021_DAMM_SOURCE_COMMIT,
+          rendererSha256: PRE_0021_DAMM_RENDERER_SHA256,
+        });
+      });
+
+      const migration = await readFile(
+        new URL("../../../migrations/0021_damm_source_pin_cutover.sql", import.meta.url),
+        "utf8",
+      );
+      await assert.rejects(pg.exec(migration), /current DAMM source pin/i);
+      assert.deepEqual(
+        (
+          await sql.query<{
+            status: string;
+            source_commit: string;
+            renderer_sha256: string;
+          }>(
+            `select workflow_run.status, methodology.source_commit,
+                    methodology.renderer_sha256
+             from runs workflow_run
+             join workflow_run_methodology methodology on methodology.run_id = workflow_run.id
+             where workflow_run.id = 'pre-0021-active'`,
+          )
+        )[0],
+        {
+          status: "queued",
+          source_commit: PRE_0021_DAMM_SOURCE_COMMIT,
+          renderer_sha256: PRE_0021_DAMM_RENDERER_SHA256,
+        },
+        "a blocked cutover must not rewrite or terminate the preceding workflow",
+      );
+
+      await sql.query(
+        `update runs set status = 'cancelled', finished_at = now(), updated_at = now()
+         where id = 'pre-0021-active'`,
+      );
+      await pg.exec(migration);
+
+      assert.deepEqual(
+        (
+          await sql.query<{
+            status: string;
+            source_commit: string;
+            renderer_sha256: string;
+          }>(
+            `select workflow_run.status, methodology.source_commit,
+                    methodology.renderer_sha256
+             from runs workflow_run
+             join workflow_run_methodology methodology on methodology.run_id = workflow_run.id
+             where workflow_run.id = 'pre-0021-active'`,
+          )
+        )[0],
+        {
+          status: "cancelled",
+          source_commit: PRE_0021_DAMM_SOURCE_COMMIT,
+          renderer_sha256: PRE_0021_DAMM_RENDERER_SHA256,
+        },
+        "the cutover must preserve the terminal workflow's complete frozen identity",
+      );
+
+      await assert.rejects(
+        sql.transaction(async (transaction) => {
+          await transaction.query(
+            `insert into runs
+              (id, user_id, country_name, iso3, pass, status, ceiling_usd, out_basename)
+             values ('stale-0021-launch', 'user-1', 'Egypt', 'EGY', 'workflow',
+                     'queued', 500, 'EGY_stale_0021_launch')`,
+          );
+          await insertWorkflowMethodology(transaction, "stale-0021-launch", {
+            sourceCommit: PRE_0021_DAMM_SOURCE_COMMIT,
+            rendererSha256: PRE_0021_DAMM_RENDERER_SHA256,
+          });
+        }),
+        /current DAMM methodology pin/i,
+      );
+      await assert.rejects(
+        sql.query(
+          `insert into runs
+            (id, user_id, country_name, iso3, pass, status, ceiling_usd, out_basename)
+           values ('missing-0021-pin', 'user-1', 'Egypt', 'EGY', 'workflow',
+                   'queued', 500, 'EGY_missing_0021_pin')`,
+        ),
+        /current DAMM methodology pin/i,
+      );
+
+      await sql.transaction(async (transaction) => {
+        await transaction.query(
+          `insert into runs
+            (id, user_id, country_name, iso3, pass, status, ceiling_usd, out_basename)
+           values ('current-0021-launch', 'user-1', 'Egypt', 'EGY', 'workflow',
+                   'queued', 500, 'EGY_current_0021_launch')`,
+        );
+        await insertWorkflowMethodology(transaction, "current-0021-launch");
+      });
+      assert.equal(await workflowRunUsesCanonicalMethodology("current-0021-launch", sql), true);
+      assert.deepEqual(await workflowMethodologySnapshot("current-0021-launch", sql), {
+        ...DAMM_WORKFLOW_METHODOLOGY,
+        rendererSha256: PRE_0021_DAMM_RENDERER_SHA256,
+      });
     } finally {
       await pg.close();
     }

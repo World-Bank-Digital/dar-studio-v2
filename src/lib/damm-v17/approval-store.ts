@@ -33,22 +33,44 @@ import { DAR_WORKFLOW, DAR_WORKFLOW_SHA256 } from "./workflow.ts";
 
 export const APPROVAL_OBSERVATIONS_ARTIFACT_KEY = "data-damm_diagnostic-damm_observations-json";
 export const APPROVAL_ASSESSMENT_INPUT_ARTIFACT_KEY = "assessment-input";
-const HISTORICAL_DAMM_SOURCE_COMMITS = [
-  "386ccb90904de4109b64b7c62d4ed7beed8daede",
-  "4b97b2c9090204dfba3aa7c44f41d558005982ee",
-  "1b1734c8a8017cda488b77cf0594b0ca82dae6ee",
-  "2efb26607acc29a687a82a56edc85f53c4a6da69",
-  "d4c659f5873f3a891634c8edf6b7166cb2eb374c",
-  "92c6ffe8b331347bc05f345785fe409753401a24",
+// A historical source and renderer form one immutable methodology identity. Keep
+// the pairs explicit so individually recognized hashes cannot be mixed across releases.
+const HISTORICAL_DAMM_SOURCE_RENDERER_PAIRS = [
+  {
+    sourceCommit: "e866e7a1fffd5edb14f53da5e038f69b2ec29af2",
+    rendererSha256: "95dcef014086f6c01f58678db426fb48d87546b8b6a4315c530801b1ff74c5be",
+  },
+  {
+    sourceCommit: "386ccb90904de4109b64b7c62d4ed7beed8daede",
+    rendererSha256: "9dc5d6169c2ae6694d9a0dbc165e61d6557b2589075b962e8def98ec13fd6ba8",
+  },
+  {
+    sourceCommit: "4b97b2c9090204dfba3aa7c44f41d558005982ee",
+    rendererSha256: "9dc5d6169c2ae6694d9a0dbc165e61d6557b2589075b962e8def98ec13fd6ba8",
+  },
+  {
+    sourceCommit: "1b1734c8a8017cda488b77cf0594b0ca82dae6ee",
+    rendererSha256: "9dc5d6169c2ae6694d9a0dbc165e61d6557b2589075b962e8def98ec13fd6ba8",
+  },
+  {
+    sourceCommit: "2efb26607acc29a687a82a56edc85f53c4a6da69",
+    rendererSha256: "9dc5d6169c2ae6694d9a0dbc165e61d6557b2589075b962e8def98ec13fd6ba8",
+  },
+  {
+    sourceCommit: "d4c659f5873f3a891634c8edf6b7166cb2eb374c",
+    rendererSha256: "9dc5d6169c2ae6694d9a0dbc165e61d6557b2589075b962e8def98ec13fd6ba8",
+  },
+  {
+    sourceCommit: "92c6ffe8b331347bc05f345785fe409753401a24",
+    rendererSha256: "9dc5d6169c2ae6694d9a0dbc165e61d6557b2589075b962e8def98ec13fd6ba8",
+  },
 ] as const;
-const HISTORICAL_DAMM_RENDERER_SHA256 =
-  "9dc5d6169c2ae6694d9a0dbc165e61d6557b2589075b962e8def98ec13fd6ba8";
 const HISTORICAL_DAMM_WORKFLOW_METHODOLOGIES = Object.freeze(
-  HISTORICAL_DAMM_SOURCE_COMMITS.map((sourceCommit) =>
+  HISTORICAL_DAMM_SOURCE_RENDERER_PAIRS.map(({ sourceCommit, rendererSha256 }) =>
     Object.freeze({
       ...DAMM_WORKFLOW_METHODOLOGY,
       sourceCommit,
-      rendererSha256: HISTORICAL_DAMM_RENDERER_SHA256,
+      rendererSha256,
     }),
   ),
 );
