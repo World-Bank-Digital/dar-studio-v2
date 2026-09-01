@@ -65,9 +65,9 @@ does not supersede the immutable 2026-09-01 evidence below.
   correctness/security review.
 - DAMM commit `16d869a` is local only. The attempted outbound push was stopped
   by the execution safety gate pending a more explicit user authorization.
-  DAR changes are ready for a local commit. No GitHub push, merge, source-pin
-  migration, database migration, deployment, credential, or paid workflow has
-  occurred.
+  The DAR implementation is committed locally on top of deployed
+  `d5e1ee4`. No GitHub push, merge, source-pin migration, database migration,
+  deployment, credential, or paid workflow has occurred.
 - After explicit push/merge authorization, land DAMM first, then create an
   append-only DAR source cutover using the resulting canonical
   `github/main` merge commit and the new renderer digest. Repeat all DAR
