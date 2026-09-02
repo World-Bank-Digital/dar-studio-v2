@@ -1121,3 +1121,64 @@ reachability checks before paid worker setup.
 **Meta-lesson:** access control is a two-sided runtime property; prove both denial
 and intended access against the live surface rather than trusting configuration
 intent or a stale ledger value.
+
+### L41 — A cache hit is an attestation to unchanged inputs, not a fresh test transcript
+
+**Incident:** the final worker rebuild reached Live on the intended DAR commit,
+but its logs did not repeat the expected `Ran 207 tests` line. Treating that
+absence as either a failed validation or claiming that the tests freshly ran
+would both misstate the evidence.
+**Root cause:** BuildKit restored the worker's content-addressed test layer from
+the preceding successful build. Cached subprocess output is not replayed, even
+though the instruction and every input that determines the layer are unchanged.
+**Fix:** distinguish execution evidence from cache-provenance evidence in the
+deployment record. Verify that the test instruction is present, the layer is
+explicitly `CACHED`, and all upstream inputs are byte-identical to a named
+cache-producing deploy whose logs contain the successful test summaries. Then
+require fresh runtime preflight over the exact pinned checkout, package set,
+conversion tools, migration ledger, methodology hashes, interpreter, and queue
+startup. If policy requires tests to execute on every deployment, encode that
+requirement explicitly and invalidate the layer rather than inferring it from
+missing log text.
+**Pinned by:** worker deploy `dep-dac7c9ijnfac739hdoig` at DAR
+`ce0036f1a49d79b40b9e822fe220d19bd96988f6` reused the unchanged test layer from
+`dep-dabkrf15efls73d3pkdg`, whose logs recorded 7, 6, and 207 tests followed by
+`OK`. The new deploy freshly reported DAMM `f7dfbbb...`, Python `3.12.13`, 21
+migrations, the pinned checkout and interpreter paths, and queue readiness.
+**Meta-lesson:** record exactly what ran and exactly what was reused; a valid
+content-addressed cache proves input identity, not a new execution transcript.
+
+### L42 — A provider refusal is a technical failure, not evidence absence
+
+**Incident:** the paid Nigeria canary run
+`7e301235-692d-4fe2-b406-7426ea1bebcb` completed three stages and then failed
+Stage 4 with an empty `source_inventory` and `strategies`. Its preserved
+checkpoint showed that all eight international scans, and all eight earlier
+country scans, received structured-output refusals with zero output tokens.
+The coordinator retry completed in under a second because those exceptions had
+already been recorded as evidence abstentions and were therefore skipped.
+**Root cause:** the scan pass caught technical provider/retrieval/contract
+failures in the same state bucket as a valid `found=false` evidence result.
+Lane completion consequently treated failed work as complete; successful
+register entries also masked the empty country lane. International retrieval
+additionally applied its six-page cap before removing obvious assessed-country
+hits, so Nigeria-heavy results could hide usable foreign evidence.
+**Fix:** technical failures now have separate durable state and cannot satisfy
+country or international completion. Legacy technical abstentions are migrated
+and reopened; downstream international completion also blocks on unresolved
+country/register failures. Query planning and extraction claim their exact paid
+structured outcomes from the append-only ledger across a crash. Extraction is
+bounded from the first attempt to at most three deterministic two-page batches,
+treats source text as untrusted evidence, advances after refusals, and permits
+only one changed-input empty-lane recovery. Obvious assessed-country title/URL
+hits are removed before the six-page cap while the final quote and country gates
+remain authoritative.
+**Pinned by:** the preserved-checkpoint migration/completion regressions, real
+ledger crash-gap and wrong-pass tests, the seven-result Nigeria-heavy retrieval
+regression, 45 focused scan-stage tests, 236 research-pipeline tests, all model,
+workbook, workflow, machine, and survey parity checks, and three complete
+zero-spend simulations. The released upstream implementation is DAMM PR #10
+merge `ff5aecbfec5c2694a61f282c27db74ea8b99b28c`.
+**Meta-lesson:** “no admissible evidence” is a methodological conclusion;
+provider refusal, retrieval loss, malformed output, and unverifiable structured
+claims are technical states that must remain visible, bounded, and resumable.
