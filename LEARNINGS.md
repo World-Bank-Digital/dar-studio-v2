@@ -966,7 +966,7 @@ stable, and a public-seam regression requires two runs in different directories
 to produce identical reports and complete-bundle ZIP bytes.
 **Pinned by:** `test_simulation.py` scenario, boundary, source-binding, and
 repeat-run tests; all three fixtures bind code identity
-`ed3d9ce0788cad5cc04a0ef8779cb5d8b78db61bd888b2aeae4242b162c63db6`.
+`a2e12fca1116b2c78b3c43de755d27ad40c1a816b940f07df7350b318867fb8f`.
 **Meta-lesson:** simulation is useful before another paid run only when it
 executes the production orchestration seam, proves prohibited I/O stayed at
 zero, and is itself reproducible.
@@ -1019,3 +1019,105 @@ append-only migration `0020` after progressive-publication migration `0019`.
 **Meta-lesson:** document quality is an end-format property; render and inspect
 the actual DOCX/PDF/XLSX/CSV artifacts, not only their HTML source or test
 stubs.
+
+### L36 — Nested office archives must be canonicalized after the final writer
+
+**Incident:** the first Render rebuild exposed a host-date-dependent fixture;
+forced-clock tests then showed supposedly deterministic simulations differed
+because OpenPyXL injected wall-clock metadata into Stage 6 and Stage 8 XLSX
+files.
+**Root cause:** Stage 6 reopened and saved an already normalized workbook,
+reintroducing timestamps, while Stage 8's consolidated inventory workbook was
+never normalized. Stable outer ZIP metadata cannot make an unstable nested XLSX
+deterministic.
+**Fix:** pin the fixture assessment date and, after the last workbook write,
+sort XLSX members, set every ZIP timestamp to 1980-01-01, and bind both
+`dcterms:created` and `dcterms:modified` to the frozen assessment/package
+timestamp. Missing, duplicate, or ambiguous core metadata fails closed. The
+released implementation is DAMM PR #9 merge
+`f7dfbbb647e0a45d996e94f62d49f2218d518c94`, carried by DAR migration `0021`.
+**Pinned by:** `test_identical_nigeria_package_simulations_are_byte_reproducible`,
+`test_consolidated_inventory_xlsx_is_stable_for_package_timestamp`, the Stage 6
+stable-byte regression, and both fail-closed metadata-normalizer regressions
+under deliberately different OpenPyXL clocks.
+**Meta-lesson:** determinism must recurse into every archive and must be
+re-established after the final library writer.
+
+### L37 — A control-plane click is not evidence that a build secret changed
+
+**Incident:** an exact-commit Render rebuild mounted a nonempty `.netrc` but
+GitHub saw no usable credential. The new fine-grained token was active and
+correctly scoped, yet the build reused the previously revoked value.
+**Root cause:** Render's Secret Files editor visually accepted the replacement,
+but the mouse click on **Save** did not submit the form. The operator checked
+only that a value had been entered, not that edit mode closed and the saved
+value survived a fresh read.
+**Fix:** submit the form, require the editor to return to read mode, reopen the
+encrypted file, and compare the persisted token byte-for-byte in memory before
+resuming. The corrected attempt fetched private DAMM, passed 207 tests, and
+reached Live; its one-use token was then revoked immediately.
+**Pinned by:** the Netlify/Neon/Render runbook and deployment wizard now require
+post-save re-read verification and forbid resume when the persisted value does
+not match the just-created credential.
+**Meta-lesson:** for external control planes, observed durable state—not a
+click, toast, or populated field—is the deployment boundary.
+
+### L38 — Disable the service, not only its source triggers, before loading a build credential
+
+**Incident:** the credential runbook disabled Blueprint sync and service
+auto-deploy, then entered a live one-attempt token before it explicitly proved
+the worker was suspended. A Secret File save can itself start a build, racing
+ahead of the persisted-value re-read and zero-active-workflow gate.
+**Root cause:** repository-trigger controls and worker execution state are
+independent control-plane boundaries. A **Failed** or idle worker is not the
+same as a visibly **Suspended** worker.
+**Fix:** before every initial upload or replacement, suspend the worker and
+verify its visible state. Only then save and freshly re-read the credential,
+reconfirm zero active workflows, and resume the exact-commit build. Every retry
+must re-suspend first, and every settled attempt still requires immediate token
+revocation.
+**Pinned by:** the deployment-wizard and Render worker-contract tests require
+suspension to precede Secret File entry across both operator surfaces.
+**Meta-lesson:** disabling source-triggered deploys does not make a credential
+mutation inert; gate the mutation with the service's execution state too.
+
+### L39 — “Latest commit” must be re-bound to the recorded deployment identity
+
+**Incident:** closeout review found that the deployment SHA was captured before
+cloud provisioning, while resuming Render later builds the branch's latest
+commit. The runbook verified the SHA only after the one-use credentialed build
+had already settled.
+**Root cause:** an exact identity checked at the start of a long operator flow
+does not remain exact if the remote branch can move before the mutation.
+**Fix:** refresh and compare both tracking and direct remote `main` identities
+to `DEPLOY_GIT_SHA` before creating the token, after any approval wait and
+immediately before loading it, and again immediately before resume; also require
+Render's displayed build target to equal that SHA. Every post-creation lookup
+failure or drift keeps the worker suspended and requires immediate revocation.
+**Pinned by:** the deployment-wizard and Render worker-contract tests require
+both identity gates and order the final gate before resume.
+**Meta-lesson:** “latest” is a moving selector; bind it again at the last safe
+boundary or select an immutable revision directly.
+
+### L40 — A private-access record is not evidence of an enforced access boundary
+
+**Incident:** the local deployment record said the Netlify project was private,
+but a final anonymous probe reached the application because live Visitor access
+was still set to **No protection settings**. With self-sign-up enabled, that
+public launch surface could expose vendor spend even though the paid worker had
+been otherwise deployed correctly.
+**Root cause:** an intended setting and an operator-written record were treated
+as proof of control-plane state. The release also lacked paired evidence that an
+anonymous visitor was denied and an authorized visitor could still reach the
+application after the setting was saved.
+**Fix:** keep the worker suspended until a fresh dashboard read shows an enforced
+mode covering all deploys, an anonymous request receives the protection boundary,
+and an authorized fresh session completes the challenge and reaches DAR Studio.
+Basic-protection passwords require explicit authority and live only in the
+operator's password manager or Keychain, never in source or deployment records.
+**Pinned by:** the Netlify/Neon/Render runbook and deployment-wizard regression
+now require post-save persisted-state evidence plus both denial and authorized
+reachability checks before paid worker setup.
+**Meta-lesson:** access control is a two-sided runtime property; prove both denial
+and intended access against the live surface rather than trusting configuration
+intent or a stale ledger value.
