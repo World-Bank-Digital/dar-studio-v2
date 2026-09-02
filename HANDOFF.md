@@ -1,12 +1,152 @@
 # HANDOFF — DAR Studio v2
 
-_Updated 2026-09-02. Read this document and [LEARNINGS.md](LEARNINGS.md) before
+_Updated 2026-09-03. Read this document and [LEARNINGS.md](LEARNINGS.md) before
 changing retrieval, scoring, drafting, or export behavior._
+
+## Stage 4 technical-failure recovery release — 2026-09-03
+
+This checkpoint supersedes the deployed-identity statements in the older
+closeout below. It records the evidence and guarded release candidate before
+the database and service cutover; a later closeout must record the actual
+deployed DAR commit and provider deploy identities.
+
+### Paid-canary diagnosis and immutable histories
+
+- The user-launched Nigeria canary workspace
+  `a586f2d6-deb2-4161-9991-2b1128a09afb`, run
+  `7e301235-692d-4fe2-b406-7426ea1bebcb`, is terminal `failed`: 3/8 stages,
+  exact spend `$28.1829`, no final artifact set, and no active claim. Stage 4
+  rejected empty `source_inventory` and `strategies`.
+- Its preserved checkpoint showed zero-output structured refusals for all eight
+  international scans and all eight earlier country scans. Those technical
+  exceptions had been persisted as evidence abstentions, so the coordinator
+  retry skipped them and returned in under a second. A successful register lane
+  also masked the empty country lane. The exact provider-side safety trigger is
+  not recoverable because the old worker did not journal raw prompts or request
+  identifiers.
+- The older Nigeria workspace `43fda6cd-c62c-46f2-bcbb-f746af3516bc` and run
+  `e96a93fd-d4a9-4c83-96d9-3488483729a9` remain terminal and untouched at 5/8
+  stages and `$29.64701`. No retry, resume, reuse, cancellation, top-up, new
+  country workspace, or additional paid workflow launch was performed by the
+  release process.
+
+### Canonical DAMM repair and local proof
+
+- DAMM PR #10 merged to `github/main` as
+  `ff5aecbfec5c2694a61f282c27db74ea8b99b28c`. It separates technical failures
+  from genuine evidence abstentions, reopens legacy misclassified failures,
+  prevents unresolved upstream failures from satisfying Stage 4 completion,
+  and filters obvious assessed-country search hits before the bounded page cap.
+- Paid structured results are durably claimed from the append-only ledger using
+  request and whole-call hashes, vendor/model identity, ledger position, and
+  pass name. Extraction is bounded from its first attempt to no more than three
+  deterministic two-page batches, advances after refusal/truncation/malformed
+  output, and permits only one changed-input empty-lane recovery.
+- The upstream proof includes 45 focused scan-stage tests, 236 research-pipeline
+  tests, the complete model/workbook/workflow/machine/survey parity suites, and
+  three complete zero-spend simulations. DAR additionally mirrors all 13 files
+  that define the upstream production identity. Its final release gate passed
+  514/514 tests, typecheck, lint with zero errors, development and Netlify
+  verification builds, plus replay, typical, and dense zero-spend simulations
+  with zero external I/O.
+
+### Guarded DAR cutover state
+
+- Branch `release/damm-ff5aecb` advances the source pin only. Migration
+  `0022_damm_source_pin_cutover.sql` preserves terminal histories, refuses a
+  stale or missing pin on active work, and retains the same model, workflow,
+  engine, renderer, and unratified status. Its SHA-256 is
+  `8bde638974122ffc00d0b0d651c7e993bf26dc48288b6b14ac107d833908a5e8`.
+- Immediately before this release commit, a read-only repeatable-read Neon
+  transaction found zero active workflows and exactly 21 migrations through
+  `0021`; the live guard still pinned `f7dfbbb...`, as expected. The production
+  Render worker was visibly **Suspended by you** before external mutation.
+  Netlify's `stop_builds` gate was also enabled through its authenticated API
+  so merging cannot start a build-time migration ahead of this cutover.
+- Neon snapshot
+  `pre-0022-stage4-recovery-20260902-224352-ff5aecb` was captured successfully
+  from root branch `production` before migration and is set never to expire.
+  Do not restore or delete it during the cutover.
+- At this checkpoint `0022` is not yet applied and the candidate is not yet
+  deployed. Merge the validated DAR branch first, recheck the remote identity
+  and zero-active gate, then migrate and deploy only that exact merge. A paid
+  end-to-end acceptance run remains a separate, user-initiated action.
+
+## Production hardening closeout — 2026-09-03
+
+This was the previous entry point. It remains immutable investigation and
+cutover history; its deployment-state language is superseded by the Stage 4
+recovery checkpoint above.
+
+### Canonical source and deployed identities
+
+- DAR PR #17 merged as canonical `origin/main`
+  `ce0036f1a49d79b40b9e822fe220d19bd96988f6`. Local `main`, its tracking ref,
+  and a direct remote lookup all matched that identity immediately before the
+  worker resume. The canonical DAMM source remains PR #9 merge
+  `f7dfbbb647e0a45d996e94f62d49f2218d518c94`, pinned by migration `0021`.
+- Netlify deploy `6a981d37e9b3a1000715b91c`, Render artifact-gateway
+  deploy `dep-dac1rkqfngtc73flvub0`, and Render worker deploy
+  `dep-dac7c9ijnfac739hdoig` all use exact DAR commit `ce0036f1...`.
+- Netlify Basic protection remains enabled for **All deploys**. Fresh anonymous
+  root and `/methodology` probes receive HTTP 401, while an authorized browser
+  session reaches DAR Studio. The password remains only in the operator's
+  macOS Keychain under `DAR Studio Netlify Basic Protection`.
+- Gateway health and access-control probes remain green: exact
+  `200 {"status":"ok"}` with `Cache-Control: no-store`, expected-origin CORS,
+  and non-disclosing denial for missing or attacker origins.
+
+### Worker credential, build, and runtime evidence
+
+- Before credential creation and again immediately before resume, the worker
+  was visibly **Suspended by you**, the canonical source identities matched,
+  and a read-only repeatable-read Neon transaction showed zero active
+  workflows. The one-day fine-grained token was scoped only to
+  `World-Bank-Digital/DAMM` with `Contents: Read-only` plus required metadata.
+  Render's saved `damm_git_netrc` was reopened and compared byte-for-byte with
+  the intended three-line value before the worker was resumed.
+- Worker deploy `dep-dac7c9ijnfac739hdoig` was triggered only by **Resume** and
+  reached `Deploy succeeded | Live` in 50.6 seconds. Its source link resolves to
+  exact DAR commit `ce0036f1a49d79b40b9e822fe220d19bd96988f6`.
+- This deploy reused the content-addressed worker test layer; it did not emit a
+  fresh 207-test summary. Every input upstream of that layer was byte-identical
+  to cache-producing deploy `dep-dabkrf15efls73d3pkdg`, whose logs recorded
+  `Ran 7 tests`, `Ran 6 tests`, and `Ran 207 tests`, each followed by `OK`.
+  Current logs explicitly mark the test instruction layer `CACHED`.
+- Fresh runtime checks still revalidated the installed source: DAMM
+  `f7dfbbb...`, Node `22.22.3`, Python `3.12.13`, 21 migrations, pipeline
+  `/var/data/checkouts/f7dfbbb...`, interpreter `/opt/damm-venv/bin/python`, and
+  `watching the run queue`. Render logged `Your service is live`.
+- As soon as the deploy reached a terminal success, the one-use GitHub token
+  was permanently revoked. GitHub no longer lists its token card or name. No
+  live credential is stored in local files; only the revoked inert value
+  remains in Render. Any future worker rebuild requires a new shortest-expiry,
+  DAMM-only Contents-read token and the same immediate-revocation sequence.
+
+### Final safety boundary
+
+- A final post-deploy audit at `2026-09-02T19:39:42.206Z` UTC used an explicit
+  read-only, repeatable-read transaction and rolled it back. It found zero
+  active workflows. The failed Nigeria workspace
+  `43fda6cd-c62c-46f2-bcbb-f746af3516bc` and run
+  `e96a93fd-d4a9-4c83-96d9-3488483729a9` remain immutable: terminal `failed`,
+  5/8 stages, exact spend `$29.64701`, null artifact-set identity, unclaimed,
+  and zero final artifacts, stage artifacts, stage publications, or reviews.
+- No retry, resume, reuse, cancellation, top-up, new country workspace, or paid
+  workflow launch occurred. The production worker is Live and idle; another
+  paid smoke remains separately unauthorized.
+- The only tracked working-tree changes after deployment are this closeout and
+  learning L41. They are intentionally uncommitted so `origin/main` remains the
+  exact identity deployed across Netlify and Render instead of creating a
+  self-referential documentation-only redeployment cycle.
+- The only observed non-blocking runtime warning concerns the future change in
+  `pg`/`pg-connection-string` semantics for `sslmode=require`. Adopt explicit
+  `sslmode=verify-full` before upgrading to those major versions.
 
 ## Production cutover checkpoint — 2026-09-02
 
-This is the current entry point. The older checkpoints below remain as immutable
-investigation history; their pre-deployment statements are no longer current.
+This older checkpoint remains immutable cutover history. Its deployment-state
+statements are superseded by the 2026-09-03 closeout above.
 
 ### Landed identities and validation
 

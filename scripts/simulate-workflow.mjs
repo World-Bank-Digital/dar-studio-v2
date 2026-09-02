@@ -21,10 +21,18 @@ export const PROFILES = Object.freeze(["minimal", "typical", "dense"]);
 const ROOT = dirname(dirname(fileURLToPath(import.meta.url)));
 const PIPELINE_RELATIVE = join("gauntlet", "loop-1", "research_pipeline", "simulate_workflow.py");
 const SAFE_PARENT_ENV = Object.freeze(["PATH", "LANG", "LC_ALL", "TZ"]);
-const SOURCE_IDENTITY_FILES = Object.freeze([
+export const SOURCE_IDENTITY_FILES = Object.freeze([
+  "gauntlet/loop-1/research_pipeline/simulation.py",
   "gauntlet/loop-1/research_pipeline/investment_options.py",
+  "gauntlet/loop-1/research_pipeline/report_design.py",
+  "gauntlet/loop-1/research_pipeline/generate_dar.py",
+  "gauntlet/loop-1/research_pipeline/export_package.py",
   "gauntlet/loop-1/research_pipeline/run_workflow.py",
   "gauntlet/loop-1/research_pipeline/vendors.py",
+  "gauntlet/loop-1/research_pipeline/workflow_inputs.py",
+  "gauntlet/loop-1/research_pipeline/foresight_contract.py",
+  "gauntlet/loop-1/engine_v17.py",
+  "model/reference_scorer.py",
   "model/DAMM-v1.7-model.json",
   "workflow/dar-workflow-v1.json",
 ]);

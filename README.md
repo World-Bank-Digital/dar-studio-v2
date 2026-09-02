@@ -143,7 +143,7 @@ methodology manifest. The model remains honestly labelled `draft for review`
 and `ratified: false`; provenance does not imply ratification.
 
 On methodology upgrades, migrations `0011`, `0013`, `0014`, `0015`, `0016`,
-`0017`, `0018`, `0020`, and `0021` stop before changing the schema or active source pin
+`0017`, `0018`, `0020`, `0021`, and `0022` stop before changing the schema or active source pin
 if an older workflow is still active. Migration `0014` is the immutable source cutover for
 the foresight candidate-register repair. Migration `0015` advances only the
 upstream source commit to the canonical DAMM merge
@@ -174,7 +174,14 @@ canonical DAMM merge `f7dfbbb647e0a45d996e94f62d49f2218d518c94` (PR #9),
 which binds Stage 6 and Stage 8 XLSX metadata and archive timestamps to their
 frozen workflow/package timestamps so exports remain byte-identical across host
 clocks. The renderer and other methodology identity fields remain unchanged.
-Deploy `0019` before `0020`, then `0021`. Allow an in-flight
+Migration `0022` advances only the source pin to canonical DAMM merge
+`ff5aecbfec5c2694a61f282c27db74ea8b99b28c` (PR #10), which adds one bounded
+recovery pass for completed-but-empty Stage 4 scans, preserves technical
+failures instead of misclassifying them as evidence abstentions, durably reuses
+paid scan results after a crash, and blocks downstream completion while upstream
+country or register failures remain unresolved. The renderer and all other
+methodology identity fields remain unchanged. Deploy `0019` before `0020`, then
+`0021`, then `0022`. Allow an in-flight
 workflow to finish under the prior release, then retry the deployment; no run
 is failed or relaunched. A deferred database invariant prevents a still-running
 old app process from committing a missing or stale methodology snapshot,

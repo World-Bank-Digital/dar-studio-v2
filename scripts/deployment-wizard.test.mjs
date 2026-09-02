@@ -102,6 +102,7 @@ test("the deployment wizard verifies progressive storage and the prior cutover b
   assert.match(wizard, /migrations\/0019_progressive_stage_artifacts\.sql/);
   assert.match(wizard, /migrations\/0020_damm_source_pin_cutover\.sql/);
   assert.match(wizard, /migrations\/0021_damm_source_pin_cutover\.sql/);
+  assert.match(wizard, /migrations\/0022_damm_source_pin_cutover\.sql/);
   assert.ok(
     wizard.indexOf("migrations/0019_progressive_stage_artifacts.sql") <
       wizard.indexOf("migrations/0020_damm_source_pin_cutover.sql"),
@@ -110,17 +111,24 @@ test("the deployment wizard verifies progressive storage and the prior cutover b
     wizard.indexOf("migrations/0020_damm_source_pin_cutover.sql") <
       wizard.indexOf("migrations/0021_damm_source_pin_cutover.sql"),
   );
+  assert.ok(
+    wizard.indexOf("migrations/0021_damm_source_pin_cutover.sql") <
+      wizard.indexOf("migrations/0022_damm_source_pin_cutover.sql"),
+  );
   assert.match(wizard, /MIGRATION_0019_VERIFIED/);
   assert.match(wizard, /MIGRATION_0020_VERIFIED/);
   assert.match(wizard, /MIGRATION_0021_VERIFIED/);
+  assert.match(wizard, /MIGRATION_0022_VERIFIED/);
   assert.match(wizard, /0019_progressive_stage_artifacts\.sql/);
   assert.match(wizard, /0020_damm_source_pin_cutover\.sql/);
   assert.match(wizard, /0021_damm_source_pin_cutover\.sql/);
-  assert.match(wizard, /pre-0021-YYYYMMDD-HHMM/);
-  assert.match(wizard, /suspend the preceding-pin Render worker before merging or applying 0021/);
+  assert.match(wizard, /0022_damm_source_pin_cutover\.sql/);
+  assert.match(wizard, /pre-0022-YYYYMMDD-HHMM/);
+  assert.match(wizard, /suspend the preceding-pin Render worker before merging or applying 0022/);
   assert.match(wizard, /existing worker visibly suspended/);
-  assert.match(wizard, /f7dfbbb647e0a45d996e94f62d49f2218d518c94/);
+  assert.match(wizard, /ff5aecbfec5c2694a61f282c27db74ea8b99b28c/);
   assert.match(wizard, /95dcef014086f6c01f58678db426fb48d87546b8b6a4315c530801b1ff74c5be/);
+  assert.doesNotMatch(wizard, /f7dfbbb647e0a45d996e94f62d49f2218d518c94/);
   assert.doesNotMatch(wizard, /e866e7a1fffd5edb14f53da5e038f69b2ec29af2/);
   assert.doesNotMatch(wizard, /386ccb90904de4109b64b7c62d4ed7beed8daede/);
   assert.doesNotMatch(wizard, /4b97b2c9090204dfba3aa7c44f41d558005982ee/);

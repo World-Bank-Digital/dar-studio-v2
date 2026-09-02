@@ -8,20 +8,36 @@ import { describe, it } from "node:test";
 
 import {
   SIMULATION_LABEL,
+  SOURCE_IDENTITY_FILES,
   runWorkflowSimulation,
   sha256Json,
   simulationEnvironment,
   validateSimulationReport,
 } from "./simulate-workflow.mjs";
 
+const UPSTREAM_PRODUCTION_CODE_FILES = Object.freeze([
+  "gauntlet/loop-1/research_pipeline/simulation.py",
+  "gauntlet/loop-1/research_pipeline/investment_options.py",
+  "gauntlet/loop-1/research_pipeline/report_design.py",
+  "gauntlet/loop-1/research_pipeline/generate_dar.py",
+  "gauntlet/loop-1/research_pipeline/export_package.py",
+  "gauntlet/loop-1/research_pipeline/run_workflow.py",
+  "gauntlet/loop-1/research_pipeline/vendors.py",
+  "gauntlet/loop-1/research_pipeline/workflow_inputs.py",
+  "gauntlet/loop-1/research_pipeline/foresight_contract.py",
+  "gauntlet/loop-1/engine_v17.py",
+  "model/reference_scorer.py",
+  "model/DAMM-v1.7-model.json",
+  "workflow/dar-workflow-v1.json",
+]);
+
 function report(overrides = {}) {
-  const codeFiles = {
-    "gauntlet/loop-1/research_pipeline/investment_options.py": "a".repeat(64),
-    "gauntlet/loop-1/research_pipeline/run_workflow.py": "b".repeat(64),
-    "gauntlet/loop-1/research_pipeline/vendors.py": "c".repeat(64),
-    "model/DAMM-v1.7-model.json": "d".repeat(64),
-    "workflow/dar-workflow-v1.json": "e".repeat(64),
-  };
+  const codeFiles = Object.fromEntries(
+    UPSTREAM_PRODUCTION_CODE_FILES.map((relative, index) => [
+      relative,
+      (index + 1).toString(16).repeat(64),
+    ]),
+  );
   const value = {
     schema_version: "damm.simulation-report/v1",
     label: SIMULATION_LABEL,
@@ -65,13 +81,12 @@ function report(overrides = {}) {
 
 function simulationSource(root) {
   const sourceRoot = join(root, "DAMM");
-  const sourceFiles = {
-    "gauntlet/loop-1/research_pipeline/investment_options.py": "# investment fixture\n",
-    "gauntlet/loop-1/research_pipeline/run_workflow.py": "# coordinator fixture\n",
-    "gauntlet/loop-1/research_pipeline/vendors.py": "# vendor fixture\n",
-    "model/DAMM-v1.7-model.json": '{"config":{"assessment_year":2026}}\n',
-    "workflow/dar-workflow-v1.json": '{"schema_version":"fixture"}\n',
-  };
+  const sourceFiles = Object.fromEntries(
+    UPSTREAM_PRODUCTION_CODE_FILES.map((relative, index) => [
+      relative,
+      `# production identity fixture ${index + 1}: ${relative}\n`,
+    ]),
+  );
   const codeFiles = {};
   for (const [relative, contents] of Object.entries(sourceFiles)) {
     const path = join(sourceRoot, relative);
@@ -129,6 +144,13 @@ function simulationSource(root) {
 }
 
 describe("workflow simulation adapter", () => {
+  it("mirrors the complete upstream production-code identity set", () => {
+    assert.deepEqual(
+      [...SOURCE_IDENTITY_FILES].sort(),
+      [...UPSTREAM_PRODUCTION_CODE_FILES].sort(),
+    );
+  });
+
   it("passes only a small allowlisted environment to the child", () => {
     const environment = simulationEnvironment(
       {
