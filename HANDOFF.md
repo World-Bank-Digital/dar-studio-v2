@@ -3,6 +3,78 @@
 _Updated 2026-09-02. Read this document and [LEARNINGS.md](LEARNINGS.md) before
 changing retrieval, scoring, drafting, or export behavior._
 
+## Production cutover checkpoint — 2026-09-02
+
+This is the current entry point. The older checkpoints below remain as immutable
+investigation history; their pre-deployment statements are no longer current.
+
+### Landed identities and validation
+
+- DAMM deterministic-export fix commit
+  `5b4a1feaf94756619f6327f5dcf45afc0563be2e` merged through PR #9 as canonical
+  `github/main` `f7dfbbb647e0a45d996e94f62d49f2218d518c94`.
+- DAR PR #16 merged as canonical `origin/main`
+  `5513f3ef9c7c910336b5aae6f7d388565873a3db`. Migration
+  `0021_damm_source_pin_cutover.sql` advances only the source pin to that DAMM
+  merge; the renderer remains
+  `95dcef014086f6c01f58678db426fb48d87546b8b6a4315c530801b1ff74c5be`.
+- The bound production code identity is
+  `a2e12fca1116b2c78b3c43de755d27ad40c1a816b940f07df7350b318867fb8f`.
+  The fix pins the host-date fixture and canonicalizes every nested XLSX member
+  after the final writer, including both core-property timestamps.
+- DAMM passed 207 pipeline tests, 470/470 model-parity checks, 7 workflow-contract
+  checks, 11 focused workflow checks, 17 machine checks, 16 survey checks, and
+  6 workbook checks. DAR passed 511 tests, typecheck, lint with zero errors and
+  the same five warnings, `build:dev`, and Netlify verification.
+
+### Database and deployed artifacts
+
+- Neon recovery snapshot
+  `pre-0021-20260901-2057-ffc74e46` is a non-expiring 34.52 MB snapshot of the
+  root production branch. Migration `0021` was applied at
+  `2026-09-01 21:02:22.222963+00`; ledger order `0019` -> `0020` -> `0021`,
+  progressive tables/triggers, and the active-pin function were verified.
+- Netlify deploy `6a973d42ae7db00008602c4d` and Render artifact-gateway deploy
+  `dep-dabk5dp5efls73d1pbe0` both use exact DAR commit `5513f3ef...`.
+  Before Visitor access was enabled, root and `/methodology` smoke probes
+  returned 200; the current protected-access evidence is recorded below.
+  Gateway health returns
+  `200 {"status":"ok"}` with `Cache-Control: no-store`; exact-origin CORS and
+  non-disclosing denial probes pass.
+- Render worker deploy `dep-dabkrf15efls73d3pkdg` built and reached Live on
+  exact DAR commit `5513f3ef...`. Build logs show all 207 pipeline tests passing;
+  runtime logs show DAMM `f7dfbbb...` installed, preflight ready with 21
+  migrations, `/opt/damm-venv/bin/python`, the pinned disk checkout, and
+  `watching the run queue`. Its one-use GitHub credential was immediately
+  revoked; only the revoked inert value remains in Render, and the live value
+  was cleared from operator memory.
+
+### Current guarded deployment state
+
+- Netlify Basic protection was explicitly authorized and enabled for **All
+  deploys** on 2026-09-02. A post-save dashboard read shows **Protected by:
+  Basic protection** and **Access restricted to: All deploys**. A fresh
+  anonymous request returns HTTP 401, while the same challenge accepts the
+  generated password and reaches DAR Studio. The password is stored only in
+  the operator's macOS Keychain as `DAR Studio Netlify Basic Protection`; it is
+  absent from source, `.env.staging`, logs, and this handoff.
+  It is not distributed; rotate it if operator/reviewer access changes, on any
+  suspected disclosure, or when this staging deployment closes, and delete the
+  Keychain item when Basic protection is removed.
+- The successfully verified Render worker remains intentionally suspended while
+  these hardened cutover controls are released. Do not resume it until the new
+  DAR main identity is fixed, Netlify and the artifact gateway use that exact
+  identity, and a fresh zero-active-workflow query passes. Render resume rebuilds
+  the image, so it also requires a new one-attempt DAMM-only Contents-read token,
+  verified persistence, and immediate revocation after the attempt settles.
+- Final read-only Neon verification still shows zero active workflows. Nigeria
+  run `e96a93fd-d4a9-4c83-96d9-3488483729a9` remains terminal `failed`, 5/8,
+  exact spend `$29.64701`, null artifact-set identity, no claim, zero final
+  artifacts, zero stage artifacts, and zero stage publications.
+- No retry, resume, cancellation, or top-up of the failed Nigeria workflow was
+  attempted; no new country workspace or paid workflow was launched. A paid
+  smoke remains separately unauthorized.
+
 ## Continuation checkpoint — 2026-09-02
 
 This section records the completed investigation, implementation, and DAMM
@@ -383,9 +455,17 @@ migration `0020` advances the source commit to canonical DAMM PR #8 merge
 `e866e7a1fffd5edb14f53da5e038f69b2ec29af2` and renderer SHA-256
 `95dcef014086f6c01f58678db426fb48d87546b8b6a4315c530801b1ff74c5be`,
 containing independently checkpointed bounded Stage 6 repair chunks, the
-zero-spend production-shaped simulation, and consulting-report exports. Apply
-`0019` before `0020`. Let the existing release finish older-pin runs, then retry
-deployment; a migration must never terminate or relaunch an in-flight workflow.
+zero-spend production-shaped simulation, and consulting-report exports.
+Append-only migration `0021` advances only the source commit to canonical DAMM
+PR #9 merge `f7dfbbb647e0a45d996e94f62d49f2218d518c94`, preserving the renderer
+digest while binding Stage 6 and Stage 8 XLSX core/archive timestamps to frozen
+assessment/package timestamps. Apply `0019` before `0020` and `0020` before
+`0021`. Require zero active workflows and suspend the preceding-pin worker
+before an auto-published cutover. Keep it suspended until every pre-resume
+identity, persisted-secret, and zero-active gate passes; then permit exactly one
+credentialed build of the bound commit and revoke its credential as soon as the
+attempt settles. A migration or deployment must never terminate, claim, or
+relaunch an in-flight workflow.
 The deferred database invariant also rejects stale launches, newly inserted
 stale terminal rows, and transitions that would turn a failed/cancelled stale
 run into a completed workflow.

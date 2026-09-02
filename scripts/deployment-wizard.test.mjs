@@ -53,6 +53,43 @@ test("the deployment wizard delegates Neon URL validation to the shared parsed p
   assert.doesNotMatch(wizard, /-pooler\.us-east-2\.aws\.neon\.tech/);
 });
 
+test("the deployment wizard requires persisted and two-sided Netlify access evidence", () => {
+  const wizard = readFileSync(join(root, "scripts/deploy/netlify-neon-render-ohio.sh"), "utf8");
+
+  assert.match(wizard, /fresh configuration reload/);
+  assert.match(wizard, /remove_env NETLIFY_VISITOR_ACCESS_MODE/);
+  assert.match(wizard, /NETLIFY_VISITOR_ACCESS_LABEL="Team protection"/);
+  assert.match(wizard, /NETLIFY_VISITOR_ACCESS_LABEL="Basic protection"/);
+  assert.match(wizard, /Protected by \$NETLIFY_VISITOR_ACCESS_LABEL/);
+  assert.match(wizard, /Access restricted to All deploys/);
+  assert.match(wizard, /anonymous request receive the protection boundary/);
+  assert.match(wizard, /fresh authorized session complete the protection challenge and reach DAR Studio/);
+  assert.match(wizard, /password manager or Keychain/);
+  assert.match(wizard, /Basic protection explicitly authorized/);
+  assert.match(wizard, /defined distribution\/rotation plan/);
+  assert.doesNotMatch(wizard, /write_env\s+NETLIFY_(?:BASIC_)?PASSWORD/i);
+  assert.match(wizard, /write_env NETLIFY_VISITOR_ACCESS_MODE "\$NETLIFY_VISITOR_ACCESS_MODE"/);
+  assert.match(wizard, /write_env NETLIFY_VISITOR_ACCESS_SCOPE "all-deploys"/);
+  assert.match(wizard, /write_env NETLIFY_ANONYMOUS_DENIAL_VERIFIED "true"/);
+  assert.match(wizard, /write_env NETLIFY_AUTHORIZED_ACCESS_VERIFIED "true"/);
+  assert.ok(
+    wizard.indexOf("remove_env NETLIFY_VISITOR_ACCESS_MODE") <
+      wizard.indexOf('ask NETLIFY_VISITOR_ACCESS_MODE "Persisted Visitor access mode'),
+  );
+  assert.ok(
+    wizard.indexOf("fresh configuration reload") <
+      wizard.indexOf("anonymous request receive the protection boundary"),
+  );
+  assert.ok(
+    wizard.indexOf("anonymous request receive the protection boundary") <
+      wizard.indexOf("fresh authorized session complete the protection challenge and reach DAR Studio"),
+  );
+  assert.ok(
+    wizard.indexOf("fresh authorized session complete the protection challenge and reach DAR Studio") <
+      wizard.indexOf('write_env NETLIFY_VISITOR_ACCESS_MODE "$NETLIFY_VISITOR_ACCESS_MODE"'),
+  );
+});
+
 test("the deployment wizard verifies progressive storage and the prior cutover before the current DAMM source repin", () => {
   const wizard = readFileSync(join(root, "scripts/deploy/netlify-neon-render-ohio.sh"), "utf8");
 
@@ -103,14 +140,64 @@ test("the deployment wizard keeps the private DAMM build credential out of env v
   assert.match(wizard, /Metadata Read-only appears automatically/);
   assert.match(wizard, /RUN --mount=type=secret,id=damm_git_netrc/);
   assert.match(wizard, /fetch --depth=1 --no-tags origin/);
-  assert.match(wizard, /automatically starts the worker retry/);
+  assert.match(wizard, /Refresh origin\/main before a one-attempt token is created/);
+  assert.match(wizard, /Refresh origin\/main again immediately before the build credential is loaded/);
+  assert.match(wizard, /Refresh origin\/main again immediately before resume/);
+  assert.match(wizard, /Render's displayed latest commit to build/);
+  assert.ok((wizard.match(/git fetch --quiet origin main/g) ?? []).length >= 4);
+  assert.match(wizard, /Before every live-token upload or replacement/);
+  assert.match(wizard, /including this initial one/);
+  assert.match(wizard, /service to be visibly Suspended/);
+  assert.match(wizard, /Only after the source identity and suspension gates pass, create/);
+  assert.match(wizard, /Pre-load source check failed:[^\n]*immediately revoke/);
+  assert.match(wizard, /Pre-resume source check failed:[^\n]*immediately revoke/);
+  assert.match(wizard, /require the Secret Files editor to leave edit mode/);
+  assert.match(wizard, /compare the persisted value byte-for-byte/);
+  assert.match(wizard, /Persistence mismatch:[^\n]*immediately revoke/);
+  assert.match(wizard, /active-workflow query still return zero rows/);
+  assert.match(wizard, /Zero-active gate failed:[^\n]*immediately revoke/);
+  assert.match(wizard, /Resume the suspended worker/);
+  assert.match(wizard, /Render starts the exact latest-commit build/);
   assert.match(wizard, /Live, Failed, or Canceled/);
   assert.match(wizard, /delete\/revoke its fine-grained PAT/);
+  assert.doesNotMatch(wizard, /Save Changes[^\n]*automatically starts/i);
   assert.ok(
     wizard.indexOf("set Auto Sync to No") < wizard.indexOf("Secret Files > Add Secret File"),
   );
   assert.ok(
-    wizard.indexOf("Save Changes. Render automatically starts the worker retry") <
+    wizard.indexOf("Refresh origin/main before a one-attempt token is created") <
+      wizard.indexOf("Before every live-token upload or replacement"),
+  );
+  assert.ok(
+    wizard.indexOf("Before every live-token upload or replacement") <
+      wizard.indexOf("Only after the source identity and suspension gates pass, create"),
+  );
+  assert.ok(
+    wizard.indexOf("Only after the source identity and suspension gates pass, create") <
+      wizard.indexOf("Refresh origin/main again immediately before the build credential is loaded"),
+  );
+  assert.ok(
+    wizard.indexOf("Refresh origin/main again immediately before the build credential is loaded") <
+      wizard.indexOf("Secret Files > Add Secret File"),
+  );
+  assert.ok(
+    wizard.indexOf("compare the persisted value byte-for-byte") <
+      wizard.indexOf("active-workflow query still return zero rows"),
+  );
+  assert.ok(
+    wizard.indexOf("active-workflow query still return zero rows") <
+      wizard.indexOf("Refresh origin/main again immediately before resume"),
+  );
+  assert.ok(
+    wizard.indexOf("Refresh origin/main again immediately before resume") <
+      wizard.indexOf("Render's displayed latest commit to build"),
+  );
+  assert.ok(
+    wizard.indexOf("Render's displayed latest commit to build") <
+      wizard.indexOf("Resume the suspended worker"),
+  );
+  assert.ok(
+    wizard.indexOf("Resume the suspended worker") <
       wizard.indexOf("delete/revoke its fine-grained PAT"),
   );
   assert.ok(
