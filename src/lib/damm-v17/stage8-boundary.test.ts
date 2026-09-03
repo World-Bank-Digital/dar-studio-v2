@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
-import { describe, it } from "node:test";
+import { describe, it, mock } from "node:test";
+import zlib, { type InputType, type ZlibOptions } from "node:zlib";
 
 import JSZip from "jszip";
 
@@ -167,10 +168,7 @@ function duplicateFirstCentralDirectoryRecord(content: Uint8Array): Uint8Array {
   return output;
 }
 
-function insertBytesBeforeCentralDirectory(
-  content: Uint8Array,
-  injected: Uint8Array,
-): Uint8Array {
+function insertBytesBeforeCentralDirectory(content: Uint8Array, injected: Uint8Array): Uint8Array {
   const source = new Uint8Array(content);
   const sourceView = new DataView(source.buffer);
   const endOffset = zipEndOffset(source);
@@ -202,6 +200,28 @@ async function archiveWithDataDescriptors(
     type: "uint8array",
     compression: "DEFLATE",
     streamFiles: true,
+  });
+}
+
+async function archiveWithZipComment(
+  fixture: SyntheticStoredStage8Package,
+  kind: "archive" | "entry",
+): Promise<Uint8Array> {
+  const archive = new JSZip();
+  let firstEntry = true;
+  for (const [relativePath, content] of fixture.packageBytes) {
+    archive.file(`synthetic-draft/${relativePath}`, content, {
+      createFolders: false,
+      comment: kind === "entry" && firstEntry ? "unmanifested entry comment" : undefined,
+    });
+    firstEntry = false;
+  }
+  archive.file("synthetic-draft/package-manifest.json", fixture.packageManifestBytes, {
+    createFolders: false,
+  });
+  return archive.generateAsync({
+    type: "uint8array",
+    comment: kind === "archive" ? "unmanifested archive comment" : undefined,
   });
 }
 
@@ -277,16 +297,8 @@ function contradictoryLastDescriptorLocalMetadata(content: Uint8Array): Uint8Arr
   assert.equal(view.getUint16(entry.localOffset + 6, true) & 0x0008, 0x0008);
   const differentNonzero = (value: number): number => (value === 1 ? 2 : 1);
   view.setUint32(entry.localOffset + 14, differentNonzero(entry.crc32), true);
-  view.setUint32(
-    entry.localOffset + 18,
-    differentNonzero(entry.compressedSize),
-    true,
-  );
-  view.setUint32(
-    entry.localOffset + 22,
-    differentNonzero(entry.uncompressedSize),
-    true,
-  );
+  view.setUint32(entry.localOffset + 18, differentNonzero(entry.compressedSize), true);
+  view.setUint32(entry.localOffset + 22, differentNonzero(entry.uncompressedSize), true);
   return output;
 }
 
@@ -312,6 +324,45 @@ function encryptedFirstZipEntry(content: Uint8Array): Uint8Array {
   return output;
 }
 
+function insertUnknownLastEntryExtraField(
+  content: Uint8Array,
+  location: "local" | "central",
+): Uint8Array {
+  const source = new Uint8Array(content);
+  const sourceView = new DataView(source.buffer, source.byteOffset, source.byteLength);
+  const endOffset = zipEndOffset(source);
+  const entry = lastZipEntry(source);
+  const field = new Uint8Array([0xfe, 0xca, 0x03, 0x00, 0x58, 0x59, 0x5a]);
+  const headerOffset = location === "local" ? entry.localOffset : entry.centralOffset;
+  const nameLengthOffset = location === "local" ? headerOffset + 26 : headerOffset + 28;
+  const extraLengthOffset = location === "local" ? headerOffset + 28 : headerOffset + 30;
+  const nameLength = sourceView.getUint16(nameLengthOffset, true);
+  const extraLength = sourceView.getUint16(extraLengthOffset, true);
+  const fixedLength = location === "local" ? 30 : 46;
+  const insertionOffset = headerOffset + fixedLength + nameLength + extraLength;
+  const output = new Uint8Array(source.byteLength + field.byteLength);
+  output.set(source.subarray(0, insertionOffset));
+  output.set(field, insertionOffset);
+  output.set(source.subarray(insertionOffset), insertionOffset + field.byteLength);
+  const view = new DataView(output.buffer);
+  view.setUint16(extraLengthOffset, extraLength + field.byteLength, true);
+  const shiftedEndOffset = endOffset + field.byteLength;
+  if (location === "local") {
+    view.setUint32(
+      shiftedEndOffset + 16,
+      sourceView.getUint32(endOffset + 16, true) + field.byteLength,
+      true,
+    );
+  } else {
+    view.setUint32(
+      shiftedEndOffset + 12,
+      sourceView.getUint32(endOffset + 12, true) + field.byteLength,
+      true,
+    );
+  }
+  return output;
+}
+
 function zip64SentinelDirectory(content: Uint8Array): Uint8Array {
   const output = new Uint8Array(content);
   const view = new DataView(output.buffer);
@@ -326,6 +377,88 @@ function outOfBoundsCentralDirectory(content: Uint8Array): Uint8Array {
   const view = new DataView(output.buffer);
   const endOffset = zipEndOffset(output);
   view.setUint32(endOffset + 12, view.getUint32(endOffset + 12, true) + 1, true);
+  return output;
+}
+
+function rewriteZipEntryDeclaredSize(
+  content: Uint8Array,
+  entryName: string,
+  declaredSize: number,
+): Uint8Array {
+  const output = new Uint8Array(content);
+  const view = new DataView(output.buffer, output.byteOffset, output.byteLength);
+  const endOffset = zipEndOffset(output);
+  const entryCount = view.getUint16(endOffset + 10, true);
+  let cursor = view.getUint32(endOffset + 16, true);
+  for (let ordinal = 0; ordinal < entryCount; ordinal += 1) {
+    assert.equal(view.getUint32(cursor, true), 0x02014b50, "synthetic central record");
+    const nameLength = view.getUint16(cursor + 28, true);
+    const extraLength = view.getUint16(cursor + 30, true);
+    const commentLength = view.getUint16(cursor + 32, true);
+    const name = decoder.decode(output.subarray(cursor + 46, cursor + 46 + nameLength));
+    if (name === entryName) {
+      const localOffset = view.getUint32(cursor + 42, true);
+      assert.equal(view.getUint32(localOffset, true), 0x04034b50, "synthetic local record");
+      view.setUint32(cursor + 24, declaredSize, true);
+      if ((view.getUint16(cursor + 8, true) & 0x0008) === 0) {
+        view.setUint32(localOffset + 22, declaredSize, true);
+      }
+      return output;
+    }
+    cursor += 46 + nameLength + extraLength + commentLength;
+  }
+  assert.fail(`Synthetic ZIP entry ${entryName} was not found.`);
+}
+
+function appendJunkInsideLastDeflateEntry(content: Uint8Array, injected: Uint8Array): Uint8Array {
+  const source = new Uint8Array(content);
+  const sourceView = new DataView(source.buffer, source.byteOffset, source.byteLength);
+  const endOffset = zipEndOffset(source);
+  const centralOffset = sourceView.getUint32(endOffset + 16, true);
+  const entryCount = sourceView.getUint16(endOffset + 10, true);
+  let cursor = centralOffset;
+  let lastCentralOffset = -1;
+  let lastLocalOffset = -1;
+  for (let ordinal = 0; ordinal < entryCount; ordinal += 1) {
+    assert.equal(sourceView.getUint32(cursor, true), 0x02014b50, "synthetic central record");
+    const localOffset = sourceView.getUint32(cursor + 42, true);
+    if (localOffset > lastLocalOffset) {
+      lastLocalOffset = localOffset;
+      lastCentralOffset = cursor;
+    }
+    cursor +=
+      46 +
+      sourceView.getUint16(cursor + 28, true) +
+      sourceView.getUint16(cursor + 30, true) +
+      sourceView.getUint16(cursor + 32, true);
+  }
+  assert.ok(lastCentralOffset >= centralOffset);
+  assert.equal(sourceView.getUint16(lastCentralOffset + 10, true), 8, "last entry is DEFLATE");
+  assert.equal(sourceView.getUint16(lastCentralOffset + 8, true) & 0x0008, 0);
+  const compressedSize = sourceView.getUint32(lastCentralOffset + 20, true);
+  const dataOffset =
+    lastLocalOffset +
+    30 +
+    sourceView.getUint16(lastLocalOffset + 26, true) +
+    sourceView.getUint16(lastLocalOffset + 28, true);
+  assert.equal(
+    dataOffset + compressedSize,
+    centralOffset,
+    "last compressed span ends at directory",
+  );
+
+  const output = new Uint8Array(source.byteLength + injected.byteLength);
+  output.set(source.subarray(0, centralOffset), 0);
+  output.set(injected, centralOffset);
+  output.set(source.subarray(centralOffset), centralOffset + injected.byteLength);
+  const view = new DataView(output.buffer);
+  view.setUint32(lastLocalOffset + 18, compressedSize + injected.byteLength, true);
+  view.setUint32(
+    lastCentralOffset + injected.byteLength + 20,
+    compressedSize + injected.byteLength,
+    true,
+  );
+  view.setUint32(endOffset + injected.byteLength + 16, centralOffset + injected.byteLength, true);
   return output;
 }
 
@@ -731,6 +864,35 @@ describe("stored Stage 8 boundary verification", () => {
     );
   });
 
+  it("rejects ZIP archive and per-entry comments outside the exact manifested package", async () => {
+    for (const kind of ["archive", "entry"] as const) {
+      const fixture = await syntheticValidPackage();
+      replaceBundle(fixture, await archiveWithZipComment(fixture, kind));
+
+      await rejection(
+        () => verifyStoredStage8Boundary(fixture.run, fixture.artifacts),
+        "INVALID_ARCHIVE",
+        /comment/,
+      );
+    }
+  });
+
+  it("rejects unknown local and central ZIP extra fields outside the exact package", async () => {
+    for (const location of ["local", "central"] as const) {
+      const fixture = await syntheticValidPackage();
+      replaceBundle(
+        fixture,
+        insertUnknownLastEntryExtraField(artifact(fixture, "bundle").content, location),
+      );
+
+      await rejection(
+        () => verifyStoredStage8Boundary(fixture.run, fixture.artifacts),
+        "INVALID_ARCHIVE",
+        /extra field/,
+      );
+    }
+  });
+
   it("rejects unmanifested bytes between the local records and central directory", async () => {
     const fixture = await syntheticValidPackage();
     replaceBundle(
@@ -783,6 +945,114 @@ describe("stored Stage 8 boundary verification", () => {
       );
     });
   }
+
+  it("bounds actual inflation when a DEFLATE entry understates its output size", async () => {
+    const fixture = await syntheticValidPackage();
+    const target = fixture.packageFiles[0];
+    const expansion = new Uint8Array(5 * 1024 * 1024).fill(0x41);
+    const compressed = await archiveSyntheticStage8Package(
+      fixture.packageBytes,
+      fixture.packageManifestBytes,
+      {
+        override: new Map([[target.path, expansion]]),
+        compression: "DEFLATE",
+      },
+    );
+    replaceBundle(
+      fixture,
+      rewriteZipEntryDeclaredSize(compressed, `synthetic-draft/${target.path}`, target.bytes),
+    );
+
+    const probeArchive = new JSZip();
+    probeArchive.file("probe.txt", "probe");
+    const probe = probeArchive.file("probe.txt");
+    assert.ok(probe);
+    const entryPrototype = Object.getPrototypeOf(probe) as {
+      async: (type: "uint8array") => Promise<Uint8Array>;
+    };
+    const originalAsync = entryPrototype.async;
+    const originalInflateRawSync = zlib.inflateRawSync.bind(zlib);
+    const boundedInflationFailures: Array<{ maxOutputLength: number | undefined; code: unknown }> =
+      [];
+    mock.method(zlib, "inflateRawSync", (input: InputType, options?: ZlibOptions) => {
+      try {
+        return originalInflateRawSync(input, options);
+      } catch (error) {
+        boundedInflationFailures.push({
+          maxOutputLength: options?.maxOutputLength,
+          code: error instanceof Error ? (error as NodeJS.ErrnoException).code : undefined,
+        });
+        throw error;
+      }
+    });
+    let unboundedExtractionCalls = 0;
+    entryPrototype.async = function patchedAsync(type) {
+      unboundedExtractionCalls += 1;
+      return originalAsync.call(this, type);
+    };
+    try {
+      await rejection(
+        () => verifyStoredStage8Boundary(fixture.run, fixture.artifacts),
+        "INVALID_ARCHIVE",
+      );
+      assert.equal(
+        unboundedExtractionCalls,
+        0,
+        "verification must reject through its byte-capped inflater, not JSZip's accumulating async extractor",
+      );
+      assert.ok(
+        boundedInflationFailures.some(
+          (failure) =>
+            failure.maxOutputLength === target.bytes && failure.code === "ERR_BUFFER_TOO_LARGE",
+        ),
+        "the native inflater must enforce the trusted manifest size before accumulating the expansion",
+      );
+    } finally {
+      entryPrototype.async = originalAsync;
+      mock.restoreAll();
+    }
+  });
+
+  it("rejects bytes hidden after a DEFLATE end marker inside its declared compressed span", async () => {
+    const fixture = await syntheticValidPackage();
+    const compressed = await archiveSyntheticStage8Package(
+      fixture.packageBytes,
+      fixture.packageManifestBytes,
+      { compression: "DEFLATE" },
+    );
+    replaceBundle(
+      fixture,
+      appendJunkInsideLastDeflateEntry(compressed, bytes("HIDDEN-AFTER-DEFLATE-END")),
+    );
+
+    await rejection(
+      () => verifyStoredStage8Boundary(fixture.run, fixture.artifacts),
+      "INVALID_ARCHIVE",
+      /compressed boundary/,
+    );
+  });
+
+  it("rejects explicit directory records outside the exact manifested file set", async () => {
+    const fixture = await syntheticValidPackage();
+    const archive = new JSZip();
+    archive.file("synthetic-draft/", new Uint8Array(), {
+      createFolders: false,
+      dir: true,
+    });
+    for (const [relativePath, content] of fixture.packageBytes) {
+      archive.file(`synthetic-draft/${relativePath}`, content, { createFolders: false });
+    }
+    archive.file("synthetic-draft/package-manifest.json", fixture.packageManifestBytes, {
+      createFolders: false,
+    });
+    replaceBundle(fixture, await archive.generateAsync({ type: "uint8array" }));
+
+    await rejection(
+      () => verifyStoredStage8Boundary(fixture.run, fixture.artifacts),
+      "INVALID_ARCHIVE",
+      /directory record/,
+    );
+  });
 
   it("rejects encrypted, ZIP64, and out-of-bounds central-directory records", async () => {
     const encrypted = await syntheticValidPackage();

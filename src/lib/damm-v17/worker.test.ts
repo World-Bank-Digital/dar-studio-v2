@@ -395,6 +395,32 @@ describe("following a run", () => {
     assert.equal(f.calls.rows[0].indicatorId, "1.4");
   });
 
+  it("persists progress events in their emitted order", async () => {
+    const f = fakeStore();
+    const originalRecordRow = f.store.recordRow.bind(f.store);
+    let firstWriteFinished = false;
+    let laterWriteStartedEarly = false;
+    f.store.recordRow = async (...args) => {
+      const event = args[3];
+      if (event.indicatorId === "1.4") {
+        await new Promise((resolve) => setTimeout(resolve, 20));
+        firstWriteFinished = true;
+      } else if (!firstWriteFinished) {
+        laterWriteStartedEarly = true;
+      }
+      return originalRecordRow(...args);
+    };
+
+    const status = await runOne(run(), "w1", deps(f.store, fakeProcess([RESEARCH_OUT], 0).proc));
+
+    assert.equal(status, "done");
+    assert.equal(laterWriteStartedEarly, false, "later progress must wait for earlier persistence");
+    assert.deepEqual(
+      f.calls.rows.map((event) => event.indicatorId),
+      ["1.4", "1.6"],
+    );
+  });
+
   it("takes the final spend from the ledger, not from stdout", async () => {
     // The last line said $1.51. The ledger is the source of record for money, and the
     // two differ whenever a row's cost lands after its progress line.
@@ -460,6 +486,114 @@ describe("following a run", () => {
     await assert.rejects(runOne(run(), "w1", deps(f.store, proc)), /claim is no longer safe/);
     assert.ok(f.calls.heartbeats > 0, "should have checked its claim");
     assert.ok(killed.yes, "should have stopped rather than run alongside the new claimant");
+  });
+
+  it("stops paid work when a progress write proves the claim is no longer active", async () => {
+    const f = fakeStore();
+    f.store.recordRow = async () => false;
+    let outCb: (c: string) => void = () => {};
+    let settleWait: ((code: number | null) => void) | undefined;
+    const killed = { yes: false };
+    const proc: SpawnedProcess = {
+      onStdout: (cb) => (outCb = cb),
+      onStderr: () => {},
+      wait: () =>
+        new Promise<number | null>((resolve) => {
+          settleWait = resolve;
+          outCb(RESEARCH_OUT);
+          setTimeout(() => resolve(0), 40);
+        }),
+      kill: () => {
+        killed.yes = true;
+        settleWait?.(null);
+      },
+    };
+    const d = deps(f.store, proc);
+    d.heartbeatMs = 1_000;
+    d.claimLeaseMs = 5_000;
+
+    await assert.rejects(runOne(run(), "w1", d), /claim is no longer safe/i);
+
+    assert.equal(killed.yes, true, "a conclusive claim-fence miss must stop the paid child");
+    assert.equal(f.calls.finished.length, 0, "a worker without the claim cannot finish the run");
+  });
+
+  it("stops paid work after a rejected progress write while retaining the claim", async () => {
+    const f = fakeStore();
+    f.store.recordRow = async () => {
+      throw new Error("synthetic progress database outage");
+    };
+    let outCb: (c: string) => void = () => {};
+    let settleWait: ((code: number | null) => void) | undefined;
+    const killed = { yes: false };
+    const proc: SpawnedProcess = {
+      onStdout: (cb) => (outCb = cb),
+      onStderr: () => {},
+      wait: () =>
+        new Promise<number | null>((resolve) => {
+          settleWait = resolve;
+          outCb(RESEARCH_OUT);
+          setTimeout(() => resolve(0), 40);
+        }),
+      kill: () => {
+        killed.yes = true;
+        settleWait?.(null);
+      },
+    };
+    const d = deps(f.store, proc);
+    d.heartbeatMs = 1_000;
+    d.claimLeaseMs = 5_000;
+
+    const status = await runOne(run(), "w1", d);
+
+    assert.equal(killed.yes, true, "an unpersistable run must not keep spending");
+    assert.equal(status, "failed");
+    assert.equal(f.calls.finished.length, 1, "the still-owned claim records one terminal failure");
+    assert.match(f.calls.finished[0].reason, /progress.*persist|database outage/i);
+  });
+
+  it("bounds a progress write that never settles and stops further paid work", async () => {
+    const f = fakeStore();
+    let settleWrite: ((recorded: boolean) => void) | undefined;
+    let writeCalls = 0;
+    f.store.recordRow = () => {
+      writeCalls++;
+      if (writeCalls > 1) return Promise.resolve(true);
+      return new Promise<boolean>((resolve) => {
+        settleWrite = resolve;
+      });
+    };
+    let outCb: (c: string) => void = () => {};
+    let settleProcess: ((code: number | null) => void) | undefined;
+    const killed = { yes: false };
+    const proc: SpawnedProcess = {
+      onStdout: (cb) => (outCb = cb),
+      onStderr: () => {},
+      wait: () =>
+        new Promise<number | null>((resolve) => {
+          settleProcess = resolve;
+          outCb(RESEARCH_OUT);
+        }),
+      kill: () => {
+        killed.yes = true;
+        settleProcess?.(null);
+      },
+    };
+    const d = deps(f.store, proc);
+    d.heartbeatMs = 1_000;
+    d.claimLeaseMs = 5_000;
+    d.progressWriteTimeoutMs = 5;
+
+    const runPromise = runOne(run(), "w1", d);
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    const killedBeforeRelease = killed.yes;
+    settleProcess?.(0);
+    settleWrite?.(true);
+    const status = await runPromise;
+
+    assert.equal(killedBeforeRelease, true, "a stuck progress write must not hold paid work open");
+    assert.equal(status, "failed");
+    assert.match(f.calls.finished[0].reason, /progress.*persist|timed out/i);
   });
 
   it("stops paid work before an unconfirmed heartbeat can reach lease expiry", async () => {
@@ -636,16 +770,10 @@ describe("following a run", () => {
     const status = await runOne(run({ pass: "workflow", vendor: null }), "w1", d);
 
     assert.equal(status, "failed");
-    assert.deepEqual(lifecycle, [
-      "prepared",
-      "reconciled",
-      "spawned",
-      "reconciled",
-      "reconciled",
-    ]);
+    assert.deepEqual(lifecycle, ["prepared", "reconciled", "spawned", "reconciled", "reconciled"]);
   });
 
-  it("does not let a rejected completed-stage write bypass package verification", async () => {
+  it("does not let a rejected completed-stage write reach package verification", async () => {
     const f = fakeStore();
     const stage = DAR_WORKFLOW.stages[0];
     const output = [
@@ -685,8 +813,73 @@ describe("following a run", () => {
     const status = await runOne(run({ pass: "workflow", vendor: null }), "w1", d);
 
     assert.equal(status, "failed");
-    assert.match(f.calls.finished[0].reason, /synthetic incomplete package/);
+    assert.match(f.calls.finished[0].reason, /progress.*persist|active claim/i);
   });
+
+  for (const failedWrite of ["rejects", "rejects without a reason", "returns false"] as const) {
+    it(`never reports a verified published workflow done when a stage-progress write ${failedWrite}`, async () => {
+      const f = fakeStore();
+      const stage = DAR_WORKFLOW.stages[0];
+      const output = [
+        JSON.stringify({
+          schema_version: "damm.workflow-event/v1",
+          run_id: "r1",
+          workflow_id: DAR_WORKFLOW.workflow_id,
+          workflow_version: DAR_WORKFLOW.workflow_version,
+          sequence: 1,
+          timestamp: "2026-09-04T00:00:01Z",
+          event: "stage_complete",
+          stage_id: stage.id,
+          stage_ordinal: stage.ordinal,
+          attempt: 1,
+          elapsed_seconds: 10,
+          spent_usd: 0,
+          cumulative_spent_usd: 0,
+          artifacts: [],
+        }),
+        JSON.stringify({
+          schema_version: "damm.workflow-event/v1",
+          run_id: "r1",
+          workflow_id: DAR_WORKFLOW.workflow_id,
+          workflow_version: DAR_WORKFLOW.workflow_version,
+          sequence: 2,
+          timestamp: "2026-09-04T00:00:02Z",
+          event: "workflow_complete",
+        }),
+      ].join("\n");
+      const p = fakeProcess([`${output}\n`], 0);
+      const d = deps(f.store, p.proc);
+      let published = false;
+      d.publishWorkflowArtifacts = async () => {
+        published = true;
+      };
+      if (failedWrite === "rejects") {
+        f.store.recordRow = async () => {
+          throw new Error("synthetic progress database failure");
+        };
+      } else if (failedWrite === "rejects without a reason") {
+        f.store.recordRow = () => Promise.reject();
+      } else {
+        f.store.recordRow = async () => false;
+      }
+
+      if (failedWrite === "returns false") {
+        await assert.rejects(
+          runOne(run({ pass: "workflow", vendor: null }), "w1", d),
+          /claim is no longer safe/i,
+        );
+        assert.equal(published, false);
+        assert.equal(f.calls.finished.length, 0);
+        return;
+      }
+
+      const status = await runOne(run({ pass: "workflow", vendor: null }), "w1", d);
+
+      assert.equal(status, "failed");
+      assert.equal(published, false);
+      assert.match(f.calls.finished[0].reason, /progress.*(record|persist)|active claim/i);
+    });
+  }
 
   it("turns workflow budget exhaustion into a terminal failure, not a top-up state", async () => {
     const f = fakeStore();
@@ -850,7 +1043,11 @@ describe("following a run", () => {
 
     settleHeartbeat(false);
     await new Promise((resolve) => setImmediate(resolve));
-    assert.equal(killed.yes, false, "a late heartbeat must not signal a stale PID or process group");
+    assert.equal(
+      killed.yes,
+      false,
+      "a late heartbeat must not signal a stale PID or process group",
+    );
   });
 
   it("does not report a verified workflow done when its terminal claim write is rejected", async () => {
@@ -909,6 +1106,31 @@ describe("draining the queue", () => {
     assert.equal(handled, 1);
     assert.equal(f.calls.finished[0].status, "failed");
     assert.match(f.calls.finished[0].reason, /python not found/);
+  });
+
+  it("stops draining when the terminal claim fence rejects the write", async () => {
+    const f = fakeStore([run({ id: "lost-claim" }), run({ id: "must-remain-queued" })]);
+    let finishAttempts = 0;
+    let pipelineStarts = 0;
+    f.store.finishRun = async () => {
+      finishAttempts++;
+      return false;
+    };
+
+    await assert.rejects(
+      drain("w1", {
+        ...deps(f.store, fakeProcess([RESEARCH_OUT], 0).proc),
+        spawnPipeline: () => {
+          pipelineStarts++;
+          return fakeProcess([RESEARCH_OUT], 0).proc;
+        },
+      }),
+      /terminal status was not recorded under its active claim/i,
+    );
+
+    assert.equal(f.calls.claims, 1, "a rejected terminal fence must end this drain pass");
+    assert.equal(pipelineStarts, 1, "the worker must not start the next queued paid run");
+    assert.equal(finishAttempts, 1, "the same rejected terminal write must not be retried");
   });
 
   it("records one terminal failure and never requeues a coordinator exit 78", async () => {
@@ -2209,9 +2431,7 @@ function rewriteZipEntryDeclaredSize(
     const nameLength = view.getUint16(cursor + 28, true);
     const extraLength = view.getUint16(cursor + 30, true);
     const commentLength = view.getUint16(cursor + 32, true);
-    const name = new TextDecoder().decode(
-      output.subarray(cursor + 46, cursor + 46 + nameLength),
-    );
+    const name = new TextDecoder().decode(output.subarray(cursor + 46, cursor + 46 + nameLength));
     if (name === entryName) {
       const localOffset = view.getUint32(cursor + 42, true);
       assert.equal(view.getUint32(localOffset, true), 0x04034b50, "synthetic local record");

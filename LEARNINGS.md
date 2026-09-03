@@ -1302,9 +1302,10 @@ one end-to-end ownership boundary.
 **Fix:** heartbeat from the start of preparation through final acknowledgement;
 abort with margin before lease expiry; assert claim ownership at boundaries;
 launch the coordinator in its own POSIX process group and terminate TERM-to-KILL;
-make a false final acknowledgement fatal; inspect raw ZIP names and declared
-sizes before any entry decompression; and prove that parsed local records cover
-every byte before the central directory. Clear the active process handle as soon
+make a false final acknowledgement fatal; inspect raw ZIP names and metadata,
+then inflate only to the exact manifest-trusted byte count while verifying
+compressed-span consumption, CRC-32, and SHA-256; and prove that parsed local
+records cover every byte before the central directory. Clear the active process handle as soon
 as the coordinator wait settles, before awaiting or reacting to a late heartbeat;
 otherwise a delayed `false` beat can signal an already-exited or recycled PID or
 process group after a successful terminal acknowledgement. The process wrapper
@@ -1418,3 +1419,125 @@ and unsigned-descriptor compatibility/contradiction regressions in the Stage 8
 boundary suite.
 **Meta-lesson:** an exhaustive logical manifest is not an exhaustive container
 proof unless the parser also accounts for every physical byte in the container.
+
+### L54 — A declared ZIP size is not a decompression limit
+
+**Incident:** the Stage 8 verifier compared an entry's declared uncompressed
+size with the package manifest before asking JSZip to inflate it. A forged
+DEFLATE stream could keep the small declared size while expanding far beyond it,
+so the comparison happened before the dangerous allocation rather than bounding
+the allocation itself. A valid stream could also hide trailing compressed bytes
+after its end marker inside the declared span.
+**Root cause:** untrusted container metadata was treated as an enforcement
+mechanism, and a name-keyed high-level archive reader obscured both actual input
+consumption and the allocation boundary.
+**Fix:** parse the raw entry records once; reject directory, duplicate, ZIP64,
+encrypted, commented, extra-field-bearing, unsupported, or physically
+unaccounted records; reject an EOCD comment; inflate DEFLATE with
+`maxOutputLength` set from the trusted package manifest; require the inflater to
+consume the exact compressed span; and bind the resulting byte length, CRC-32,
+and SHA-256. Stored entries must have identical compressed and trusted sizes.
+The worker's publication path uses the same extractor.
+**Pinned by:** Stage 8 regressions for understated five-megabyte expansion,
+hidden post-end-marker bytes, explicit directory entries, descriptor
+contradictions, duplicates, interstitial bytes, and valid STORE/DEFLATE packages.
+**Meta-lesson:** inspect metadata to reject impossible containers, but derive
+resource limits only from a separately trusted manifest and enforce them during
+the resource-consuming operation.
+
+### L55 — Progress persistence is part of workflow completion
+
+**Incident:** a workflow could emit `stage_complete` or `workflow_complete`,
+then a progress write could reject, return `false`, or remain pending forever;
+the worker waited with `Promise.allSettled()` but ignored rejection and could
+still verify, publish, and report the run done, or could hang past its claim
+lease. Concurrent writes could also settle out of stream order. A promise can
+reject with no reason, so using the rejection value itself as the failure flag
+lost that case.
+**Root cause:** stream telemetry was classified as advisory even though it is the
+claim-fenced durable ordering record for stage and terminal events.
+**Fix:** serialize progress writes in stream order and bound each write with a
+30-second persistence timeout. Every write is wrapped in a sticky, separate
+failure boolean; rejection, timeout, or `false` means the active-claim write
+failed. The worker immediately terminates the coordinator, records a non-secret
+diagnostic, clears the observed completion signal, and prevents final
+verification/publication/success. A lost-claim `false` kills the child without
+attempting a terminal write; a terminal finish that loses its fence stops queue
+drain and does not claim another run. Falsy rejection reasons are still failures.
+**Pinned by:** worker regressions for ordered writes, an `Error` rejection, a
+reasonless `Promise.reject()`, a `false` return, a rejected completed-stage
+write, a never-settling write, lost-claim child termination, and a false terminal
+finish acknowledgement.
+**Meta-lesson:** when success depends on durable event order, observing a promise
+is not enough; its successful claim-fenced result is part of the product's commit
+protocol.
+
+### L56 — A frozen deploy must bind source, build inputs, and upload separately
+
+**Incident:** reopening Netlify's Git build gate introduced a moving-`main`
+race and cleanup hazards. The replacement local CLI plan initially had further
+failures: Netlify masks production secret values for builds outside Netlify;
+CLI 27.4.2 rejects `--context` with `--no-build` and reads the `dev` Functions
+environment while packaging; its config store rewrites `config.json` even for
+`env:get`; a deterministic Docker volume name could silently reuse stale state;
+and clearing inherited exports could change the selected Docker daemon. Passing
+secrets with Docker `--env` would also retain resolved values in container
+metadata until removal. An unguarded `cd` inside a tested Bash subshell could
+continue from the caller's dirty checkout because `errexit` is suppressed in
+conditional command lists.
+**Root cause:** source selection, build environment, and artifact upload were
+treated as one provider action even though each has different identity and
+secret semantics.
+**Fix:** keep `stop_builds=true` throughout; establish a deploy-history baseline;
+re-read cached and direct GitHub `main`; copy an exact clean detached worktree
+into a Docker-generated, commit-labeled, ownership-tracked, asserted-empty
+ephemeral volume; and install without credentials in one digest-pinned
+Linux/amd64 Node 22.22.3 image. Pre-existing resources are never cleanup targets. Preserve only Docker client
+selection while clearing inherited exports. Send allowlisted build values as a
+fixed-order NUL-framed stdin stream, build in a second invocation of the same
+image with no CLI credential, then clear secrets. Before upload, scan generated
+client, server, and Function bytes for
+plaintext, Base64, or URI-encoded forms of every build secret, reporting only
+variable names and paths. Only after that audit, start a third container, mount
+the operator's CLI config at a separate read-only path, and copy it mode `0600`
+into container tmpfs so CLI mutations are ephemeral. Require the remote
+`dev`/Functions runtime gate to be `nodejs22.x`, assert that no alternate
+Function or Edge Function directory exists, then use the exact local CLI binary
+with explicit audited client/Function paths and
+`deploy --prod --no-build --skip-functions-cache`. Guard `cd` explicitly and
+fail if the volume or worktree survives cleanup. Runtime Functions receive
+their separately verified Production-scoped application environment.
+**Pinned by:** deployment regressions for the frozen baseline, two-source commit
+recheck, exact worktree, fresh empty volume, digest-pinned Linux image, exact CLI
+and packager, secretless install, NUL-framed build inputs, Docker-context
+preservation, writable ephemeral CLI config, secret scrub, runtime re-read,
+explicit deploy paths, fresh `--no-build` packaging, guarded directory change,
+fail-closed cleanup, and successful deployment-only decline.
+**Meta-lesson:** an immutable release is a chain of bindings. Freezing automatic
+builds prevents races only if the replacement path also proves the exact source,
+supplies build secrets without disclosure, and uploads without rebuilding.
+
+### L57 — Native serverless bundles must be audited on the deployment architecture
+
+**Incident:** a successful macOS Netlify build produced a Function archive that
+could not load PDF extraction in production: the packager omitted canvas
+JavaScript/native files, and the PDF parser later required a dynamically loaded
+`pdfjs-dist/legacy/build/pdf.worker.mjs`. A broad
+`@napi-rs/canvas-*/**` include was also unsafe: the locked optional-dependency
+tree can contain both glibc and musl packages. Conversely, the packager may trace
+a harmless foreign-platform `package.json`, so rejecting a package solely by
+its directory name created a false stop.
+**Root cause:** a JavaScript import graph is not a complete native/dynamic asset
+graph, and packaging on the operator's host says nothing about the target ABI.
+**Fix:** use exact includes for the canvas root, Linux x64 GNU package, and PDF.js
+worker. Package and deploy only in the same digest-pinned Linux/amd64 image with
+exact `@netlify/zip-it-and-ship-it@15.5.0`; require safe unique entries, exactly
+one `.node` binary and its exact GNU path, streamed Node 22 metadata, and the
+dynamic worker; then extract the archive and perform real PDF text extraction.
+Allow inert optional-package metadata, never a second native binary.
+**Pinned by:** deployment-contract and Function-bundle regressions for exact
+includes, wrong/missing native binaries, missing canvas bindings, missing PDF.js
+worker, metadata drift, malformed archive entries, and a generated PDF smoke.
+**Meta-lesson:** a serverless build is ready only when its final archive—not the
+source tree—runs a representative workload under the target OS, CPU, libc, and
+runtime contract.

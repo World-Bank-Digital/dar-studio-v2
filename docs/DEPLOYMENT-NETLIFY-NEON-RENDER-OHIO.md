@@ -21,7 +21,7 @@ This topology is not ready merely because the web build and worker start. Do not
 
 1. **Large Stage 8 downloads use the Ohio Render gateway, not a Netlify response.** DAR Studio permits a 250 MB complete bundle, 50 MB individual artifacts, and 400 MB total artifact set. Netlify Functions allow 6 MB buffered responses and 20 MB streamed responses. Netlify therefore authorizes the signed-in owner or exact active package reviewer and returns a no-store JSON grant containing a 60-second capability bound to run/artifact-set/key/SHA-256, authenticated subject, and—when applicable—the exact active reviewer assignment. The browser sends that capability only in the `Authorization` header to the fixed `dar-studio-artifacts` endpoint; it never appears in a URL. The gateway revalidates live access in Neon, retrieves the exact currently published row, checks the stored size and SHA-256 against the actual immutable bytes, and streams bounded chunks with `private, no-store`. The repository suite deterministically streams and hashes a synthetic artifact larger than 20 MiB without committing a large fixture; the live smoke separately proves the deployed JSON-grant, CORS, authorization, and byte path with a real immutable artifact. Health, exact-origin CORS, non-disclosing invalid-token behavior, live assignment revocation, and both proofs are hard acceptance gates. A Render worker disk alone is not a download gateway.
 2. **Hosted database configuration must fail closed.** On Netlify, a missing or blank `DATABASE_URL` must never select the ephemeral PGLite fallback. A production or preview deployment without its intended database must fail before serving a usable application.
-3. **Deploy Previews must not share staging secrets.** `DATABASE_URL`, authentication secrets, encryption keys, email credentials, and platform AI keys belong only to the production deploy context of this staging project. Disable Deploy Previews and branch deploys. The committed build preflight additionally requires Netlify `CONTEXT=production` and `BRANCH=main`, so a preview or branch build fails even if secrets were scoped incorrectly. A preview that can read or write the staging database is a hard stop.
+3. **Deploy Previews must not share staging secrets, and production must build only the reviewed commit.** `DATABASE_URL`, authentication secrets, encryption keys, email credentials, and platform AI keys belong only to the production deploy context of this staging project. Disable Deploy Previews and branch deploys. The committed build preflight requires Netlify `CONTEXT=production`, `BRANCH=main`, and a full `COMMIT_REF` exactly equal to `EXPECTED_DEPLOY_GIT_SHA`, so a preview, branch build, or different commit fails even if secrets were scoped incorrectly. A preview that can read or write the staging database is a hard stop.
 4. **Deployed social sign-in must be honest.** The baked Grok preview OAuth client accepts only `*.grok-sandbox.com` callbacks. It is not a Netlify credential. Either register a per-app broker client with the two exact callbacks in this guide, or use a committed deployment mode that keeps email/password auth enabled while hiding Google and X. `VITE_AUTH_ENABLED=false` is not an email-only mode: with a hosted database it intentionally fails closed, and without that guard it would collapse users into the shared development identity.
 5. **Public self-sign-up exposes platform spend.** A registered user can create a country and launch the country-only autonomous workflow, which consumes the worker's platform vendor keys. Keep the staging Netlify project Private unless an application-level invitation/launch authorization and abuse controls have been implemented. Use one authorized Netlify member session to switch among the three application test identities, or invite each intended reviewer through Netlify on a plan that supports it.
 6. **Migration 0023 follows 0019 through 0022 before the repinned Render worker deploys.** Take a Neon recovery snapshot, prove there are no active workflows, run migrations with the direct Neon connection, and verify exactly one ledger row for each current migration. `0019_progressive_stage_artifacts.sql` first installs transactionally sealed, owner-only Stage 1–7 publications without historical backfill. `0020_damm_source_pin_cutover.sql` then advances the worker to canonical DAMM PR #8 merge `e866e7a1fffd5edb14f53da5e038f69b2ec29af2` and renderer SHA-256 `95dcef014086f6c01f58678db426fb48d87546b8b6a4315c530801b1ff74c5be`, containing independently checkpointed bounded Stage 6 repair chunks and consulting-report exports. `0021_damm_source_pin_cutover.sql` advances only the source pin to canonical DAMM PR #9 merge `f7dfbbb647e0a45d996e94f62d49f2218d518c94`, which normalizes Stage 6 and Stage 8 XLSX bytes to frozen workflow/package timestamps. `0022_damm_source_pin_cutover.sql` advances only the source pin to canonical DAMM PR #10 merge `ff5aecbfec5c2694a61f282c27db74ea8b99b28c`, which adds bounded, crash-safe Stage 4 scan recovery and prevents technical or upstream scan failures from being accepted as a complete lane. `0023_damm_source_pin_cutover.sql` advances only the source pin to canonical DAMM PR #12 merge `68e1994b5facfaaf0ddc49ba3bec108d9bde2c55`, which adds durable pre-transport spend reservation, replayable paid outcomes, terminal paid-failure propagation, semantic downstream gates, bounded artifact handling, and production-byte-bound simulations. The renderer and remaining methodology identity stay unchanged. Only after all five gates pass may the Render worker and artifact gateway deploy; neither service runs migrations.
@@ -56,6 +56,9 @@ Relevant platform documentation:
 - [Netlify: import an existing Git repository](https://docs.netlify.com/welcome/add-new-site/)
 - [Netlify: Functions configuration, regions, and limits](https://docs.netlify.com/build/functions/configuration/)
 - [Netlify: environment variables](https://docs.netlify.com/build/environment-variables/get-started/)
+- [Netlify: secret values outside Netlify builds](https://docs.netlify.com/build/environment-variables/secrets-controller/)
+- [Netlify: stop and activate builds](https://docs.netlify.com/build/configure-builds/stop-or-activate-builds/)
+- [Netlify: manual production deploys with the CLI](https://docs.netlify.com/api-and-cli-guides/cli-guides/get-started-with-cli/)
 - [Netlify: Deploy Previews](https://docs.netlify.com/deploy/deploy-types/deploy-previews/)
 - [Netlify: project visibility](https://docs.netlify.com/manage/security/secure-access-to-sites/project-visibility/)
 - [Neon: create and manage projects](https://neon.com/docs/manage/projects)
@@ -91,6 +94,7 @@ The wizard writes an ignored, mode-`0600` operator file. Never commit it. In the
 | Value                                                                                                               | Source                                                                                                                                | Destination                                                                                                                | Classification                                                                                                             |
 | ------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------- |
 | `DEPLOY_GIT_SHA`                                                                                                    | merged `origin/main`                                                                                                                  | local deployment record; compare with Netlify and Render deploys                                                           | integrity evidence                                                                                                         |
+| `EXPECTED_DEPLOY_GIT_SHA`                                                                                           | exact `DEPLOY_GIT_SHA`                                                                                                                | Netlify Production/Builds and the isolated local production build                                                          | public integrity gate; must exactly equal full `COMMIT_REF`                                                                |
 | `NEON_PROJECT_NAME`                                                                                                 | operator, recommended `dar-studio-staging`                                                                                            | Neon project name; local record                                                                                            | public configuration                                                                                                       |
 | `NEON_PROJECT_ID`                                                                                                   | Neon Project settings                                                                                                                 | local record                                                                                                               | public identifier                                                                                                          |
 | `NEON_REGION`                                                                                                       | fixed `aws-us-east-2`                                                                                                                 | Neon project; local record                                                                                                 | public configuration                                                                                                       |
@@ -134,11 +138,13 @@ The wizard writes an ignored, mode-`0600` operator file. Never commit it. In the
 | `NETLIFY_PROJECT_SLUG`                                                                                              | Netlify project creation                                                                                                              | production hostname and local record                                                                                       | public identifier                                                                                                          |
 | `NETLIFY_SITE_ID`                                                                                                   | Project configuration > General > Project information                                                                                 | local record                                                                                                               | public identifier                                                                                                          |
 | `NETLIFY_URL`                                                                                                       | Domain management > Production domains                                                                                                | auth base URL, smoke tests, local record                                                                                   | public configuration                                                                                                       |
-| Netlify Basic-protection password, when explicitly approved                                                         | generated once by the authorized operator                                                                                             | operator password manager or macOS Keychain only                                                                          | persistent access credential; never source, `.env.staging`, logs, screenshots, or handoff text                             |
+| Netlify Basic-protection password, when explicitly approved                                                         | generated once by the authorized operator                                                                                             | operator password manager or macOS Keychain only                                                                           | persistent access credential; never source, `.env.staging`, logs, screenshots, or handoff text                             |
 | `NETLIFY_FUNCTION_REGION`, `NETLIFY_DEPLOY_PREVIEWS`, `NETLIFY_PROJECT_VISIBILITY`                                  | verified Netlify settings                                                                                                             | local deployment record                                                                                                    | public configuration; fixed `cmh`, `disabled`, `private`                                                                   |
+| `AWS_LAMBDA_JS_RUNTIME`                                                                                             | fixed `nodejs22.x`                                                                                                                    | Netlify **all deploy contexts**, Functions scope only                                                                      | public runtime gate; sole deliberate cross-context environment exception                                                   |
 | `NETLIFY_VISITOR_ACCESS_MODE`, `NETLIFY_VISITOR_ACCESS_SCOPE`                                                       | post-save, freshly reloaded Visitor access summary                                                                                    | local deployment record                                                                                                    | non-secret evidence; `team` or explicitly authorized `basic`, plus fixed `all-deploys`                                     |
 | `NETLIFY_ANONYMOUS_DENIAL_VERIFIED`, `NETLIFY_AUTHORIZED_ACCESS_VERIFIED`                                           | fresh anonymous and authorized live probes                                                                                            | local deployment record                                                                                                    | non-secret runtime evidence; fixed `true` only after both probes pass                                                      |
 | `NETLIFY_ENVIRONMENT_VERIFIED`                                                                                      | exact Production context/scope review                                                                                                 | local deployment record                                                                                                    | integrity evidence; fixed `true` only after review                                                                         |
+| `NETLIFY_BASELINE_DEPLOY_ID`, `NETLIFY_BASELINE_DEPLOY_SHA`                                                         | final deploy-history row before the frozen manual release                                                                             | local deployment record                                                                                                    | confidential operational ID and integrity evidence                                                                         |
 | `NETLIFY_DEPLOY_ID`, `NETLIFY_DEPLOY_SHA`                                                                           | successful production deploy details                                                                                                  | local deployment record and commit comparison                                                                              | confidential operational ID and integrity evidence                                                                         |
 | `RENDER_BLUEPRINT_ID`                                                                                               | Render Blueprint Settings/URL                                                                                                         | local record                                                                                                               | public identifier                                                                                                          |
 | `RENDER_BLUEPRINT_AUTO_SYNC`                                                                                        | verified Blueprint Settings                                                                                                           | local deployment record                                                                                                    | public configuration; fixed `disabled`                                                                                     |
@@ -362,15 +368,23 @@ first must remain 3/8 at `$28.1829` with three stage publications and 18 stage
 artifacts; the second must remain 5/8 at `$29.64701` with zero stage
 publications/artifacts. Any difference is a hard stop before a provider build.
 
-### 8. Create the Netlify project
+### 8. Import or verify the Netlify project, then freeze builds
 
 Dashboard path: **Netlify team > Projects > Add new project > Import an existing project > GitHub**.
 
-1. Select the exact `World-Bank-Digital/dar-studio-v2` repository.
+1. For a new site, import the exact `World-Bank-Digital/dar-studio-v2`
+   repository. For an existing site, verify that link in place; do not create a
+   duplicate project.
 2. Set the production branch to `main`.
 3. Use the build command and publish directory committed in `netlify.toml`; do not replace them with remembered Vercel settings.
 4. Choose an unambiguous slug such as `dar-studio-staging` and capture the resulting `https://<slug>.netlify.app` URL.
 5. Capture the site ID from **Project configuration > General > Project information**.
+6. Wait until the expected initial deploy reaches a terminal state, canceling
+   it first if needed. It is not acceptance evidence.
+7. Immediately stop Netlify builds. Save, reload or use a fresh API read, and
+   require `stop_builds=true`.
+8. Record the latest deploy ID and displayed commit (or `none`) as the frozen
+   deploy-history baseline. Account for any later deploy before proceeding.
 
 If Netlify attempts a deploy before environment variables exist, the hosted application must fail closed. That failed first deploy is not a smoke pass. Never accept a live PGLite-backed staging site.
 
@@ -458,37 +472,150 @@ For `dar-studio-artifacts`, open `https://<gateway>.onrender.com/healthz`. Requi
 
 Any `[worker-checkout] failed:`, `[worker-preflight] failed:`, `[worker-entrypoint] failed:`, gateway startup/database failure, checkout drift, wrong commit, absent renderer, invalid health response, or repeated crash/restart is a hard stop. Do not launch a workflow to diagnose a failed preflight.
 
-### 13. Set Netlify production-only environment variables
+### 13. Set Netlify environment variables
 
 Dashboard path: **Project configuration > Environment variables > Add a variable**.
 
-Apply every value only to the **Production** deploy context. Use the narrowest scope:
+Every application value and every secret belongs only to the **Production** deploy
+context. There is one narrow, non-secret exception: set
+`AWS_LAMBDA_JS_RUNTIME=nodejs22.x` for **all deploy contexts**, Functions scope
+only. Pinned CLI 27.4.2 packages a `--no-build` Function using the `dev`
+Functions environment, so a Production-only runtime setting is not visible to
+that packaging path and silently defaults to a newer runtime. Deploy Previews
+remain disabled; this exception contains no database, application, or credential
+value.
 
-| Key                                                | Scope                | Required                                               |
-| -------------------------------------------------- | -------------------- | ------------------------------------------------------ |
-| `DATABASE_URL` (pooled)                            | Builds and Functions | yes                                                    |
-| `MIGRATION_DATABASE_URL` (direct)                  | Builds only          | yes                                                    |
-| `DAR_KEY_SECRET`                                   | Builds and Functions | yes                                                    |
-| `BETTER_AUTH_SECRET`                               | Builds and Functions | yes                                                    |
-| `BETTER_AUTH_URL`                                  | Builds and Functions | yes                                                    |
-| `VITE_AUTH_ENABLED=true`                           | Builds and Functions | yes                                                    |
-| `VITE_PUBLIC_HOSTNAME`                             | Builds               | yes                                                    |
-| `VITE_GROK_AUTH_ENABLED`                           | Builds and Functions | yes                                                    |
-| `GROK_AUTH_ISSUER`, client ID, client secret       | Builds and Functions | only for broker mode                                   |
-| `ARTIFACT_GATEWAY_URL`, `ARTIFACT_DELIVERY_SECRET` | Builds and Functions | yes                                                    |
-| `DAR_ADMIN_EMAILS`                                 | Functions            | optional                                               |
-| `RESEND_API_KEY`, `EMAIL_FROM`                     | Functions            | optional but required for real password-reset delivery |
-| `XAI_API_KEY`                                      | Functions            | optional platform key                                  |
+Use the narrowest scope:
+
+| Key                                                | Context    | Scope                | Required                                               |
+| -------------------------------------------------- | ---------- | -------------------- | ------------------------------------------------------ |
+| `AWS_LAMBDA_JS_RUNTIME=nodejs22.x`                 | all        | Functions            | yes; non-secret runtime gate                           |
+| `DATABASE_URL` (pooled)                            | Production | Builds and Functions | yes                                                    |
+| `MIGRATION_DATABASE_URL` (direct)                  | Production | Builds only          | yes                                                    |
+| `EXPECTED_DEPLOY_GIT_SHA`                          | Production | Builds only          | yes; exact reviewed 40-character commit SHA            |
+| `DAR_KEY_SECRET`                                   | Production | Builds and Functions | yes                                                    |
+| `BETTER_AUTH_SECRET`                               | Production | Builds and Functions | yes                                                    |
+| `BETTER_AUTH_URL`                                  | Production | Builds and Functions | yes                                                    |
+| `VITE_AUTH_ENABLED=true`                           | Production | Builds and Functions | yes                                                    |
+| `VITE_PUBLIC_HOSTNAME`                             | Production | Builds               | yes                                                    |
+| `VITE_GROK_AUTH_ENABLED`                           | Production | Builds and Functions | yes                                                    |
+| `GROK_AUTH_ISSUER`, client ID, client secret       | Production | Builds and Functions | only for broker mode                                   |
+| `ARTIFACT_GATEWAY_URL`, `ARTIFACT_DELIVERY_SECRET` | Production | Builds and Functions | yes                                                    |
+| `DAR_ADMIN_EMAILS`                                 | Production | Functions            | optional                                               |
+| `RESEND_API_KEY`, `EMAIL_FROM`                     | Production | Functions            | optional but required for real password-reset delivery |
+| `XAI_API_KEY`                                      | Production | Functions            | optional platform key                                  |
 
 Mark database URLs, encryption/auth secrets, OAuth client secrets, mail keys, and AI keys as **Contains secret values**. The direct URL is stored under `MIGRATION_DATABASE_URL`, never under the local-only name `DATABASE_URL_DIRECT`. Do not set either database URL for Deploy Preview, branch deploy, Preview Server, or local contexts. Netlify environment changes require a new deploy. The migrator must prefer `MIGRATION_DATABASE_URL`, take its deployment advisory lock, and leave the pooled URL for application runtime.
 
 ### 14. Deploy and verify the Netlify web application
 
-Trigger a production deploy of the captured `DEPLOY_GIT_SHA`. Require:
+Keep Deploy Previews disabled and `stop_builds=true` throughout this sequence.
+Netlify documents that stopped builds still permit a local CLI build followed
+by a manual deploy. Perform the complete install, build, Function audit, and
+upload in the pinned Linux/amd64 release image
+`node:22.22.3-bookworm@sha256:46e94f8cf91baab69a2deb3153e74eeffd73c20c7cc1d8432f5b96469eaa0322`.
+This binds the native Function bundle to Netlify's Linux x64 glibc runtime and
+avoids a branch-HEAD race or open build-gate interval.
 
-- the deploy reports the exact merged `main` commit;
-- build preflight accepts only `CONTEXT=production` and `BRANCH=main`; a deploy-preview, branch-deploy, dev, missing context, or missing/wrong branch must fail closed;
+1. With builds still frozen, refresh cached origin/main and direct GitHub main;
+   they must both equal DEPLOY_GIT_SHA. Re-read Netlify and require
+   `stop_builds=true`, previews disabled, and no deploy after the recorded
+   deploy-history baseline.
+2. Authenticate pinned `netlify-cli@27.4.2` interactively and verify the exact
+   account and site ID. Do not create or save an automation token. Require a
+   trusted local Docker engine. Only the final deploy container receives the
+   interactive CLI configuration: it mounts one read-only source file, copies it
+   mode `0600` into writable ephemeral tmpfs, and discards that copy with the
+   container. CLI 27.4.2 rewrites its global configuration even for `env:get`,
+   so mounting the live operator file directly at its write location is both
+   unsafe and nonfunctional. Install, application build, secret scanning, and
+   Function audit receive no CLI credential. No container receives
+   `NETLIFY_AUTH_TOKEN`.
+3. Create a temporary clean detached worktree at exact `DEPLOY_GIT_SHA`; require
+   its `HEAD` and clean status, install an exit/signal cleanup trap, and create
+   one Docker-generated, release-labeled ephemeral volume. Require its returned
+   identifier and exact commit label, assert the new volume is empty before
+   copying, and remove only a volume this process marked as created whose label
+   still matches. Fail if it or the worktree survives cleanup. In the pinned
+   image, copy the clean tree into that volume and run `npm ci` with no operator
+   secret or provider credential present. Require Node `v22.22.3`,
+   `netlify-cli@27.4.2`, and
+   `@netlify/zip-it-and-ship-it@15.5.0` exactly.
+4. Netlify masks secret values when a production-context build runs outside
+   Netlify. Therefore, do not ask the CLI to build. In a second invocation of
+   the same pinned image and volume, strip inherited host exports and allowlist
+   only the Docker client-selection variables needed to reach the already
+   verified engine. Send required build values as a fixed-order NUL-framed stdin
+   stream and export them only inside the short-lived container; do not use
+   Docker `--env` for a secret because Docker persists resolved `Config.Env`
+   values until container removal. Map
+   `DATABASE_URL_DIRECT` to `MIGRATION_DATABASE_URL`, bind `NETLIFY=true`,
+   `CONTEXT=production`, `BRANCH=main`, and both commit variables to
+   `DEPLOY_GIT_SHA`, then run `npm run build` directly. Do not place a secret in
+   a CLI argument, generated file, or output.
+5. Before upload, scan every regular, non-symbolic file under `dist` and
+   `.netlify` for the exact
+   database, auth, encryption, artifact, and selected broker secret in plaintext,
+   Base64, and URI-encoded form. The scanner reports only variable names and file
+   paths; any match, unreadable entry, symlink, or non-file output is a hard
+   stop. Then clear every build secret from the container environment.
+6. Still in the same pinned Linux/amd64 image, package a separate audit archive
+   with the exact committed Function configuration. Require one streamed
+   Functions-v2 `server` route on `/*`, runtime `nodejs22.x`, safe and unique ZIP
+   names, and exactly one native binary:
+   `@napi-rs/canvas-linux-x64-gnu/skia.linux-x64-gnu.node`. Require the canvas
+   JavaScript bindings, `pdf-parse`, and the exact dynamic PDF.js worker
+   `pdfjs-dist/legacy/build/pdf.worker.mjs`; then extract the audited archive and
+   successfully parse a bounded generated PDF. A Darwin, arm64, musl, missing
+   worker, malformed archive, or failed real PDF parse is a hard stop. Harmless
+   optional-package metadata may be present, but no second `.node` binary may be.
+7. Start a third invocation of the same pinned image only after the build and
+   Function audit pass. Send only the non-secret site ID and commit SHA on its
+   NUL-framed stdin; mount the operator config read-only at its separate source
+   path and copy it into writable container tmpfs. Query Netlify's remote
+   `dev`/Functions value and require
+   `AWS_LAMBDA_JS_RUNTIME=nodejs22.x` immediately before upload. Then use the
+   exact local `./node_modules/.bin/netlify` binary and Linux volume to upload
+   once with `netlify deploy --prod --no-build --skip-functions-cache`, explicit
+   `--dir dist/client`, explicit `--functions .netlify/v1/functions`, and the
+   verified `--site <site-id>`; title it
+   `DAR Studio release <DEPLOY_GIT_SHA>`. `--skip-functions-cache`
+   forces a fresh Function package rather than reusing a prior host/architecture
+   cache. The explicit client and Function paths override any historical remote
+   `functions_dir`; require `netlify/functions`, `.netlify/functions`,
+   `.netlify/functions-internal`, `.netlify/edge-functions`,
+   `.netlify/v1/edge-functions`, `.netlify/edge-functions-dist`, every Netlify
+   blob directory, `.netlify/deploy-config`, and
+   `.netlify/internal/db/migrations` to be absent so no unaudited Function, Edge
+   Function, blob, or extension input exists. The deployed Function obtains
+   application runtime values from the separately verified Production-scoped
+   Netlify environment; no local secret is forwarded as a deploy argument.
+8. `EXPECTED_DEPLOY_GIT_SHA=<DEPLOY_GIT_SHA>` must be supplied to the direct
+   local build from the operator value already configured in Netlify. The
+   committed first preflight rejects a missing, malformed, or unequal
+   `COMMIT_REF` before Vite and before migration. Remove the temporary worktree
+   and exact temporary Docker volume after every success, failure, interruption,
+   or stop.
+9. Require the manual deploy to settle successfully, and then verify all checks
+   below, including deployed server metadata showing Node.js 22.x and streamed
+   invocation. A failed manual attempt is a hard stop; builds remain stopped.
+10. Finally re-read `stop_builds=true`, previews disabled, and exactly one new
+    manual production deploy after the frozen baseline.
+
+For the single intended deploy, require:
+
+- the deploy is Manual / Production, its title contains the exact merged
+  `main` commit, and local provenance records that same exact clean worktree;
+- build preflight accepts only `CONTEXT=production`, `BRANCH=main`, and a full
+  `COMMIT_REF` exactly equal to `EXPECTED_DEPLOY_GIT_SHA`; a different commit,
+  deploy-preview, branch-deploy, dev, missing context, or missing/wrong branch
+  must fail closed;
 - build output comes from the committed Netlify adapter, not `.vercel` output;
+- the install, build, Function audit, and deploy all used the exact pinned
+  Linux/amd64 image, CLI, and packager; the fresh Function archive passed the
+  native-module, PDF-worker, metadata, and real-PDF smoke checks;
+- deployed `server` Function metadata reports Node.js 22.x and streamed
+  Functions-v2 invocation;
 - the migration output is `up to date` against the already verified exact
   23-row ledger through `0023`; it must not be the first process to apply `0023`;
 - no migration is attempted during a preview build;

@@ -50,7 +50,7 @@ import { canonicalIndicatorCensus, runMethodologyManifest } from "./methodology.
 import { parseChunk, statusOnExit, type RunEvent } from "./run-output.ts";
 import { CLAIM_LEASE_MS, type ClaimedRun, type Run, type RunPass, type RunStatus } from "./runs.ts";
 import type { WorkflowArtifactWrite } from "./run-store.ts";
-import { inspectZipCentralDirectory, zipEntryDeclaredSize } from "./stage8-boundary.server.ts";
+import { extractZipEntryExact, inspectZipArchive } from "./stage8-boundary.server.ts";
 import {
   artifactsFor as artifactLinksFor,
   type ArtifactLink,
@@ -85,6 +85,7 @@ function scriptDir(): string {
 }
 
 const HEARTBEAT_MS = 30_000;
+const PROGRESS_WRITE_TIMEOUT_MS = 30_000;
 const PROCESS_GROUP_KILL_GRACE_MS = 1_000;
 
 /** What a completed row contributes to the run record. */
@@ -174,6 +175,8 @@ export interface WorkerDeps {
   heartbeatMs?: number;
   /** Test-only lease override for exercising the pre-expiry heartbeat fail-safe. */
   claimLeaseMs?: number;
+  /** Test-only deadline override for a claim-fenced progress persistence operation. */
+  progressWriteTimeoutMs?: number;
 }
 
 /** The coordinator owns one isolated directory for the complete eight-stage run. */
@@ -499,9 +502,8 @@ export function defaultDeps(): WorkerDeps {
       return verified.ok ? { ok: true } : verified;
     },
     async reconcileCompletedStageArtifacts(run, workerId) {
-      const { reconcileCompletedStageArtifacts } = await import(
-        "./completed-stage-artifacts.server.ts"
-      );
+      const { reconcileCompletedStageArtifacts } =
+        await import("./completed-stage-artifacts.server.ts");
       await reconcileCompletedStageArtifacts(run, workerId);
     },
     async publishWorkflowArtifacts(run, workerId) {
@@ -1761,17 +1763,7 @@ async function archivedWorkflowPackageFiles(
       if (declaredTotal > MAX_WORKFLOW_ARTIFACT_TOTAL_BYTES) return null;
     }
     const bundleBytes = new Uint8Array(await readFile(bundle));
-    const centralDirectoryNames = inspectZipCentralDirectory(bundleBytes);
-    const JSZip = (await import("jszip")).default;
-    const archive = await JSZip.loadAsync(bundleBytes);
-    const jsZipNames = Object.keys(archive.files);
-    if (
-      jsZipNames.length !== centralDirectoryNames.length ||
-      jsZipNames.some((name, index) => name !== centralDirectoryNames[index])
-    ) {
-      return null;
-    }
-    const archiveFiles = Object.values(archive.files).filter((entry) => !entry.dir);
+    const archiveFiles = inspectZipArchive(bundleBytes);
     if (archiveFiles.length !== index.records.length + 1) return null;
     const usedArchiveEntries = new Set<string>();
     const recordEntries = new Map<string, (typeof archiveFiles)[number]>();
@@ -1785,7 +1777,7 @@ async function archivedWorkflowPackageFiles(
       );
       if (entries.length !== 1) return null;
       usedArchiveEntries.add(entries[0].name);
-      if (zipEntryDeclaredSize(entries[0]) !== record.bytes) return null;
+      if (entries[0].uncompressedSize !== record.bytes) return null;
       recordEntries.set(record.path, entries[0]);
     }
     const manifestEntries = archiveFiles.filter(
@@ -1795,7 +1787,7 @@ async function archivedWorkflowPackageFiles(
     );
     if (manifestEntries.length !== 1) return null;
     const authoritativeManifest = await readFile(index.manifestPath);
-    if (zipEntryDeclaredSize(manifestEntries[0]) !== authoritativeManifest.byteLength) return null;
+    if (manifestEntries[0].uncompressedSize !== authoritativeManifest.byteLength) return null;
     usedArchiveEntries.add(manifestEntries[0].name);
     if (usedArchiveEntries.size !== archiveFiles.length) return null;
 
@@ -1803,16 +1795,13 @@ async function archivedWorkflowPackageFiles(
     for (const record of index.records) {
       const entry = recordEntries.get(record.path);
       if (!entry) return null;
-      const bytes = await entry.async("uint8array");
-      if (
-        bytes.byteLength !== record.bytes ||
-        createHash("sha256").update(bytes).digest("hex") !== record.sha256
-      ) {
-        return null;
-      }
+      const bytes = extractZipEntryExact(entry, { bytes: record.bytes, sha256: record.sha256 });
       content.set(record.path, bytes);
     }
-    const archivedManifest = await manifestEntries[0].async("uint8array");
+    const archivedManifest = extractZipEntryExact(manifestEntries[0], {
+      bytes: authoritativeManifest.byteLength,
+      sha256: createHash("sha256").update(authoritativeManifest).digest("hex"),
+    });
     if (!Buffer.from(archivedManifest).equals(authoritativeManifest)) return null;
     return { index, content };
   } catch {
@@ -2109,6 +2098,13 @@ export function degradationNotes(
 }
 
 /** Follow one claimed run to its end. Returns the status it settled on. */
+class ClaimFenceRejectedError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "ClaimFenceRejectedError";
+  }
+}
+
 export async function runOne(run: ClaimedRun, workerId: string, deps: WorkerDeps): Promise<string> {
   if (isSimulationIdentity(run)) {
     throw new Error("Simulation identities cannot enter the production worker.");
@@ -2119,10 +2115,7 @@ export async function runOne(run: ClaimedRun, workerId: string, deps: WorkerDeps
   const heartbeatMs = deps.heartbeatMs ?? HEARTBEAT_MS;
   const claimLeaseMs = deps.claimLeaseMs ?? CLAIM_LEASE_MS;
   const heartbeatSafetyMarginMs = Math.max(heartbeatMs * 2, claimLeaseMs / 5);
-  const heartbeatUnconfirmedLimitMs = Math.max(
-    heartbeatMs,
-    claimLeaseMs - heartbeatSafetyMarginMs,
-  );
+  const heartbeatUnconfirmedLimitMs = Math.max(heartbeatMs, claimLeaseMs - heartbeatSafetyMarginMs);
   let lastConfirmedHeartbeatAt = performance.now();
   const abandonClaim = () => {
     if (!claimHeld) return;
@@ -2172,6 +2165,8 @@ export async function runOne(run: ClaimedRun, workerId: string, deps: WorkerDeps
       processSettled: (process) => {
         if (activeProcess === process) activeProcess = null;
       },
+      stopProcess: () => activeProcess?.kill(),
+      claimRejected: abandonClaim,
     });
   } finally {
     clearInterval(beat);
@@ -2186,6 +2181,8 @@ async function runOneWhileClaimHeld(
     assertSafe(): void;
     processStarted(process: SpawnedProcess): void;
     processSettled(process: SpawnedProcess): void;
+    stopProcess(): void;
+    claimRejected(): void;
   },
 ): Promise<string> {
   const seen = {
@@ -2227,21 +2224,79 @@ async function runOneWhileClaimHeld(
     void handle(parseChunk(lines.join("\n"), run.pass === "workflow" ? run.id : undefined), isErr);
   };
 
-  const pending: Promise<unknown>[] = [];
-  const trackPending = <T>(operation: Promise<T>): Promise<T> => {
+  const pending: Promise<void>[] = [];
+  let progressPersistenceFailed = false;
+  let progressPersistenceFailure: unknown = null;
+  let progressWriteSequence = Promise.resolve();
+  const progressWriteTimeoutMs = deps.progressWriteTimeoutMs ?? PROGRESS_WRITE_TIMEOUT_MS;
+  const trackPending = (operation: () => Promise<boolean>, description: string): Promise<void> => {
     // Stream callbacks cannot await. Observe rejection immediately so Node cannot
     // treat a fast database failure as unhandled before the post-exit settlement.
-    void operation.catch(() => undefined);
-    pending.push(operation);
-    return operation;
+    let claimRejected = false;
+    const checked = progressWriteSequence
+      .then(() => {
+        if (progressPersistenceFailed) {
+          throw progressPersistenceFailure ?? new Error("An earlier progress write failed.");
+        }
+        const storeWrite = operation();
+        return new Promise<boolean>((resolve, reject) => {
+          const timeout = setTimeout(() => {
+            reject(new Error(`${description} timed out while persisting run progress.`));
+          }, progressWriteTimeoutMs);
+          storeWrite.then(
+            (recorded) => {
+              clearTimeout(timeout);
+              resolve(recorded);
+            },
+            (error) => {
+              clearTimeout(timeout);
+              reject(error);
+            },
+          );
+        });
+      })
+      .then((recorded) => {
+        if (!recorded) {
+          // Unlike a rejected request, false is a conclusive claim-token mismatch.
+          // Stop the paid descendant immediately instead of waiting for process exit
+          // or the next heartbeat to discover the same lost claim.
+          claimRejected = true;
+          heartbeat.claimRejected();
+          throw new Error(`${description} was not recorded under the active claim.`);
+        }
+      })
+      .catch((error) => {
+        // A rejected request does not prove the claim was lost, so retain it for the
+        // terminal failure write. It does prove this run can no longer succeed; stop
+        // the paid child now instead of consuming later stage allocations needlessly.
+        if (!claimRejected) heartbeat.stopProcess();
+        progressPersistenceFailed = true;
+        if (error !== undefined && error !== null) progressPersistenceFailure ??= error;
+        throw error;
+      });
+    // Preserve coordinator event order even when the store uses different pooled
+    // database connections. Once one write fails, later queued writes skip their
+    // store operation because the durable event sequence is already incomplete.
+    progressWriteSequence = checked.catch(() => undefined);
+    void checked.catch(() => undefined);
+    pending.push(checked);
+    return checked;
   };
   let stageReconciliation = Promise.resolve();
   let stageReconciliationFailure: unknown = null;
   const queueStageReconciliation = (after?: Promise<unknown>) => {
     if (run.pass !== "workflow" || !deps.reconcileCompletedStageArtifacts) return;
     stageReconciliation = stageReconciliation.then(async () => {
+      if (after) {
+        try {
+          await after;
+        } catch {
+          // The sticky progress-persistence failure is reported separately and must
+          // never be cleared by a later successful filesystem reconciliation.
+          return;
+        }
+      }
       try {
-        if (after) await after;
         await deps.reconcileCompletedStageArtifacts!(run, workerId);
         stageReconciliationFailure = null;
       } catch (error) {
@@ -2257,13 +2312,15 @@ async function runOneWhileClaimHeld(
       switch (e.kind) {
         case "start":
           trackPending(
-            deps.store.setRowsTotal(run.id, workerId, run.claimToken, e.rowsTotal, e.vendor),
+            () => deps.store.setRowsTotal(run.id, workerId, run.claimToken, e.rowsTotal, e.vendor),
+            "The run total",
           );
           break;
         case "row":
           {
             const recorded = trackPending(
-              deps.store.recordRow(run.id, workerId, run.claimToken, e),
+              () => deps.store.recordRow(run.id, workerId, run.claimToken, e),
+              `Progress for ${e.indicatorId}`,
             );
             if (
               run.pass === "workflow" &&
@@ -2278,18 +2335,30 @@ async function runOneWhileClaimHeld(
           break;
         case "exhausted":
           seen.exhausted = true;
-          trackPending(deps.store.noteEvent(run.id, workerId, run.claimToken, "note", e.message));
+          trackPending(
+            () => deps.store.noteEvent(run.id, workerId, run.claimToken, "note", e.message),
+            "A budget-exhaustion event",
+          );
           break;
         case "incomplete":
           seen.incomplete = true;
-          trackPending(deps.store.noteEvent(run.id, workerId, run.claimToken, "note", e.message));
+          trackPending(
+            () => deps.store.noteEvent(run.id, workerId, run.claimToken, "note", e.message),
+            "An incomplete-run event",
+          );
           break;
         case "finished":
           seen.finished = true;
-          trackPending(deps.store.noteEvent(run.id, workerId, run.claimToken, "note", e.message));
+          trackPending(
+            () => deps.store.noteEvent(run.id, workerId, run.claimToken, "note", e.message),
+            "The workflow-complete event",
+          );
           break;
         case "note":
-          trackPending(deps.store.noteEvent(run.id, workerId, run.claimToken, "note", e.message));
+          trackPending(
+            () => deps.store.noteEvent(run.id, workerId, run.claimToken, "note", e.message),
+            "A worker note",
+          );
           break;
         case "degraded": {
           const entry = degraded.get(e.vendor) ?? { rows: new Set<string>(), example: e.message };
@@ -2335,12 +2404,41 @@ async function runOneWhileClaimHeld(
       stageReconciliationFailure = error;
     }
     if (stageReconciliationFailure) {
-      const archiveFailure =
-        `Verified completed-stage downloads could not be archived: ${String(stageReconciliationFailure)}`;
+      const archiveFailure = `Verified completed-stage downloads could not be archived: ${String(stageReconciliationFailure)}`;
       seen.failure = seen.failure ? `${seen.failure} ${archiveFailure}` : archiveFailure;
       seen.finished = false;
     }
   }
+
+  const notes = degradationNotes(degraded, run.rowsTotal);
+  for (const note of notes) {
+    try {
+      const recorded = await deps.store.noteEvent(
+        run.id,
+        workerId,
+        run.claimToken,
+        "degraded",
+        note,
+      );
+      if (!recorded)
+        throw new Error("A degradation event was not recorded under the active claim.");
+    } catch (error) {
+      progressPersistenceFailed = true;
+      if (error !== undefined && error !== null) progressPersistenceFailure ??= error;
+    }
+  }
+  if (progressPersistenceFailed) {
+    const diagnostic =
+      progressPersistenceFailure instanceof Error
+        ? `${progressPersistenceFailure.name}: ${progressPersistenceFailure.message}`
+        : progressPersistenceFailure === undefined || progressPersistenceFailure === null
+          ? "The persistence operation rejected without a reason."
+          : String(progressPersistenceFailure);
+    const persistenceFailure = `Run progress could not be persisted under the active claim: ${diagnostic}`;
+    seen.failure = seen.failure ? `${seen.failure} ${persistenceFailure}` : persistenceFailure;
+    seen.finished = false;
+  }
+  heartbeat.assertSafe();
 
   if (run.pass === "workflow" && seen.finished) {
     const verified =
@@ -2369,10 +2467,6 @@ async function runOneWhileClaimHeld(
   const { status, reason } = statusOnExit(code, seen, {
     budgetExhaustion: run.pass === "workflow" ? "terminal" : "resumable",
   });
-  const notes = degradationNotes(degraded, run.rowsTotal);
-  for (const note of notes) {
-    await deps.store.noteEvent(run.id, workerId, run.claimToken, "degraded", note);
-  }
 
   const ledger = await deps.readLedger(run);
   heartbeat.assertSafe();
@@ -2388,7 +2482,9 @@ async function runOneWhileClaimHeld(
     ledger ?? undefined,
   );
   if (!finished) {
-    throw new Error("The run terminal status was not recorded under its active claim.");
+    throw new ClaimFenceRejectedError(
+      "The run terminal status was not recorded under its active claim.",
+    );
   }
   return status;
 }
@@ -2421,15 +2517,24 @@ export async function drain(
     try {
       await runOne(run, workerId, deps);
     } catch (err) {
+      // runOne already attempted its terminal write. A false result conclusively means
+      // this worker no longer owns the claim, so retrying that token and taking another
+      // paid run in the same drain pass would both be unsafe.
+      if (err instanceof ClaimFenceRejectedError) throw err;
       // A throw here is the worker's own fault rather than the pipeline's, and leaving
       // the run marked running would strand it until the lease expired.
-      await deps.store.finishRun(
+      const finished = await deps.store.finishRun(
         run.id,
         workerId,
         run.claimToken,
         "failed",
         `The worker failed: ${String(err)}`,
       );
+      if (!finished) {
+        throw new ClaimFenceRejectedError(
+          "The worker failure status was not recorded under its active claim.",
+        );
+      }
     }
   }
 }

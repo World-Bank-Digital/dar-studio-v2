@@ -199,6 +199,8 @@ umask 077
 
 DAMM_SOURCE_COMMIT="68e1994b5facfaaf0ddc49ba3bec108d9bde2c55"
 DAMM_RENDERER_SHA256="95dcef014086f6c01f58678db426fb48d87546b8b6a4315c530801b1ff74c5be"
+NETLIFY_RELEASE_IMAGE="node:22.22.3-bookworm@sha256:46e94f8cf91baab69a2deb3153e74eeffd73c20c7cc1d8432f5b96469eaa0322"
+NETLIFY_FUNCTION_RUNTIME="nodejs22.x"
 
 stop() {
   printf '\n  %s%sSTOP:%s %s\n\n' "$BOLD" "$RED" "$RESET" "$1" >&2
@@ -278,6 +280,7 @@ require_command git
 require_command node
 require_command npm
 require_command openssl
+require_command docker
 
 [[ -d .git && -f package.json ]] || stop "Run this wizard from the dar-studio-v2 repository root."
 [[ "$(git branch --show-current)" == "main" ]] ||
@@ -305,6 +308,8 @@ required_files=(
   deploy/worker/entrypoint.sh
   deploy/worker/preflight.mjs
   scripts/artifact-gateway.ts
+  scripts/verify-build-no-secrets.mjs
+  scripts/verify-netlify-function-bundle.mjs
   scripts/validate-neon-deployment-urls.mjs
   migrations/0013_damm_methodology_pin_cutover.sql
   migrations/0014_damm_source_pin_cutover.sql
@@ -516,11 +521,11 @@ write_env MIGRATION_0022_VERIFIED "true"
 write_env MIGRATION_0023_VERIFIED "true"
 
 # ── 8 ─────────────────────────────────────────────────────────────────────
-stage "Import the main branch into Netlify"
+stage "Import or verify the main branch in Netlify, then freeze builds"
 open_url "https://app.netlify.com/"
-step "Team Projects > Add new project > Import an existing project > GitHub."
-step "Select the exact World-Bank-Digital/dar-studio-v2 repository and production branch main. Keep netlify.toml's build and publish settings."
-step "Choose the staging slug. A first build before environment setup must fail closed; do not accept a usable empty/PGLite app."
+step "For a new site: Team Projects > Add new project > Import an existing project > GitHub. For this existing site, verify it remains linked to the exact repository instead of importing a duplicate."
+step "Require the exact World-Bank-Digital/dar-studio-v2 repository and production branch main. Keep netlify.toml's build and publish settings."
+step "For a new site, choose the staging slug. A first build before environment setup must fail closed; do not accept a usable empty/PGLite app."
 ask NETLIFY_PROJECT_SLUG "Netlify project slug (without .netlify.app):"
 require_value NETLIFY_PROJECT_SLUG "$NETLIFY_PROJECT_SLUG"
 [[ "$NETLIFY_PROJECT_SLUG" =~ ^[a-z0-9][a-z0-9-]*[a-z0-9]$ ]] ||
@@ -535,6 +540,16 @@ write_env NETLIFY_SITE_ID "$NETLIFY_SITE_ID"
 write_env NETLIFY_URL "$NETLIFY_URL"
 write_env VITE_PUBLIC_HOSTNAME "$VITE_PUBLIC_HOSTNAME"
 write_env BETTER_AUTH_URL "$BETTER_AUTH_URL"
+open_url "https://app.netlify.com/sites/$NETLIFY_PROJECT_SLUG/deploys"
+step "Wait until the expected initial deploy reaches a terminal state, canceling it first if necessary; do not inspect it as acceptance evidence."
+step "Immediately stop Netlify builds under Project configuration > Build & deploy > Continuous deployment > Build settings."
+step "After Save and a full reload or API read, require stop_builds=true. Build hooks, UI/API Git builds, branch deploys, and previews must now be inert."
+ask NETLIFY_BASELINE_DEPLOY_ID "Latest deploy ID for the frozen deploy-history baseline:"
+require_value NETLIFY_BASELINE_DEPLOY_ID "$NETLIFY_BASELINE_DEPLOY_ID"
+ask NETLIFY_BASELINE_DEPLOY_SHA "Commit SHA shown for that baseline deploy, or 'none' for a commitless failed import:"
+require_value NETLIFY_BASELINE_DEPLOY_SHA "$NETLIFY_BASELINE_DEPLOY_SHA"
+write_env NETLIFY_BASELINE_DEPLOY_ID "$NETLIFY_BASELINE_DEPLOY_ID"
+write_env NETLIFY_BASELINE_DEPLOY_SHA "$NETLIFY_BASELINE_DEPLOY_SHA"
 
 # ── 9 ─────────────────────────────────────────────────────────────────────
 stage "Netlify Ohio, deploy isolation, and private access"
@@ -758,8 +773,10 @@ confirm_or_stop "Are both services stable, on the exact commit, and free of pref
 stage "Netlify production-only environment"
 open_url "https://app.netlify.com/sites/$NETLIFY_PROJECT_SLUG/configuration/env"
 warn "Do not import the whole $ENV_FILE file: it contains Render-only keys and values with different Netlify scopes."
+step "Add AWS_LAMBDA_JS_RUNTIME=$NETLIFY_FUNCTION_RUNTIME: all deploy contexts, Functions only, non-secret. This deliberate cross-context exception is required because pinned CLI no-build packaging reads the dev Functions envelope."
 step "Add pooled DATABASE_URL: Production context, Builds + Functions scopes, secret."
 step "Add MIGRATION_DATABASE_URL from local DATABASE_URL_DIRECT: Production context, Builds scope only, secret."
+step "Add EXPECTED_DEPLOY_GIT_SHA=$DEPLOY_GIT_SHA: Production context, Builds scope only, non-secret."
 step "Add DAR_KEY_SECRET, BETTER_AUTH_SECRET, and BETTER_AUTH_URL: Production, Builds + Functions. Mark both secrets."
 step "Add ARTIFACT_GATEWAY_URL=$ARTIFACT_GATEWAY_URL and ARTIFACT_DELIVERY_SECRET: Production, Builds + Functions. Mark the secret."
 step "Add VITE_AUTH_ENABLED=true and VITE_GROK_AUTH_ENABLED=$VITE_GROK_AUTH_ENABLED: Production, Builds + Functions."
@@ -777,28 +794,316 @@ write_env NETLIFY_ENVIRONMENT_VERIFIED "true"
 
 # ── 14 ────────────────────────────────────────────────────────────────────
 stage "Netlify production deploy"
+say "With builds still frozen, refresh cached origin/main and direct GitHub main; they must both equal DEPLOY_GIT_SHA."
+git fetch --quiet origin main ||
+  stop "Pre-Netlify source check failed while builds were frozen. Keep them frozen and restart from a newly reviewed main."
+NETLIFY_TRACKING_SHA=$(git rev-parse origin/main) ||
+  stop "Could not resolve cached origin/main while Netlify builds were frozen."
+NETLIFY_REMOTE_SHA=$(git ls-remote origin refs/heads/main | awk 'NR == 1 { print $1 }') ||
+  stop "Could not resolve direct GitHub main while Netlify builds were frozen."
+[[ "$NETLIFY_TRACKING_SHA" == "$DEPLOY_GIT_SHA" &&
+   "$NETLIFY_REMOTE_SHA" == "$DEPLOY_GIT_SHA" ]] ||
+  stop "Pre-Netlify source check failed: main moved after review. Keep builds frozen and restart from the new clean merged main."
 open_url "https://app.netlify.com/sites/$NETLIFY_PROJECT_SLUG/deploys"
-step "Trigger a production deploy from main after every environment value is saved."
-step "Require [deploy-preflight] success with Netlify CONTEXT=production and BRANCH=main, the migration advisory lock, and an up-to-date exact 23-row ledger through 0023. Netlify must not be the first process to apply 0023."
+step "Before any manual production deploy, use a fresh configuration/API read to require stop_builds=true, Deploy Previews disabled, and no deploy after baseline $NETLIFY_BASELINE_DEPLOY_ID."
+confirm_or_stop "Are builds still stopped, previews disabled, and the deploy-history baseline unchanged?" \
+  "Keep the site frozen and account for every unexpected deploy before continuing."
+step "Authenticate the pinned Netlify CLI 27.4.2 in the operator terminal if needed, and verify it addresses only site ID $NETLIFY_SITE_ID. Do not create or save an automation token."
+confirm_or_stop "Does the pinned CLI identify the intended Netlify account and exact site ID?" \
+  "Do not deploy from an unauthenticated, wrong-account, or wrong-site CLI session."
+docker info >/dev/null 2>&1 ||
+  stop "Docker is not ready. Start the trusted local Docker engine before the frozen Linux release build."
+case "$(uname -s)" in
+  Darwin) NETLIFY_CONFIG_PATH="$HOME/Library/Preferences/netlify/config.json" ;;
+  Linux) NETLIFY_CONFIG_PATH="${XDG_CONFIG_HOME:-$HOME/.config}/netlify/config.json" ;;
+  *) stop "The frozen Netlify release supports macOS or Linux operators only." ;;
+esac
+[[ -f "$NETLIFY_CONFIG_PATH" && ! -L "$NETLIFY_CONFIG_PATH" && -r "$NETLIFY_CONFIG_PATH" ]] ||
+  stop "The interactive Netlify CLI credential file is missing, unreadable, or symbolic. Authenticate the pinned CLI without creating an automation token."
+NETLIFY_RELEASE_PARENT=$(mktemp -d)
+NETLIFY_RELEASE_DIR="$NETLIFY_RELEASE_PARENT/release"
+NETLIFY_RELEASE_VOLUME=""
+NETLIFY_RELEASE_VOLUME_CREATED="false"
+cleanup_netlify_release() {
+  local cleanup_failed=0 cleanup_volume_label=""
+  if [[ "${NETLIFY_RELEASE_VOLUME_CREATED:-false}" == "true" &&
+        -n "${NETLIFY_RELEASE_VOLUME:-}" &&
+        "$NETLIFY_RELEASE_VOLUME" =~ ^[a-f0-9]{64}$ ]]; then
+    if cleanup_volume_label=$(docker volume inspect \
+      --format '{{ index .Labels "org.worldbank.dar-studio.release" }}' \
+      "$NETLIFY_RELEASE_VOLUME" 2>/dev/null); then
+      if [[ "$cleanup_volume_label" != "$DEPLOY_GIT_SHA" ]]; then
+        warn "Temporary Linux release volume ownership could not be verified: $NETLIFY_RELEASE_VOLUME"
+        cleanup_failed=1
+      elif docker volume rm -f "$NETLIFY_RELEASE_VOLUME" >/dev/null 2>&1; then
+        NETLIFY_RELEASE_VOLUME_CREATED="false"
+      else
+        warn "Temporary Linux release volume survived cleanup: $NETLIFY_RELEASE_VOLUME"
+        cleanup_failed=1
+      fi
+    else
+      warn "Could not verify cleanup of temporary Linux release volume: $NETLIFY_RELEASE_VOLUME"
+      cleanup_failed=1
+    fi
+  fi
+  if [[ -n "${NETLIFY_RELEASE_DIR:-}" && -e "$NETLIFY_RELEASE_DIR/.git" ]]; then
+    if ! git worktree remove --force "$NETLIFY_RELEASE_DIR" >/dev/null 2>&1; then
+      warn "Temporary release worktree survived cleanup: $NETLIFY_RELEASE_DIR"
+      cleanup_failed=1
+    fi
+  fi
+  if [[ -n "${NETLIFY_RELEASE_PARENT:-}" && -d "$NETLIFY_RELEASE_PARENT" ]]; then
+    if ! rmdir "$NETLIFY_RELEASE_PARENT" >/dev/null 2>&1; then
+      warn "Temporary release parent survived cleanup: $NETLIFY_RELEASE_PARENT"
+      cleanup_failed=1
+    fi
+  fi
+  return "$cleanup_failed"
+}
+trap 'cleanup_netlify_release || true' EXIT
+trap 'exit 130' HUP INT TERM
+git worktree add --detach "$NETLIFY_RELEASE_DIR" "$DEPLOY_GIT_SHA" ||
+  stop "Could not create the clean detached worktree for the exact reviewed commit."
+[[ "$(git -C "$NETLIFY_RELEASE_DIR" rev-parse HEAD)" == "$DEPLOY_GIT_SHA" &&
+   -z "$(git -C "$NETLIFY_RELEASE_DIR" status --porcelain --untracked-files=all)" ]] ||
+  stop "The detached Netlify release worktree is not the exact clean reviewed commit."
+NETLIFY_RELEASE_VOLUME=$(docker volume create \
+  --label "org.worldbank.dar-studio.release=$DEPLOY_GIT_SHA") ||
+  stop "Could not create the temporary Linux release volume."
+[[ "$NETLIFY_RELEASE_VOLUME" =~ ^[a-f0-9]{64}$ ]] ||
+  stop "Docker returned an invalid temporary release volume identifier."
+NETLIFY_RELEASE_VOLUME_CREATED="true"
+NETLIFY_RELEASE_VOLUME_LABEL=$(docker volume inspect \
+  --format '{{ index .Labels "org.worldbank.dar-studio.release" }}' \
+  "$NETLIFY_RELEASE_VOLUME") ||
+  stop "Could not verify ownership of the temporary Linux release volume."
+[[ "$NETLIFY_RELEASE_VOLUME_LABEL" == "$DEPLOY_GIT_SHA" ]] ||
+  stop "The temporary Linux release volume ownership label is invalid."
+unset NETLIFY_RELEASE_VOLUME_LABEL
+say "Install the exact locked dependency tree without any operator secret inside the pinned Linux/amd64 image. The later build and deploy reuse only this ephemeral volume."
+docker run --rm --platform linux/amd64 \
+  --mount "type=bind,source=$NETLIFY_RELEASE_DIR,target=/source,readonly" \
+  --mount "type=volume,source=$NETLIFY_RELEASE_VOLUME,target=/workspace" \
+  "$NETLIFY_RELEASE_IMAGE" bash -ceu '
+    [[ -z "$(find /workspace -mindepth 1 -maxdepth 1 -print -quit)" ]]
+    shopt -s dotglob nullglob
+    cp -a /source/. /workspace/
+    rm -f /workspace/.git
+    cd /workspace
+    [[ "$(uname -s)" == "Linux" && "$(uname -m)" == "x86_64" ]]
+    [[ "$(node --version)" == "v22.22.3" ]]
+    npm ci
+    [[ "$(node -p "require(\"./node_modules/netlify-cli/package.json\").version")" == "27.4.2" ]]
+    [[ "$(node -p "require(\"./node_modules/@netlify/zip-it-and-ship-it/package.json\").version")" == "15.5.0" ]]
+  ' || stop "The secretless, pinned Linux/amd64 dependency installation failed."
+say "Build the exact release with the already-held operator values, inspect a separately packaged Linux function archive, then let the same pinned Linux CLI package and upload once."
+NETLIFY_DEPLOY_STATUS=0
+if (
+  # This shell may have been started after an operator sourced a credential file.
+  # Strip every inherited export before the Docker client runs, then restore only
+  # its small process environment and explicitly allowlist release values by name.
+  while IFS= read -r RELEASE_EXPORTED_NAME; do
+    export -n "$RELEASE_EXPORTED_NAME" 2>/dev/null || true
+  done < <(compgen -e)
+  for RELEASE_BASE_NAME in \
+    PATH HOME TMPDIR LANG LC_ALL TERM \
+    DOCKER_HOST DOCKER_CONTEXT DOCKER_CONFIG DOCKER_TLS_VERIFY \
+    DOCKER_CERT_PATH SSH_AUTH_SOCK; do
+    [[ -n "${!RELEASE_BASE_NAME:-}" ]] && export "$RELEASE_BASE_NAME"
+  done
+  unset EXA_API_KEY
+  unset JINA_API_KEY
+  unset PERPLEXITY_API_KEY
+  unset ANTHROPIC_API_KEY
+  unset OPENAI_API_KEY
+  unset GEMINI_API_KEY
+  unset RESEND_API_KEY
+  unset XAI_API_KEY
+  unset GH_TOKEN
+  unset GITHUB_TOKEN
+  unset NETLIFY_AUTH_TOKEN
+  unset NPM_TOKEN
+  unset NODE_AUTH_TOKEN
+
+  MIGRATION_DATABASE_URL="$DATABASE_URL_DIRECT"
+  if [[ "$AUTH_MODE" == "broker" ]]; then
+    RELEASE_GROK_AUTH_ISSUER="$GROK_AUTH_ISSUER"
+    RELEASE_GROK_AUTH_CLIENT_ID="$GROK_AUTH_CLIENT_ID"
+    RELEASE_GROK_AUTH_CLIENT_SECRET="$GROK_AUTH_CLIENT_SECRET"
+  else
+    RELEASE_GROK_AUTH_ISSUER=""
+    RELEASE_GROK_AUTH_CLIENT_ID=""
+    RELEASE_GROK_AUTH_CLIENT_SECRET=""
+  fi
+
+  docker info >/dev/null 2>&1 ||
+    stop "The selected Docker engine changed or became unavailable before the release build."
+  printf '%s\0' \
+    "$NETLIFY_SITE_ID" \
+    "$DEPLOY_GIT_SHA" \
+    "$AUTH_MODE" \
+    "$DATABASE_URL" \
+    "$MIGRATION_DATABASE_URL" \
+    "$DAR_KEY_SECRET" \
+    "$BETTER_AUTH_SECRET" \
+    "$ARTIFACT_DELIVERY_SECRET" \
+    "$BETTER_AUTH_URL" \
+    "$VITE_PUBLIC_HOSTNAME" \
+    "$ARTIFACT_GATEWAY_URL" \
+    "$VITE_AUTH_ENABLED" \
+    "$VITE_GROK_AUTH_ENABLED" \
+    "$RELEASE_GROK_AUTH_ISSUER" \
+    "$RELEASE_GROK_AUTH_CLIENT_ID" \
+    "$RELEASE_GROK_AUTH_CLIENT_SECRET" |
+    docker run --rm -i --platform linux/amd64 \
+      --mount "type=volume,source=$NETLIFY_RELEASE_VOLUME,target=/workspace" \
+      "$NETLIFY_RELEASE_IMAGE" bash -ceu '
+      read_release_value() {
+        local target="$1"
+        IFS= read -r -d "" "$target" || exit 64
+      }
+      for release_name in \
+        NETLIFY_SITE_ID DEPLOY_GIT_SHA AUTH_MODE \
+        DATABASE_URL MIGRATION_DATABASE_URL \
+        DAR_KEY_SECRET BETTER_AUTH_SECRET ARTIFACT_DELIVERY_SECRET \
+        BETTER_AUTH_URL VITE_PUBLIC_HOSTNAME ARTIFACT_GATEWAY_URL \
+        VITE_AUTH_ENABLED VITE_GROK_AUTH_ENABLED \
+        GROK_AUTH_ISSUER GROK_AUTH_CLIENT_ID GROK_AUTH_CLIENT_SECRET; do
+        read_release_value "$release_name"
+      done
+      unset release_name
+
+      cd /workspace || exit $?
+      [[ "$(uname -s)" == "Linux" && "$(uname -m)" == "x86_64" ]]
+      [[ "$(node --version)" == "v22.22.3" ]]
+
+      NETLIFY="true"
+      CONTEXT="production"
+      BRANCH="main"
+      COMMIT_REF="$DEPLOY_GIT_SHA"
+      EXPECTED_DEPLOY_GIT_SHA="$DEPLOY_GIT_SHA"
+      export NETLIFY CONTEXT BRANCH COMMIT_REF EXPECTED_DEPLOY_GIT_SHA
+      export DATABASE_URL MIGRATION_DATABASE_URL
+      export DAR_KEY_SECRET BETTER_AUTH_SECRET ARTIFACT_DELIVERY_SECRET
+      export BETTER_AUTH_URL VITE_PUBLIC_HOSTNAME ARTIFACT_GATEWAY_URL
+      export VITE_AUTH_ENABLED VITE_GROK_AUTH_ENABLED
+      if [[ "$AUTH_MODE" == "broker" ]]; then
+        export GROK_AUTH_ISSUER GROK_AUTH_CLIENT_ID GROK_AUTH_CLIENT_SECRET
+      fi
+
+      npm run build
+
+      RELEASE_SECRET_NAMES=(
+        DATABASE_URL
+        MIGRATION_DATABASE_URL
+        DAR_KEY_SECRET
+        BETTER_AUTH_SECRET
+        ARTIFACT_DELIVERY_SECRET
+      )
+      if [[ "$AUTH_MODE" == "broker" ]]; then
+        RELEASE_SECRET_NAMES+=(GROK_AUTH_CLIENT_SECRET)
+      fi
+      node scripts/verify-build-no-secrets.mjs "${RELEASE_SECRET_NAMES[@]}"
+
+      unset DATABASE_URL MIGRATION_DATABASE_URL
+      unset DAR_KEY_SECRET BETTER_AUTH_SECRET ARTIFACT_DELIVERY_SECRET
+      unset GROK_AUTH_ISSUER GROK_AUTH_CLIENT_ID GROK_AUTH_CLIENT_SECRET
+      unset NETLIFY CONTEXT BRANCH COMMIT_REF EXPECTED_DEPLOY_GIT_SHA
+      unset BETTER_AUTH_URL VITE_PUBLIC_HOSTNAME ARTIFACT_GATEWAY_URL
+      unset VITE_AUTH_ENABLED VITE_GROK_AUTH_ENABLED
+
+      for unexpected_deploy_input in \
+        netlify/functions \
+        .netlify/functions \
+        .netlify/functions-internal \
+        .netlify/edge-functions \
+        .netlify/v1/edge-functions \
+        .netlify/edge-functions-dist \
+        .netlify/v1/blobs \
+        .netlify/deploy/v1/blobs \
+        .netlify/blobs \
+        .netlify/deploy-config \
+        .netlify/internal/db/migrations; do
+        [[ ! -e "$unexpected_deploy_input" ]] || exit 65
+      done
+      unset unexpected_deploy_input
+      node scripts/verify-netlify-function-bundle.mjs
+    ' || exit $?
+
+  printf '%s\0' "$NETLIFY_SITE_ID" "$DEPLOY_GIT_SHA" |
+    docker run --rm -i --platform linux/amd64 \
+      --mount "type=volume,source=$NETLIFY_RELEASE_VOLUME,target=/workspace" \
+      --mount "type=bind,source=$NETLIFY_CONFIG_PATH,target=/netlify-auth/config.json,readonly" \
+      --tmpfs /root/.config/netlify:rw,noexec,nosuid,nodev,mode=0700 \
+      "$NETLIFY_RELEASE_IMAGE" bash -ceu '
+      read_release_value() {
+        local target="$1"
+        IFS= read -r -d "" "$target" || exit 64
+      }
+      for release_name in NETLIFY_SITE_ID DEPLOY_GIT_SHA; do
+        read_release_value "$release_name"
+      done
+      unset release_name
+
+      cd /workspace || exit $?
+      [[ "$(uname -s)" == "Linux" && "$(uname -m)" == "x86_64" ]]
+      [[ "$(node --version)" == "v22.22.3" ]]
+      [[ "$(node -p "require(\"./node_modules/netlify-cli/package.json\").version")" == "27.4.2" ]]
+      [[ "$(node -p "require(\"./node_modules/@netlify/zip-it-and-ship-it/package.json\").version")" == "15.5.0" ]]
+      install -m 600 /netlify-auth/config.json /root/.config/netlify/config.json
+
+      AWS_LAMBDA_JS_RUNTIME="nodejs22.x"
+      NETLIFY_RUNTIME_JSON=$(./node_modules/.bin/netlify env:get AWS_LAMBDA_JS_RUNTIME --context dev --scope functions --site "$NETLIFY_SITE_ID" --json)
+      NETLIFY_REMOTE_RUNTIME=$(printf "%s" "$NETLIFY_RUNTIME_JSON" | node -e "const fs=require(\"node:fs\"); const parsed=JSON.parse(fs.readFileSync(0,\"utf8\")); process.stdout.write(parsed.AWS_LAMBDA_JS_RUNTIME ?? \"\")")
+      [[ "$NETLIFY_REMOTE_RUNTIME" == "$AWS_LAMBDA_JS_RUNTIME" ]]
+      unset NETLIFY_RUNTIME_JSON
+
+      ./node_modules/.bin/netlify deploy --prod --no-build --skip-functions-cache \
+        --dir dist/client --functions .netlify/v1/functions \
+        --site "$NETLIFY_SITE_ID" --message "DAR Studio release $DEPLOY_GIT_SHA"
+    '
+); then
+  NETLIFY_DEPLOY_STATUS=0
+else
+  NETLIFY_DEPLOY_STATUS=$?
+fi
+cleanup_netlify_release ||
+  stop "The temporary Netlify release state could not be removed safely. Resolve it before recording a successful deploy."
+[[ ! -e "$NETLIFY_RELEASE_DIR" ]] ||
+  warn "The exact temporary release worktree needs manual cleanup at $NETLIFY_RELEASE_DIR."
+trap - EXIT HUP INT TERM
+(( NETLIFY_DEPLOY_STATUS == 0 )) ||
+  stop "The exact manual Netlify production deploy failed. Builds remain stopped; inspect the failed manual attempt before any retry."
+step "Require [deploy-preflight] success with Netlify CONTEXT=production, BRANCH=main, and COMMIT_REF exactly equal to EXPECTED_DEPLOY_GIT_SHA=$DEPLOY_GIT_SHA before Vite or migration starts. Require the migration advisory lock and an up-to-date exact 23-row ledger through 0023. Netlify must not be the first process to apply 0023."
 step "Require the Netlify adapter output, not .vercel output. Open /, /methodology, and /login over HTTPS."
+step "Require the deployed server Function metadata to show Node.js 22.x and streamed invocation; any Node 24.x runtime is a hard stop."
 step "Confirm email auth works and Google/X visibility exactly matches VITE_GROK_AUTH_ENABLED."
 step "Confirm app-owned loading, error, empty, dialog, and page states retain the explicit white background."
 step "Confirm both artifact-gateway values reached Functions. The first authenticated JSON-grant and header-only byte-delivery proof occurs in Stage 16 after a real artifact exists."
 ask NETLIFY_DEPLOY_ID "Successful Netlify production deploy ID:"
 require_value NETLIFY_DEPLOY_ID "$NETLIFY_DEPLOY_ID"
-ask NETLIFY_DEPLOY_SHA "Commit SHA shown for that deploy:"
-[[ "$NETLIFY_DEPLOY_SHA" == "$DEPLOY_GIT_SHA" ]] ||
-  stop "Netlify did not deploy the recorded origin/main commit."
+NETLIFY_DEPLOY_SHA="$DEPLOY_GIT_SHA"
+step "Require the successful deploy to be Manual, Production, and titled exactly DAR Studio release $DEPLOY_GIT_SHA. Manual deploy metadata may omit commit_ref; exactness comes from the clean detached worktree plus the preflight-bound COMMIT_REF."
 write_env NETLIFY_DEPLOY_ID "$NETLIFY_DEPLOY_ID"
 write_env NETLIFY_DEPLOY_SHA "$NETLIFY_DEPLOY_SHA"
 confirm_or_stop "Did every web, configuration, and fail-closed check pass without a usable PGLite-backed deployment?" \
   "The web deployment is not ready for workflow smoke testing."
+step "Use one final fresh read to require stop_builds=true, Deploy Previews disabled, and exactly one new manual production deploy after the recorded baseline."
+confirm_or_stop "Did the build freeze remain closed and did exactly one intended manual production deploy occur?" \
+  "Account for any extra deploy before closing the release."
 
 stage "Deployment-only closeout boundary"
 step "Record exact DAR on Netlify/gateway/worker, DAMM $DAMM_SOURCE_COMMIT, node=22.22.3, python=3.12.13, migrations=23 through 0023, private anonymous denial plus authorized access, every automation freeze, zero active workflows, and the unchanged preserved failures."
 warn "Stop here unless post-deployment identity setup and the separately authorized paid canary are explicitly in scope. Deployment completion does not authorize either."
-confirm_or_stop "Are the post-deployment human test identities and one separately authorized named-country paid canary explicitly in scope now?" \
-  "Deployment is complete. Do not create identities, a country workspace, or a paid run."
+if ! confirm "Are the post-deployment human test identities and one separately authorized named-country paid canary explicitly in scope now?"; then
+  DEPLOYMENT_DEPLOYED_AT_UTC=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+  write_env DEPLOYMENT_DEPLOYED_AT_UTC "$DEPLOYMENT_DEPLOYED_AT_UTC"
+  write_env DEPLOYMENT_READINESS_STATUS "deployed-no-canary"
+  chmod 600 "$ENV_FILE"
+  finish
+  say "Deployment-only closeout is complete. No identities, country workspace, or paid run were created."
+  exit 0
+fi
 
 # ── 15 ────────────────────────────────────────────────────────────────────
 stage "Three registered human identities"

@@ -52,23 +52,45 @@ remain authoritative.
   evidence gaps. Stage 5 now proves three substantive, distinct scenarios with
   drivers, preferred-future linkage, and milestones rather than accepting shape
   alone.
-- Stage 8 rejects duplicate raw ZIP names and oversized declared entries before
-  decompression, validates signed and unsigned data descriptors against their
-  central records (including their optional local metadata), and requires exact
-  contiguous local-record coverage before the central directory. The worker
-  heartbeat covers prepare, reconciliation, publication, and final
+- Stage 8 parses STORE and DEFLATE entries from raw ZIP records, bounds output by
+  the separately trusted manifest, and verifies exact compressed-byte
+  consumption, length, CRC-32, and SHA-256. It rejects directories, duplicates,
+  ZIP64, encryption, comments, extra fields, descriptor contradictions, hidden
+  compressed tails, and any byte not covered contiguously before the central
+  directory. The worker uses this same extractor rather than a second parser.
+- Progress writes are serialized and bounded by a 30-second persistence timeout.
+  A rejection (including a reasonless rejection), `false` claim-fence result, or
+  timeout terminates the coordinator before verification or publication. The
+  worker heartbeat covers prepare, reconciliation, publication, and final
   acknowledgement; coordinator termination reaches its POSIX process group and
   cannot fire a delayed escalation after process settlement; a failed final
-  database acknowledgement is fatal.
+  database acknowledgement is fatal and a lost terminal fence stops queue
+  drain.
 - Simulations bind all 37 production files and emit canonical ZIP metadata, so
   fresh repeated runs have identical report and package identities.
+- The frozen Netlify release path now uses an exact clean Git worktree and a
+  Docker-generated, commit-labeled ephemeral volume across three isolated
+  containers in one digest-pinned Linux/amd64 Node image: credential-free
+  install, NUL-framed build plus secret scan and Function audit, then
+  credential-isolated upload. The upload uses exact pinned CLI/packager binaries,
+  explicit audited client and Function paths, and fresh Function packaging; it
+  fails closed on alternate deploy inputs or cleanup uncertainty.
 
 ### Validation and read-only production evidence
 
-- DAR: full suite `537/537` across 101 suites; focused release set `202/202`
-  across 35 suites; simulation adapter `7/7`; typecheck and `git diff --check`
-  clean; lint has zero errors and five pre-existing warnings; development and
-  Netlify adapter build/output verification passed.
+- DAR: full suite `564/564` across 101 suites; focused frozen-deployment set
+  `35/35`; simulation adapter `7/7`; typecheck, Bash syntax, and
+  `git diff --check` clean; lint has zero errors and five pre-existing warnings.
+  Development and Netlify adapter build/output verification passed. A real
+  credential-free package in the exact Linux/amd64 release image produced one
+  streamed Node 22 Function archive containing exactly the Linux x64 GNU canvas
+  binary and required PDF.js worker, then extracted a generated PDF successfully.
+  The archive was 27,350,440 compressed bytes and 71,334,431 uncompressed bytes
+  across 3,403 files, below Netlify's 250 MB uncompressed limit; its native
+  binary requires no newer than GLIBC 2.16. Production-dependency audit is zero.
+  The full development tree retains nine high-severity audit findings in the
+  Netlify/image/PPTX toolchain with no nonbreaking production fix; none are in
+  the production dependency graph.
 - DAMM: an isolated clean checkout of exact merge `68e1994...` passed
   research-pipeline discovery `287/287` with no skips; model parity `470/470`;
   workflow contract `7/7`; loop-1 unit suite `6/6`; and custom
@@ -87,20 +109,29 @@ remain authoritative.
   `452e76433b99042d...`, `bb90cffc12088fd2...`, and
   `f1e99768741d87e7...`; the complete hashes are recorded in the readiness audit.
   These are synthetic non-acceptance tests, not live-provider evidence.
-- Fresh read-only production checks found 22 migrations through `0022`, zero
-  active workflows, the expected source/model/renderer guards, a healthy private
-  gateway, Basic-protected Netlify routes, stopped Netlify builds, disabled
-  Render automatic deploys, and Blueprint Auto Sync `No`. Netlify Deploy
-  Previews are still enabled and must be disabled and re-read before builds are
-  reactivated. The worker remains Live/idle on DAMM `ff5aecb...`, not suspended;
-  suspension is mandatory before migration `0023` or build-secret mutation.
+- A fresh repeatable, read-only Neon transaction at
+  `2026-09-03T18:39:44.116Z` found 22 migrations through `0022`, zero active
+  workflows, and the expected `ff5aecb...` source plus model/engine/renderer
+  guards. Both Nigeria runs remain terminal `failed`, unclaimed, without a final
+  artifact set: `7e301...` is still 3/8 and `$28.18290` with its 18 immutable
+  stage artifacts across three publications; `e96a9...` is still 5/8 and
+  `$29.64701` with none. No row was written.
+- The most recent provider reads found a healthy private gateway,
+  Basic-protected Netlify routes, stopped Netlify builds, disabled Render
+  automatic deploys, and Blueprint Auto Sync `No`. Netlify Deploy Previews are
+  still enabled and must be disabled and re-read before release activity. The
+  worker remains Live/idle on DAMM `ff5aecb...`, not suspended; suspension is
+  mandatory before migration `0023` or any build-secret mutation.
 
 ### Preconditions for one controlled paid canary
 
-1. Complete review and validation of the DAR release candidate, merge it, advance
-   the immutable DAMM source pin through migration `0023`, deploy the exact
-   reviewed identities, and repeat the read-only identity, migration, access,
-   terminal-run, and zero-active-run gates.
+1. Complete review and validation of the DAR release candidate, commit and merge
+   it, disable and re-read Deploy Previews, suspend the worker, take the required
+   pre-migration snapshot, advance the immutable DAMM source pin through
+   migration `0023`, deploy only the exact reviewed identities through the frozen
+   manual path, and repeat the read-only identity, migration, access,
+   terminal-run, and zero-active-run gates. Keep Netlify builds stopped and
+   Render automatic deploy/Blueprint sync disabled throughout.
 2. Identify which masked Jina key Render uses, verify its package/rate, and
    verify that its account funding control is acceptably bounded for the canary.
    Reverify every provider model ID and tariff against primary documentation on

@@ -105,6 +105,7 @@ export async function archiveSyntheticStage8Package(
   options: {
     override?: ReadonlyMap<string, Uint8Array>;
     extra?: ReadonlyMap<string, Uint8Array>;
+    compression?: "STORE" | "DEFLATE";
   } = {},
 ): Promise<Uint8Array> {
   const archive = new JSZip();
@@ -121,7 +122,7 @@ export async function archiveSyntheticStage8Package(
   for (const [relativePath, content] of options.extra ?? []) {
     archive.file(`synthetic-draft/${relativePath}`, content, { createFolders: false });
   }
-  return archive.generateAsync({ type: "uint8array" });
+  return archive.generateAsync({ type: "uint8array", compression: options.compression });
 }
 
 async function canonicalMethodologyBytes(
