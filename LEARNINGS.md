@@ -1182,3 +1182,57 @@ merge `ff5aecbfec5c2694a61f282c27db74ea8b99b28c`.
 **Meta-lesson:** “no admissible evidence” is a methodological conclusion;
 provider refusal, retrieval loss, malformed output, and unverifiable structured
 claims are technical states that must remain visible, bounded, and resumable.
+
+### L43 — A stopped-build gate can look like an authentication failure
+
+**Incident:** after the database and Render cutover, both Netlify's build API
+and the dashboard's **Trigger deploy** action returned `Forbidden` even though
+read-only API calls worked and the authenticated operator was the Multiverz
+team owner.
+**Root cause:** the deliberate pre-cutover `stop_builds=true` safety gate was
+still active. Netlify permits project reads and some configuration updates in
+that state but rejects Git build creation. Activating builds changes the gate;
+it does not itself enqueue a build.
+**Fix:** prove the persisted build state is active before invoking
+`createSiteBuild`, then query recent deploys to exclude an automatically queued
+duplicate before triggering exactly once. After activation, use **Deploys →
+Trigger deploy → Deploy project** or `netlify deploy --trigger --site <id>`;
+verify the resulting production deploy's immutable commit before accepting it.
+**Pinned by:** Netlify production deploy `6a9924b990749e7ca28360bb`, which is
+ready on exact `main` SHA `4112a27f30fc37b605919fae29d3004dc3063459`, plus
+the paired pre-activation `Forbidden` and post-activation successful build
+evidence.
+**Meta-lesson:** when a control-plane mutation is forbidden, distinguish an
+intentional state gate from expired authentication by checking durable account,
+role, and resource state before changing credentials.
+
+### L44 — Repository transfer is a provider cutover, not a Git-only rename
+
+**Incident:** after DAR moved to `World-Bank-Digital`, GitHub preserved the
+repository and commit identity, but Netlify still named the former owner and
+Render's Blueprint lost repository access. Netlify's relink screen silently
+cleared the stopped-build gate and launched a same-commit production build. The
+Render GitHub App restored organization-repository access, while reassociating
+the services through a new Blueprint updated their canonical source; the old
+Blueprint retained its former source and could not be edited in place.
+**Root cause:** GitHub redirects preserve Git continuity, but deployment
+providers persist their own installation grants, source identifiers, and sync
+policies. Their relink workflows are state-changing operations with provider-
+specific side effects; they are not passive URL edits.
+**Fix:** freeze provider automation and require zero active workflows before a
+transfer. Install each GitHub App on the destination organization with access
+only to DAR. For Netlify, relink the existing site, then immediately re-read and
+restore `build_settings.stop_builds` and inspect deploy history. For Render,
+disconnect the inaccessible Blueprint only after confirming resources will be
+preserved, create a new Blueprint on the canonical repository, choose
+**Associate existing services**, reject any suffixed replacements, and disable
+Auto Sync. Preserve service IDs, verify exact deploy SHAs and health, and use a
+revoked-immediately DAMM-only credential only if the worker must rebuild.
+**Pinned by:** Netlify site `159c2675-9ef9-42d3-980d-40b4baeb6e79` and same-
+commit deploy `6a994654e7528310841dbe29`; Render Blueprint
+`exs-dackesjm8hqs73b7rnm0`, preserved services `srv-da8ta95g1s2s738gvhk0` and
+`srv-da8ta95g1s2s738gvhkg`, and worker deploy
+`dep-dackii2jnfac73ct3jl0`, all on DAR `4112a27...`.
+**Meta-lesson:** treat every repository ownership change as a controlled
+identity migration across Git, provider authorization, deployment source, and
+governance—not as a single repository-setting change.
