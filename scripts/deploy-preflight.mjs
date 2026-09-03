@@ -37,12 +37,25 @@ export function validateNetlifyEnvironment(environment = process.env) {
   const socialEnabled = text(environment, "VITE_GROK_AUTH_ENABLED");
   const artifactGatewayUrl = text(environment, "ARTIFACT_GATEWAY_URL");
   const artifactDeliverySecret = text(environment, "ARTIFACT_DELIVERY_SECRET");
+  const expectedDeployGitSha = text(environment, "EXPECTED_DEPLOY_GIT_SHA");
+  const commitRef = text(environment, "COMMIT_REF");
 
   if (text(environment, "CONTEXT") !== "production") {
     failures.push("CONTEXT must be production; Deploy Previews and branch deploys are forbidden");
   }
   if (text(environment, "BRANCH") !== "main") {
     failures.push("BRANCH must be main for the staging production deployment");
+  }
+  if (
+    !expectedDeployGitSha ||
+    !commitRef ||
+    !/^[0-9a-f]{40}$/.test(expectedDeployGitSha) ||
+    !/^[0-9a-f]{40}$/.test(commitRef) ||
+    expectedDeployGitSha !== commitRef
+  ) {
+    failures.push(
+      "EXPECTED_DEPLOY_GIT_SHA must be one full Git SHA and exactly match Netlify COMMIT_REF",
+    );
   }
 
   if (!databaseUrl || !validNeonOhioConnection(databaseUrl, true)) {

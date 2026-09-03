@@ -10,11 +10,18 @@ const read = (path) => readFileSync(join(root, path), "utf8");
 test("the Netlify contract uses the official adapter and the repository build", () => {
   const pkg = JSON.parse(read("package.json"));
   assert.equal(pkg.devDependencies["@netlify/vite-plugin-tanstack-start"], "1.3.18");
+  assert.equal(pkg.devDependencies["@netlify/zip-it-and-ship-it"], "15.5.0");
+  assert.equal(pkg.devDependencies["netlify-cli"], "27.4.2");
   assert.match(pkg.scripts.build, /^node scripts\/deploy-preflight\.mjs && vite build/);
   assert.match(pkg.scripts["verify:netlify"], /NETLIFY=true npm run build:dev/);
   const toml = read("netlify.toml");
   assert.match(toml, /command = "npm run build"/);
   assert.match(toml, /publish = "dist\/client"/);
+  assert.match(
+    toml,
+    /included_files = \["node_modules\/@napi-rs\/canvas\/\*\*", "node_modules\/@napi-rs\/canvas-linux-x64-gnu\/\*\*", "node_modules\/pdfjs-dist\/legacy\/build\/pdf\.worker\.mjs"\]/,
+  );
+  assert.doesNotMatch(toml, /node_modules\/@napi-rs\/canvas-\*\/\*\*/);
   assert.equal(read(".node-version").trim(), "22.22.3");
   assert.match(read(".gitignore"), /^\.netlify\/$/m);
 });

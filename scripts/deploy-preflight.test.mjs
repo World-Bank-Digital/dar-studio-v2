@@ -13,6 +13,8 @@ function validEnvironment() {
     NETLIFY: "true",
     CONTEXT: "production",
     BRANCH: "main",
+    EXPECTED_DEPLOY_GIT_SHA: "a".repeat(40),
+    COMMIT_REF: "a".repeat(40),
     DATABASE_URL:
       "postgresql://role:secret@ep-dar-pooler.us-east-2.aws.neon.tech/neondb?sslmode=require",
     MIGRATION_DATABASE_URL:
@@ -53,6 +55,28 @@ test("Netlify refuses previews, branch deploys, and non-main production builds",
   for (const branch of ["feature/deployment-test", undefined]) {
     const failures = validateNetlifyEnvironment({ ...validEnvironment(), BRANCH: branch });
     assert.match(failures.join("\n"), /BRANCH must be main/);
+  }
+});
+
+test("Netlify refuses to build a commit other than the reviewed release identity", () => {
+  const reviewed = "a".repeat(40);
+  const exact = {
+    ...validEnvironment(),
+    EXPECTED_DEPLOY_GIT_SHA: reviewed,
+    COMMIT_REF: reviewed,
+  };
+  assert.deepEqual(validateNetlifyEnvironment(exact), []);
+
+  for (const environment of [
+    { ...exact, EXPECTED_DEPLOY_GIT_SHA: undefined },
+    { ...exact, COMMIT_REF: undefined },
+    { ...exact, COMMIT_REF: "b".repeat(40) },
+    { ...exact, EXPECTED_DEPLOY_GIT_SHA: "main" },
+  ]) {
+    assert.match(
+      validateNetlifyEnvironment(environment).join("\n"),
+      /EXPECTED_DEPLOY_GIT_SHA.*COMMIT_REF/,
+    );
   }
 });
 
