@@ -3,6 +3,155 @@
 _Updated 2026-09-03. Read this document and [LEARNINGS.md](LEARNINGS.md) before
 changing retrieval, scoring, drafting, or export behavior._
 
+## World Bank repository transfer closeout — 2026-09-03
+
+This is the authoritative repository and provider-ownership state. It
+supersedes only the ownership, provider-link, and deploy-identity statements in
+the release closeout below; the preserved failure diagnoses and methodology
+history remain authoritative.
+
+### GitHub ownership and governance
+
+- The private DAR repository moved in place from `rsudan/dar-studio-v2` to
+  `World-Bank-Digital/dar-studio-v2`. At transfer, its default branch remained
+  `main` at exact commit `4112a27f30fc37b605919fae29d3004dc3063459`, and
+  the local `origin` moved to the canonical organization URL. This
+  documentation-and-governance closeout advances repository `main`, but must
+  not run a provider build, Blueprint sync, database migration, or paid
+  workflow. Production remains exact DAR `4112a27...` with DAMM `ff5aecb...`;
+  Netlify builds and Render automatic deploy/Blueprint sync remain disabled.
+- Organization team **DAR Studio Maintainers**
+  (`@World-Bank-Digital/dar-studio-maintainers`) has `maintain` access;
+  `rsudan` is an active team maintainer. `.github/CODEOWNERS` routes repository
+  ownership to that team.
+- The organization's current Free plan does not permit branch protection or
+  repository rulesets on this private repository. CODEOWNERS therefore records
+  review ownership but cannot by itself enforce an approving review. Treat
+  that as an explicit governance limitation until the plan or repository
+  visibility changes.
+
+### Netlify relink
+
+- Existing site `wbdar` (`159c2675-9ef9-42d3-980d-40b4baeb6e79`) was relinked
+  in place to `https://github.com/World-Bank-Digital/dar-studio-v2`; production
+  branch `main`, empty base, `npm run build`, `dist/client`, and
+  `netlify/functions` were preserved. The Netlify GitHub App is installed on
+  the organization for this repository only.
+- Netlify's relink flow re-enabled builds and immediately started a production
+  build despite the pre-existing freeze. It completed before cancellation and
+  published deploy `6a994654e7528310841dbe29`, but from the same exact DAR
+  commit `4112a27f30fc37b605919fae29d3004dc3063459`; no source or schema changed.
+  `build_settings.stop_builds=true` was restored and independently re-read.
+
+### Render relink and one-use credential
+
+- The Render GitHub App is installed on `World-Bank-Digital` for
+  `dar-studio-v2` only. The old Blueprint
+  `exs-da8shk2jnfac73bue23g` was disconnected after Render confirmed that its
+  managed resources would remain. New Blueprint
+  `exs-dackesjm8hqs73b7rnm0` is linked to the organization repository at
+  `main`/`render.yaml`, associated the existing worker and gateway rather than
+  creating replacements, and has Auto Sync disabled.
+- Service IDs were preserved: worker `srv-da8ta95g1s2s738gvhk0` and artifact
+  gateway `srv-da8ta95g1s2s738gvhkg`. Both show the canonical organization
+  repository and keep automatic deploys disabled. The gateway remains Live on
+  deploy `dep-dacbg1eq1p3s73fi7dq0`, exact DAR `4112a27...`; `/healthz`
+  returned `200 {"status":"ok"}` with `Cache-Control: no-store`, and an
+  unauthenticated `/v1/artifacts` request returned the non-disclosing
+  `404 Not found.` response.
+- With zero active workflows, the worker was suspended before its build
+  credential changed. A seven-day-expiry fine-grained token—the shortest
+  standard GitHub option—was restricted to `World-Bank-Digital/DAMM`, Contents
+  read-only plus required Metadata, saved in Render's encrypted
+  `damm_git_netrc`, and never written to the repository or local files. Resume deploy
+  `dep-dackii2jnfac73ct3jl0` reached `Deploy succeeded | Live` on exact DAR
+  `4112a27...`. The cached private-source layer was reused; runtime preflight
+  then reported DAMM `ff5aecbfec5c2694a61f282c27db74ea8b99b28c`, 22 migrations,
+  and `watching the run queue`. The token was immediately deleted from GitHub,
+  verified absent, and cleared from the browser automation session; only its
+  revoked inert value remains in Render.
+
+### Source-pin and acceptance boundary
+
+- DAMM PR #11 fixed legacy `--lane all --resume` empty-international recovery
+  and is canonical `github/main`
+  `92160286dcad8563c5b7d345467b2e2b4d9cfbc3`. Production does not use that
+  legacy lane, so DAR intentionally remains pinned to the fully tested
+  `ff5aecb...`; no source-pin migration or database mutation accompanied the
+  ownership transfer.
+- The final read-only Neon checks found zero active workflows. Neither terminal
+  Nigeria failure was retried, resumed, reused, cancelled, topped up, or
+  mutated, and no country workspace or paid workflow was launched.
+- A future paid canary remains blocked on verifying the unconfirmed provider
+  tariffs in DAMM's `prices.json`. The deterministic 8/8 simulations and live
+  infrastructure checks are strong preflight evidence, not paid end-to-end
+  acceptance.
+
+## Stage 4 recovery production closeout — 2026-09-03
+
+This is the authoritative production state. The guarded release checkpoint and
+older closeouts below remain immutable investigation and cutover history.
+
+### Canonical identities and database cutover
+
+- DAMM PR #10 is canonical `github/main`
+  `ff5aecbfec5c2694a61f282c27db74ea8b99b28c`. DAR PR #18 is canonical
+  `origin/main` `4112a27f30fc37b605919fae29d3004dc3063459`. Immediately before
+  deployment, local `main`, its tracking ref, and a direct remote lookup all
+  matched the DAR identity and the worktree was clean.
+- The pre-migration Neon snapshot is
+  `pre-0022-stage4-recovery-20260902-224352-4112a27f`, captured from root branch
+  `production` and configured never to expire. Migration
+  `0022_damm_source_pin_cutover.sql` was applied exactly once through the direct
+  connection. The final read-only audit found zero active workflows, 22
+  migrations through `0022`, and the active-workflow guard pinned to exact DAMM
+  `ff5aecb...`.
+
+### Render and one-use credential evidence
+
+- Artifact-gateway deploy `dep-dacbg1eq1p3s73fi7dq0` is live on exact DAR
+  `4112a27...`. `/healthz` returns `200 {"status":"ok"}` with
+  `Cache-Control: no-store`; the Netlify origin receives the exact GET and
+  Authorization CORS grant, while missing and attacker origins receive the
+  same non-disclosing 404.
+- Worker deploy `dep-daci5rmq1p3s73897370` was triggered once by **Resume** and
+  reached `Deploy succeeded | Live` on exact DAR `4112a27...`. Runtime logs
+  freshly reported installed DAMM `ff5aecb...`, Node `22.22.3`, Python
+  `3.12.13`, 22 migrations, pipeline
+  `/var/data/checkouts/ff5aecbfec5c2694a61f282c27db74ea8b99b28c`, and
+  `watching the run queue`.
+- The worker build credential was a one-day fine-grained token restricted to
+  `World-Bank-Digital/DAMM`, Contents read-only plus required metadata. It was
+  kept out of logs and files outside Render's encrypted Secret File, revoked as
+  soon as the worker reached Live, verified absent from GitHub's token list,
+  and cleared from the browser automation session.
+
+### Netlify and live access evidence
+
+- Production deploy `6a9924b990749e7ca28360bb` is published from exact
+  `main` commit `4112a27f30fc37b605919fae29d3004dc3063459`. It is a Git/API-triggered
+  production deploy, not a local artifact upload. The 44-second build logged a
+  complete production-environment preflight, `[migrate] up to date`, successful
+  function packaging, no secrets in 271 scanned files, and successful build
+  completion.
+- Netlify Basic protection remains effective for all deploys: fresh anonymous
+  requests to `/`, `/methodology`, and `/login` each return 401. An authorized
+  Chrome session reaches the DAR Studio landing page, methodology page, and
+  email/passkey login page.
+- The ignored `.env.staging` deployment ledger records the exact DAR SHA and
+  current Netlify, gateway, worker, snapshot, and migration identities without
+  exposing credentials.
+
+### Acceptance boundary
+
+- No failed run was retried, resumed, reused, cancelled, topped up, or mutated,
+  and no additional country workspace or paid workflow was launched during the
+  repair or cutover. The two Nigeria failures below remain terminal evidence.
+- Focused and full validation plus three complete zero-spend simulations prove
+  the repaired code and deployment path. A successful paid end-to-end workflow
+  is deliberately **not yet claimed**; that requires a future, separately
+  user-launched canary to complete all eight stages and publish its package.
+
 ## Stage 4 technical-failure recovery release — 2026-09-03
 
 This checkpoint supersedes the deployed-identity statements in the older
@@ -64,7 +213,7 @@ deployed DAR commit and provider deploy identities.
   Netlify's `stop_builds` gate was also enabled through its authenticated API
   so merging cannot start a build-time migration ahead of this cutover.
 - Neon snapshot
-  `pre-0022-stage4-recovery-20260902-224352-ff5aecb` was captured successfully
+  `pre-0022-stage4-recovery-20260902-224352-4112a27f` was captured successfully
   from root branch `production` before migration and is set never to expire.
   Do not restore or delete it during the cutover.
 - At this checkpoint `0022` is not yet applied and the candidate is not yet
@@ -135,10 +284,13 @@ recovery checkpoint above.
 - No retry, resume, reuse, cancellation, top-up, new country workspace, or paid
   workflow launch occurred. The production worker is Live and idle; another
   paid smoke remains separately unauthorized.
-- The only tracked working-tree changes after deployment are this closeout and
-  learning L41. They are intentionally uncommitted so `origin/main` remains the
-  exact identity deployed across Netlify and Render instead of creating a
-  self-referential documentation-only redeployment cycle.
+- At that checkpoint, the only tracked working-tree changes were this closeout
+  and learning L41. They were intentionally uncommitted so `origin/main`
+  remained the exact identity deployed across Netlify and Render. The
+  2026-09-03 transfer closeout supersedes that working-tree statement: the
+  accumulated documentation and governance changes are now merged while
+  provider automation remains frozen, so the runtime stays on exact DAR
+  `4112a27...` without a self-referential documentation-only redeploy.
 - The only observed non-blocking runtime warning concerns the future change in
   `pg`/`pg-connection-string` semantics for `sslmode=require`. Adopt explicit
   `sslmode=verify-full` before upgrading to those major versions.

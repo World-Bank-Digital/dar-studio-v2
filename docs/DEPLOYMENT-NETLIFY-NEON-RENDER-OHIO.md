@@ -44,6 +44,7 @@ Relevant platform documentation:
 - [Render: graceful shutdown](https://render.com/docs/deploys#graceful-shutdown)
 - [Render: persistent-disk limitations](https://render.com/docs/disks#disk-limitations-and-considerations)
 - [GitHub: fine-grained personal access tokens](https://docs.github.com/en/authentication/keeping-your-account-and-data-secure/managing-your-personal-access-tokens)
+- [Repository-transfer provider relink procedure](RENDER-BLUEPRINT-RELINK-RESEARCH.md)
 
 ## Data flow and ownership
 
@@ -166,7 +167,7 @@ Stop if any validation fails, if a generated manifest changes, if the canonical 
 
 ### 2. Confirm accounts, billing, and spend authority
 
-Before creating anything, verify access to Netlify, Neon, Render, GitHub, Exa, Jina, Perplexity, Anthropic, OpenAI, and Google AI Studio. GitHub access must include both `rsudan/dar-studio-v2` and the private `World-Bank-Digital/DAMM` repository, plus authority to create an approved, repository-scoped **Contents: read-only** fine-grained token for the worker image build. Both Render `1c-2g` services and the worker's persistent disk are billed. Vendor smoke checks and a full eight-stage workflow consume paid API calls. Record explicit authorization for those staging costs.
+Before creating anything, verify access to Netlify, Neon, Render, GitHub, Exa, Jina, Perplexity, Anthropic, OpenAI, and Google AI Studio. GitHub access must include both private repositories, `World-Bank-Digital/dar-studio-v2` and `World-Bank-Digital/DAMM`, plus authority to create an approved, repository-scoped **Contents: read-only** fine-grained token for the worker image build. Both Render `1c-2g` services and the worker's persistent disk are billed. Vendor smoke checks and a full eight-stage workflow consume paid API calls. Record explicit authorization for those staging costs.
 
 Stop if the operator cannot view billing/usage, cannot rotate a key, or does not have authority to incur the costs.
 
@@ -296,7 +297,7 @@ Require all three values to be `true`. Keep the pre-migration snapshot through t
 
 Dashboard path: **Netlify team > Projects > Add new project > Import an existing project > GitHub**.
 
-1. Select the exact `dar-studio-v2` repository.
+1. Select the exact `World-Bank-Digital/dar-studio-v2` repository.
 2. Set the production branch to `main`.
 3. Use the build command and publish directory committed in `netlify.toml`; do not replace them with remembered Vercel settings.
 4. Choose an unambiguous slug such as `dar-studio-staging` and capture the resulting `https://<slug>.netlify.app` URL.
@@ -342,7 +343,8 @@ If no per-app broker client is available, keep `VITE_GROK_AUTH_ENABLED=false`. T
 
 Do this only after migrations `0019`, `0020`, `0021`, and `0022` are verified.
 
-Dashboard path: **Render Dashboard > New > Blueprint > Connect** the exact repository.
+Dashboard path: **Render Dashboard > New > Blueprint > Connect** the exact
+`World-Bank-Digital/dar-studio-v2` repository.
 
 1. Name the Blueprint clearly, select branch `main`, and keep Blueprint path `render.yaml`.
 2. Review `dar-studio-worker`: `type: worker`, `runtime: docker`, `region: ohio`, plan `1c-2g`, `dockerfilePath: ./Dockerfile.worker`, one instance, `autoDeployTrigger: off`, and no `maxShutdownDelaySeconds` field.
