@@ -1236,3 +1236,185 @@ commit deploy `6a994654e7528310841dbe29`; Render Blueprint
 **Meta-lesson:** treat every repository ownership change as a controlled
 identity migration across Git, provider authorization, deployment source, and
 governance—not as a single repository-setting change.
+
+### L45 — A price table is not a spend boundary
+
+**Incident:** the pre-canary audit found stale or approximate tariffs, implicit
+fallback prices for unknown models, paid SDK/HTTP retries, and calls charged only
+after a response. A crash or ambiguous response could therefore spend money
+without consuming the workflow ceiling, while a new model ID could be silently
+priced as an unrelated default.
+**Root cause:** estimated accounting was treated as enforcement. The check and
+the billable side effect were separated by an unrecorded network interval, and
+transport libraries were allowed to multiply that side effect.
+**Fix:** maintain exact explicit model tariffs and fail closed on an unknown paid
+model; calculate the conservative request bound; durably fsync its reservation
+before transport; make one paid transport attempt; settle authoritative usage at
+full precision; and consume the whole reservation when usage is absent or
+malformed. If reported actual cost exceeds the reservation, record it and stop
+terminally rather than making the request replayable.
+**Pinned by:** tariff/model-contract, retry, crash-gap, malformed-usage,
+over-reservation, and precision-boundary regressions in the DAMM vendor suite.
+**Meta-lesson:** a hard ceiling requires a durable pre-side-effect claim and a
+conservative ambiguity policy; a spreadsheet of rates is only an estimate.
+
+### L46 — Provider-result durability and stage-checkpoint durability are separate commits
+
+**Incident:** a paid call could succeed and be accounted for, then the process
+could die before the stage saved the structured result. Resume either repeated
+the paid call or lacked the data needed to continue.
+**Root cause:** the stage checkpoint was the only replay surface, even though
+provider acceptance, spend settlement, result parsing, and stage publication
+cross distinct failure boundaries.
+**Fix:** persist successful structured LLM and retrieval results in the paid
+request journal and replay the exact vendor/model/pass/request result before
+considering another transport. Coalesce identical concurrent retrievals inside
+the singleton process. A restored unresolved reservation remains terminally
+ambiguous and consumes its full bound until an operator reconciles it.
+**Pinned by:** result-replay, wrong-pass/model, concurrent-identical-request, and
+restart-ambiguity regressions.
+**Meta-lesson:** every expensive side effect needs its own durable outcome record;
+downstream workflow checkpoints cannot close the provider-response crash gap.
+
+### L47 — Output cardinality does not prove semantic completion
+
+**Incident:** Stage 5 could satisfy a three-scenario shape check with blank,
+duplicated, or weakly linked scenario objects and still unlock downstream paid
+work.
+**Root cause:** structural validation counted containers but did not test the
+decision-relevant meaning that the next stage assumes.
+**Fix:** require exactly three nonblank, distinct scenarios; substantive drivers;
+an explicit preferred-future reference and fields; and nonblank milestones before
+Stage 5 completes.
+**Pinned by:** Stage 5 semantic-gate regressions in the foresight and gate suites.
+**Meta-lesson:** a gate is complete only when it proves the assumptions of its
+consumer, not when its JSON has the expected number of elements.
+
+### L48 — The lease must cover the whole publication critical section
+
+**Incident:** the worker heartbeat began after preparation/reconciliation and
+could stop before final publication acknowledgement. A slow or hung coordinator
+could outlive its direct child, while a crafted ZIP could hide duplicate names or
+force decompression before an enforceable size decision.
+**Root cause:** claim liveness, process ownership, archive validation, and final
+database acknowledgement were handled as local implementation details instead of
+one end-to-end ownership boundary.
+**Fix:** heartbeat from the start of preparation through final acknowledgement;
+abort with margin before lease expiry; assert claim ownership at boundaries;
+launch the coordinator in its own POSIX process group and terminate TERM-to-KILL;
+make a false final acknowledgement fatal; inspect raw ZIP names and declared
+sizes before any entry decompression; and prove that parsed local records cover
+every byte before the central directory. Clear the active process handle as soon
+as the coordinator wait settles, before awaiting or reacting to a late heartbeat;
+otherwise a delayed `false` beat can signal an already-exited or recycled PID or
+process group after a successful terminal acknowledgement. The process wrapper
+must likewise own its escalation timer: if TERM makes the coordinator exit while
+a descendant survives, send the group KILL before resolving `wait()`, cancel the
+timer, and make every post-settlement `kill()` a no-op.
+**Pinned by:** pre-coordinator heartbeat, hung-beat, lease-margin, grandchild
+termination, duplicate-name, zero-decompression oversized-entry, and failed-
+finish regressions, plus the late in-flight heartbeat-after-success regression,
+and the no-post-settlement-process-group-signal regression, in the DAR
+worker/publication suite.
+**Meta-lesson:** publication safety is one distributed critical section, from
+claim acquisition through the last durable acknowledgement and every descendant
+process or byte container it controls.
+
+### L49 — A deterministic simulation must bind code and container metadata
+
+**Incident:** the simulator covered only part of the production implementation,
+and two identical synthetic runs could produce different Stage 8 ZIP bytes
+because archive timestamps and metadata came from the runtime clock.
+**Root cause:** deterministic fixtures were mistaken for deterministic execution;
+transitive production inputs and serialization metadata were outside the
+identity boundary.
+**Fix:** bind the simulation identity to all 37 production files used across the
+eight stages and write canonical ZIP timestamps/attributes/order. Require a
+fresh repeated run to reproduce report, bundle, and Stage 8 manifest hashes.
+Record the interpreter and compression runtime with every reported hash. The
+matrix has three full eight-stage happy profiles, three Stage-6-only overlength
+profiles, and one real Stages-6-through-8 package profile with synthetic
+predecessors; do not describe all seven as full-workflow executions.
+**Pinned by:** source-identity drift and repeat-happy determinism regressions plus
+independent DAMM/DAR adapter hash parity.
+**Meta-lesson:** reproducibility includes executable dependencies and container
+metadata, not merely prompts, fixtures, and logical payloads.
+
+### L50 — Account billing controls sit outside the workflow ledger
+
+**Incident:** Jina's logged-in dashboard verified a conservative account rate
+but did not reveal which masked key Render uses, and the account funding control
+was not demonstrably bounded. The application could enforce `<$500` of metered
+usage while an account purchase still caused a larger or poorly timed cash charge.
+**Root cause:** request-cost control and account funding were treated as the same
+boundary even though provider packages, key attribution, credits, taxes, and
+automatic purchases are separate control-plane state.
+**Fix:** before a paid canary, identify the exact production key and its package,
+reverify the effective tariff, and verify that the account's funding control is
+acceptably bounded for the canary. Keep an account-level vendor spend limit
+wherever the provider offers one.
+**Pinned by:** the 2026-09-03 tariff audit and read-only Jina dashboard evidence.
+**Meta-lesson:** code can bound requests; only provider/account controls can bound
+the resulting invoice and funding events.
+
+### L51 — Terminal paid failures must survive every orchestration boundary
+
+**Incident:** a paid request could correctly classify an ambiguous or
+over-reservation outcome as terminal, but a broad stage fallback converted the
+failure into alternate work and the coordinator then treated exit code `78` as
+retryable. The accounting layer had stopped safely while the surrounding
+orchestration could still spend again.
+**Root cause:** terminality was encoded at the provider call but not preserved as
+an end-to-end contract through stage fallback, process exit, and worker queue
+acknowledgement.
+**Fix:** rethrow terminal paid outcomes before any stage fallback; classify
+coordinator exit `78` as terminal/nonretryable; and require the DAR worker to
+write exactly one terminal `failed` result with no claim release, requeue, or
+second spawn.
+**Pinned by:** DAMM regressions for stage-fallback propagation and coordinator
+exit `78`, plus the DAR drain regression asserting one spawn, one terminal write,
+and zero release/requeue operations.
+**Meta-lesson:** a safety classification is only real when every caller preserves
+it; retries are a distributed property of the whole orchestration stack.
+
+### L52 — One lease must be measured by one clock
+
+**Incident:** the database wrote `heartbeat_at` with PostgreSQL `now()`, but the
+worker calculated the stale-claim threshold from application `Date.now()`. A
+future-skewed worker clock could reclaim a fresh claim, while a delayed successful
+heartbeat response could make the local process believe its database lease was
+newer than the persisted heartbeat.
+**Root cause:** one ownership lease mixed database wall time, application wall
+time, and response-arrival time as if they shared an exact clock and zero network
+latency.
+**Fix:** compare persisted heartbeats exclusively with database `now()` minus the
+lease interval. Inside the owning process, measure elapsed safety windows with a
+monotonic clock and credit a successful heartbeat only from its conservative
+request-start boundary, never from response arrival.
+**Pinned by:** the future-skewed application-clock fresh/stale reclaim regression
+in the run-store suite and the delayed-success-then-hung heartbeat regression in
+the worker suite.
+**Meta-lesson:** distributed leases need a single authoritative clock for shared
+state and conservative monotonic elapsed time for local self-termination.
+
+### L53 — A ZIP manifest cannot account for bytes the parser never names
+
+**Incident:** the Stage 8 verifier rejected unmanifested archive entries but
+accepted arbitrary bytes inserted after the last local record and before the
+central directory. Those bytes had no filename and therefore escaped both the
+central-directory duplicate check and the exhaustive package manifest.
+**Root cause:** archive validation proved the consistency of the entries it
+parsed, but did not prove that those entries described the complete byte region
+that precedes the central directory. Data-descriptor compatibility also made a
+simple last-entry end check insufficient.
+**Fix:** record every local header, compressed-data span, and optional signed or
+unsigned data descriptor; validate each descriptor's CRC and sizes against its
+central record; permit descriptor-bearing local CRC/size fields only when all
+zero or all equal to that central record; sort the local offsets; and require
+exact contiguous coverage from byte zero to the central-directory offset before
+any publication.
+**Pinned by:** the forged interstitial-byte rejection and valid signed-descriptor
+and unsigned-descriptor compatibility/contradiction regressions in the Stage 8
+boundary suite.
+**Meta-lesson:** an exhaustive logical manifest is not an exhaustive container
+proof unless the parser also accounts for every physical byte in the container.

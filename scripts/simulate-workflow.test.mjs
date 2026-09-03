@@ -8,6 +8,7 @@ import { describe, it } from "node:test";
 
 import {
   SIMULATION_LABEL,
+  SCENARIOS,
   SOURCE_IDENTITY_FILES,
   runWorkflowSimulation,
   sha256Json,
@@ -17,15 +18,39 @@ import {
 
 const UPSTREAM_PRODUCTION_CODE_FILES = Object.freeze([
   "gauntlet/loop-1/research_pipeline/simulation.py",
+  "gauntlet/loop-1/research_pipeline/simulate_workflow.py",
   "gauntlet/loop-1/research_pipeline/investment_options.py",
   "gauntlet/loop-1/research_pipeline/report_design.py",
   "gauntlet/loop-1/research_pipeline/generate_dar.py",
   "gauntlet/loop-1/research_pipeline/export_package.py",
   "gauntlet/loop-1/research_pipeline/run_workflow.py",
+  "gauntlet/loop-1/research_pipeline/diagnostic_stage.py",
+  "gauntlet/loop-1/research_pipeline/research_orchestrator.py",
+  "gauntlet/loop-1/research_pipeline/automated_challenge.py",
+  "gauntlet/loop-1/research_pipeline/diagnostic.py",
+  "gauntlet/loop-1/research_pipeline/scan_stage.py",
+  "gauntlet/loop-1/research_pipeline/prices.json",
+  "gauntlet/loop-1/research_pipeline/scans.py",
+  "gauntlet/loop-1/research_pipeline/ai_assessment.py",
+  "gauntlet/loop-1/research_pipeline/foresight.py",
   "gauntlet/loop-1/research_pipeline/vendors.py",
   "gauntlet/loop-1/research_pipeline/workflow_inputs.py",
   "gauntlet/loop-1/research_pipeline/foresight_contract.py",
+  "gauntlet/loop-1/research_pipeline/gates.py",
+  "gauntlet/loop-1/research_pipeline/cell_schema.py",
+  "gauntlet/loop-1/research_pipeline/nso_registry.py",
+  "gauntlet/loop-1/research_pipeline/country_names.py",
+  "gauntlet/loop-1/research_pipeline/countries.json",
+  "gauntlet/loop-1/research_pipeline/nso_registry.json",
   "gauntlet/loop-1/engine_v17.py",
+  "gauntlet/loop-1/build_inputs.py",
+  "gauntlet/loop-1/build_workbook_v17.py",
+  "gauntlet/loop-1/verify_workbook_parity.py",
+  "gauntlet/loop-1/machine_pass.py",
+  "gauntlet/loop-1/survey_pass.py",
+  "gauntlet/loop-1/render_v17.py",
+  "gauntlet/loop-1/definition_notes.json",
+  "model/export_model.py",
   "model/reference_scorer.py",
   "model/DAMM-v1.7-model.json",
   "workflow/dar-workflow-v1.json",
@@ -33,9 +58,9 @@ const UPSTREAM_PRODUCTION_CODE_FILES = Object.freeze([
 
 function report(overrides = {}) {
   const codeFiles = Object.fromEntries(
-    UPSTREAM_PRODUCTION_CODE_FILES.map((relative, index) => [
+    UPSTREAM_PRODUCTION_CODE_FILES.map((relative) => [
       relative,
-      (index + 1).toString(16).repeat(64),
+      createHash("sha256").update(relative).digest("hex"),
     ]),
   );
   const value = {
@@ -120,15 +145,6 @@ function simulationSource(root) {
   mkdirSync(dirname(scenarioPath), { recursive: true });
   writeFileSync(scenarioPath, scenarioContents, { mode: 0o600 });
   const scenarioSha256 = createHash("sha256").update(scenarioContents).digest("hex");
-  const script = join(
-    sourceRoot,
-    "gauntlet",
-    "loop-1",
-    "research_pipeline",
-    "simulate_workflow.py",
-  );
-  mkdirSync(dirname(script), { recursive: true });
-  writeFileSync(script, "# fixture entry point\n", { mode: 0o600 });
   const runIdentity = sha256Json({
     scenario_sha256: scenarioSha256,
     country: "Nigeria",
@@ -144,6 +160,14 @@ function simulationSource(root) {
 }
 
 describe("workflow simulation adapter", () => {
+  it("exposes every committed production-path simulation scenario", () => {
+    assert.deepEqual(SCENARIOS, [
+      "nigeria-stage6-overlength-v1",
+      "nigeria-stage6-through-package-v1",
+      "eight-stage-happy-v1",
+    ]);
+  });
+
   it("mirrors the complete upstream production-code identity set", () => {
     assert.deepEqual(
       [...SOURCE_IDENTITY_FILES].sort(),

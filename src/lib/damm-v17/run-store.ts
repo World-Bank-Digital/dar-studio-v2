@@ -1120,9 +1120,8 @@ export async function listRuns(userId: string, limit = 50): Promise<Run[]> {
  * that died. The `where` clause re-checks both conditions inside the update, so the
  * decision and the write cannot be separated by another worker.
  */
-export async function claimNextRun(workerId: string): Promise<ClaimedRun | null> {
-  const sql = await getSql();
-  const staleBefore = new Date(Date.now() - CLAIM_LEASE_MS);
+export async function claimNextRun(workerId: string, database?: Sql): Promise<ClaimedRun | null> {
+  const sql = database ?? (await getSql());
   const claimToken = randomUUID();
   const rows = await sql<RunRow>`
     update runs set
@@ -1136,7 +1135,8 @@ export async function claimNextRun(workerId: string): Promise<ClaimedRun | null>
       select id from runs
       where status = 'queued'
          or (status = 'running'
-             and (heartbeat_at is null or heartbeat_at < ${staleBefore}))
+             and (heartbeat_at is null
+                  or heartbeat_at < now() - (${CLAIM_LEASE_MS}::bigint * interval '1 millisecond')))
       order by created_at
       limit 1
       for update skip locked

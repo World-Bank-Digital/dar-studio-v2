@@ -15,7 +15,11 @@ import { dirname, isAbsolute, join, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 
 export const SIMULATION_LABEL = "SIMULATED — NOT ACCEPTANCE EVIDENCE";
-export const SCENARIOS = Object.freeze(["nigeria-stage6-overlength-v1", "eight-stage-happy-v1"]);
+export const SCENARIOS = Object.freeze([
+  "nigeria-stage6-overlength-v1",
+  "nigeria-stage6-through-package-v1",
+  "eight-stage-happy-v1",
+]);
 export const PROFILES = Object.freeze(["minimal", "typical", "dense"]);
 
 const ROOT = dirname(dirname(fileURLToPath(import.meta.url)));
@@ -23,15 +27,39 @@ const PIPELINE_RELATIVE = join("gauntlet", "loop-1", "research_pipeline", "simul
 const SAFE_PARENT_ENV = Object.freeze(["PATH", "LANG", "LC_ALL", "TZ"]);
 export const SOURCE_IDENTITY_FILES = Object.freeze([
   "gauntlet/loop-1/research_pipeline/simulation.py",
+  "gauntlet/loop-1/research_pipeline/simulate_workflow.py",
   "gauntlet/loop-1/research_pipeline/investment_options.py",
   "gauntlet/loop-1/research_pipeline/report_design.py",
   "gauntlet/loop-1/research_pipeline/generate_dar.py",
   "gauntlet/loop-1/research_pipeline/export_package.py",
   "gauntlet/loop-1/research_pipeline/run_workflow.py",
+  "gauntlet/loop-1/research_pipeline/diagnostic_stage.py",
+  "gauntlet/loop-1/research_pipeline/research_orchestrator.py",
+  "gauntlet/loop-1/research_pipeline/automated_challenge.py",
+  "gauntlet/loop-1/research_pipeline/diagnostic.py",
+  "gauntlet/loop-1/research_pipeline/scan_stage.py",
+  "gauntlet/loop-1/research_pipeline/prices.json",
+  "gauntlet/loop-1/research_pipeline/scans.py",
+  "gauntlet/loop-1/research_pipeline/ai_assessment.py",
+  "gauntlet/loop-1/research_pipeline/foresight.py",
   "gauntlet/loop-1/research_pipeline/vendors.py",
   "gauntlet/loop-1/research_pipeline/workflow_inputs.py",
   "gauntlet/loop-1/research_pipeline/foresight_contract.py",
+  "gauntlet/loop-1/research_pipeline/gates.py",
+  "gauntlet/loop-1/research_pipeline/cell_schema.py",
+  "gauntlet/loop-1/research_pipeline/nso_registry.py",
+  "gauntlet/loop-1/research_pipeline/country_names.py",
+  "gauntlet/loop-1/research_pipeline/countries.json",
+  "gauntlet/loop-1/research_pipeline/nso_registry.json",
   "gauntlet/loop-1/engine_v17.py",
+  "gauntlet/loop-1/build_inputs.py",
+  "gauntlet/loop-1/build_workbook_v17.py",
+  "gauntlet/loop-1/verify_workbook_parity.py",
+  "gauntlet/loop-1/machine_pass.py",
+  "gauntlet/loop-1/survey_pass.py",
+  "gauntlet/loop-1/render_v17.py",
+  "gauntlet/loop-1/definition_notes.json",
+  "model/export_model.py",
   "model/reference_scorer.py",
   "model/DAMM-v1.7-model.json",
   "workflow/dar-workflow-v1.json",

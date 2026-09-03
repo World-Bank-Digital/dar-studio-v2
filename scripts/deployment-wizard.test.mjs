@@ -103,6 +103,7 @@ test("the deployment wizard verifies progressive storage and the prior cutover b
   assert.match(wizard, /migrations\/0020_damm_source_pin_cutover\.sql/);
   assert.match(wizard, /migrations\/0021_damm_source_pin_cutover\.sql/);
   assert.match(wizard, /migrations\/0022_damm_source_pin_cutover\.sql/);
+  assert.match(wizard, /migrations\/0023_damm_source_pin_cutover\.sql/);
   assert.ok(
     wizard.indexOf("migrations/0019_progressive_stage_artifacts.sql") <
       wizard.indexOf("migrations/0020_damm_source_pin_cutover.sql"),
@@ -115,19 +116,27 @@ test("the deployment wizard verifies progressive storage and the prior cutover b
     wizard.indexOf("migrations/0021_damm_source_pin_cutover.sql") <
       wizard.indexOf("migrations/0022_damm_source_pin_cutover.sql"),
   );
+  assert.ok(
+    wizard.indexOf("migrations/0022_damm_source_pin_cutover.sql") <
+      wizard.indexOf("migrations/0023_damm_source_pin_cutover.sql"),
+  );
   assert.match(wizard, /MIGRATION_0019_VERIFIED/);
   assert.match(wizard, /MIGRATION_0020_VERIFIED/);
   assert.match(wizard, /MIGRATION_0021_VERIFIED/);
   assert.match(wizard, /MIGRATION_0022_VERIFIED/);
+  assert.match(wizard, /MIGRATION_0023_VERIFIED/);
   assert.match(wizard, /0019_progressive_stage_artifacts\.sql/);
   assert.match(wizard, /0020_damm_source_pin_cutover\.sql/);
   assert.match(wizard, /0021_damm_source_pin_cutover\.sql/);
   assert.match(wizard, /0022_damm_source_pin_cutover\.sql/);
-  assert.match(wizard, /pre-0022-YYYYMMDD-HHMM/);
-  assert.match(wizard, /suspend the preceding-pin Render worker before merging or applying 0022/);
+  assert.match(wizard, /0023_damm_source_pin_cutover\.sql/);
+  assert.match(wizard, /pre-0023-YYYYMMDD-HHMM/);
+  assert.match(wizard, /suspend the preceding-pin Render worker before applying 0023/);
+  assert.match(wizard, /reviewed merge is inert only while Netlify builds, Deploy Previews, Render service auto-deploys, and Blueprint Auto Sync are all disabled/);
   assert.match(wizard, /existing worker visibly suspended/);
-  assert.match(wizard, /ff5aecbfec5c2694a61f282c27db74ea8b99b28c/);
+  assert.match(wizard, /68e1994b5facfaaf0ddc49ba3bec108d9bde2c55/);
   assert.match(wizard, /95dcef014086f6c01f58678db426fb48d87546b8b6a4315c530801b1ff74c5be/);
+  assert.doesNotMatch(wizard, /ff5aecbfec5c2694a61f282c27db74ea8b99b28c/);
   assert.doesNotMatch(wizard, /f7dfbbb647e0a45d996e94f62d49f2218d518c94/);
   assert.doesNotMatch(wizard, /e866e7a1fffd5edb14f53da5e038f69b2ec29af2/);
   assert.doesNotMatch(wizard, /386ccb90904de4109b64b7c62d4ed7beed8daede/);
@@ -136,6 +145,34 @@ test("the deployment wizard verifies progressive storage and the prior cutover b
   assert.doesNotMatch(wizard, /2efb26607acc29a687a82a56edc85f53c4a6da69/);
   assert.doesNotMatch(wizard, /d4c659f5873f3a891634c8edf6b7166cb2eb374c/);
   assert.doesNotMatch(wizard, /92c6ffe8b331347bc05f345785fe409753401a24/);
+});
+
+test("the deployment wizard keeps paid canary execution behind separate named authorization", () => {
+  const wizard = readFileSync(join(root, "scripts/deploy/netlify-neon-render-ohio.sh"), "utf8");
+
+  assert.match(wizard, /This stage does not authorize provider inference\/search or the separately gated paid canary/);
+  assert.doesNotMatch(wizard, /run vendor-cost smoke tests/);
+  assert.match(wizard, /Deployment-only closeout boundary/);
+  assert.match(wizard, /Deployment completion does not authorize either/);
+  assert.match(wizard, /separate explicit paid-canary authorization/i);
+  assert.match(wizard, /Reverify every selected provider model ID and tariff against first-party documentation today/);
+  assert.match(wizard, /Map the exact Render Jina key to its package\/rate/);
+  assert.match(wizard, /37-file identity 9eb81998a65a15be6a92be2524cec82a8b5550756c5d910df3b5ca901001489c/);
+  assert.match(wizard, /exactly one Live worker instance and possible claimant/);
+  assert.match(wizard, /cumulative spend against \$225, \$262\.50, \$312\.50, \$350, \$400, \$425, then strictly below \$500/);
+  assert.match(wizard, /Abort without automatic retry\/top-up\/state repair/);
+  assert.match(wizard, /Explicitly authorized canary country name/);
+  assert.doesNotMatch(wizard, /create a new Nigeria country workspace/i);
+});
+
+test("the deployment wizard requires exact post-cutover runtime and database evidence", () => {
+  const wizard = readFileSync(join(root, "scripts/deploy/netlify-neon-render-ohio.sh"), "utf8");
+
+  assert.match(wizard, /exactly 23 total migration rows through 0023/);
+  assert.match(wizard, /preserved-failure query/);
+  assert.match(wizard, /node=22\.22\.3, python=3\.12\.13, migrations=23 through 0023/);
+  assert.match(wizard, /up-to-date exact 23-row ledger through 0023/);
+  assert.match(wizard, /Netlify must not be the first process to apply 0023/);
 });
 
 test("the deployment wizard keeps the private DAMM build credential out of env values", () => {

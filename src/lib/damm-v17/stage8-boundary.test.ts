@@ -1,6 +1,8 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
+import JSZip from "jszip";
+
 import {
   Stage8BoundaryVerificationError,
   type Stage8BoundaryFailureCode,
@@ -162,6 +164,140 @@ function duplicateFirstCentralDirectoryRecord(content: Uint8Array): Uint8Array {
     sourceView.getUint32(endOffset + 12, true) + recordLength,
     true,
   );
+  return output;
+}
+
+function insertBytesBeforeCentralDirectory(
+  content: Uint8Array,
+  injected: Uint8Array,
+): Uint8Array {
+  const source = new Uint8Array(content);
+  const sourceView = new DataView(source.buffer);
+  const endOffset = zipEndOffset(source);
+  const centralOffset = sourceView.getUint32(endOffset + 16, true);
+  const output = new Uint8Array(source.byteLength + injected.byteLength);
+  output.set(source.subarray(0, centralOffset));
+  output.set(injected, centralOffset);
+  output.set(source.subarray(centralOffset), centralOffset + injected.byteLength);
+  const outputView = new DataView(output.buffer);
+  outputView.setUint32(
+    endOffset + injected.byteLength + 16,
+    centralOffset + injected.byteLength,
+    true,
+  );
+  return output;
+}
+
+async function archiveWithDataDescriptors(
+  fixture: SyntheticStoredStage8Package,
+): Promise<Uint8Array> {
+  const archive = new JSZip();
+  for (const [relativePath, content] of fixture.packageBytes) {
+    archive.file(`synthetic-draft/${relativePath}`, content, { createFolders: false });
+  }
+  archive.file("synthetic-draft/package-manifest.json", fixture.packageManifestBytes, {
+    createFolders: false,
+  });
+  return archive.generateAsync({
+    type: "uint8array",
+    compression: "DEFLATE",
+    streamFiles: true,
+  });
+}
+
+function lastZipEntry(content: Uint8Array): {
+  centralOffset: number;
+  compressedSize: number;
+  crc32: number;
+  localOffset: number;
+  uncompressedSize: number;
+} {
+  const view = new DataView(content.buffer, content.byteOffset, content.byteLength);
+  const endOffset = zipEndOffset(content);
+  const centralOffset = view.getUint32(endOffset + 16, true);
+  const entryCount = view.getUint16(endOffset + 10, true);
+  let cursor = centralOffset;
+  let result:
+    | {
+        centralOffset: number;
+        compressedSize: number;
+        crc32: number;
+        localOffset: number;
+        uncompressedSize: number;
+      }
+    | undefined;
+  for (let ordinal = 0; ordinal < entryCount; ordinal += 1) {
+    assert.equal(view.getUint32(cursor, true), 0x02014b50);
+    const localOffset = view.getUint32(cursor + 42, true);
+    if (!result || localOffset > result.localOffset) {
+      result = {
+        centralOffset,
+        compressedSize: view.getUint32(cursor + 20, true),
+        crc32: view.getUint32(cursor + 16, true),
+        localOffset,
+        uncompressedSize: view.getUint32(cursor + 24, true),
+      };
+    }
+    cursor +=
+      46 +
+      view.getUint16(cursor + 28, true) +
+      view.getUint16(cursor + 30, true) +
+      view.getUint16(cursor + 32, true);
+  }
+  assert.ok(result);
+  return result;
+}
+
+function unsignedLastDataDescriptor(content: Uint8Array): Uint8Array {
+  const source = new Uint8Array(content);
+  const view = new DataView(source.buffer);
+  const endOffset = zipEndOffset(source);
+  const entry = lastZipEntry(source);
+  assert.equal(view.getUint16(entry.localOffset + 6, true) & 0x0008, 0x0008);
+  const descriptorOffset =
+    entry.localOffset +
+    30 +
+    view.getUint16(entry.localOffset + 26, true) +
+    view.getUint16(entry.localOffset + 28, true) +
+    entry.compressedSize;
+  assert.equal(view.getUint32(descriptorOffset, true), 0x08074b50);
+
+  const output = new Uint8Array(source.byteLength - 4);
+  output.set(source.subarray(0, descriptorOffset));
+  output.set(source.subarray(descriptorOffset + 4), descriptorOffset);
+  const outputView = new DataView(output.buffer);
+  outputView.setUint32(endOffset - 4 + 16, entry.centralOffset - 4, true);
+  return output;
+}
+
+function contradictoryLastDescriptorLocalMetadata(content: Uint8Array): Uint8Array {
+  const output = new Uint8Array(content);
+  const view = new DataView(output.buffer);
+  const entry = lastZipEntry(output);
+  assert.equal(view.getUint16(entry.localOffset + 6, true) & 0x0008, 0x0008);
+  const differentNonzero = (value: number): number => (value === 1 ? 2 : 1);
+  view.setUint32(entry.localOffset + 14, differentNonzero(entry.crc32), true);
+  view.setUint32(
+    entry.localOffset + 18,
+    differentNonzero(entry.compressedSize),
+    true,
+  );
+  view.setUint32(
+    entry.localOffset + 22,
+    differentNonzero(entry.uncompressedSize),
+    true,
+  );
+  return output;
+}
+
+function matchingLastDescriptorLocalMetadata(content: Uint8Array): Uint8Array {
+  const output = new Uint8Array(content);
+  const view = new DataView(output.buffer);
+  const entry = lastZipEntry(output);
+  assert.equal(view.getUint16(entry.localOffset + 6, true) & 0x0008, 0x0008);
+  view.setUint32(entry.localOffset + 14, entry.crc32, true);
+  view.setUint32(entry.localOffset + 18, entry.compressedSize, true);
+  view.setUint32(entry.localOffset + 22, entry.uncompressedSize, true);
   return output;
 }
 
@@ -594,6 +730,59 @@ describe("stored Stage 8 boundary verification", () => {
       /repeats entry name/,
     );
   });
+
+  it("rejects unmanifested bytes between the local records and central directory", async () => {
+    const fixture = await syntheticValidPackage();
+    replaceBundle(
+      fixture,
+      insertBytesBeforeCentralDirectory(
+        artifact(fixture, "bundle").content,
+        bytes("UNMANIFESTED-HIDDEN-BYTES"),
+      ),
+    );
+    await rejection(
+      () => verifyStoredStage8Boundary(fixture.run, fixture.artifacts),
+      "INVALID_ARCHIVE",
+      /local record coverage/,
+    );
+  });
+
+  it("accepts exact ZIP local records that use signed and unsigned data descriptors", async () => {
+    for (const descriptorForm of ["signed", "unsigned"] as const) {
+      for (const localMetadata of ["zero", "matching"] as const) {
+        const fixture = await syntheticValidPackage();
+        const signed = await archiveWithDataDescriptors(fixture);
+        const descriptorArchive =
+          descriptorForm === "signed" ? signed : unsignedLastDataDescriptor(signed);
+        replaceBundle(
+          fixture,
+          localMetadata === "zero"
+            ? descriptorArchive
+            : matchingLastDescriptorLocalMetadata(descriptorArchive),
+        );
+
+        const verified = await verifyStoredStage8Boundary(fixture.run, fixture.artifacts);
+
+        assert.equal(verified.bundleSha256, artifact(fixture, "bundle").sha256);
+      }
+    }
+  });
+
+  for (const descriptorForm of ["signed", "unsigned"] as const) {
+    it(`rejects contradictory nonzero local metadata in ${descriptorForm} data descriptors`, async () => {
+      const fixture = await syntheticValidPackage();
+      const signed = await archiveWithDataDescriptors(fixture);
+      const descriptorArchive =
+        descriptorForm === "signed" ? signed : unsignedLastDataDescriptor(signed);
+      replaceBundle(fixture, contradictoryLastDescriptorLocalMetadata(descriptorArchive));
+
+      await rejection(
+        () => verifyStoredStage8Boundary(fixture.run, fixture.artifacts),
+        "INVALID_ARCHIVE",
+        /inconsistent byte metadata/,
+      );
+    });
+  }
 
   it("rejects encrypted, ZIP64, and out-of-bounds central-directory records", async () => {
     const encrypted = await syntheticValidPackage();

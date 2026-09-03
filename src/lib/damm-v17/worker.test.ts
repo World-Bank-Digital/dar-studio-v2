@@ -40,6 +40,7 @@ import {
   type PipelineMethodologyFile,
 } from "./worker.ts";
 import { defaultVendorFor, type ClaimedRun, type Run } from "./runs.ts";
+import { MAX_WORKFLOW_ARTIFACT_BYTES } from "./artifact-limits.ts";
 import { verifyStoredStage8Boundary } from "./stage8-boundary.server.ts";
 import { artifactsFor } from "./worker-artifacts.ts";
 import { DAR_WORKFLOW, DAR_WORKFLOW_SHA256 } from "./workflow.ts";
@@ -456,9 +457,77 @@ describe("following a run", () => {
       },
       kill: () => (killed.yes = true),
     };
-    await runOne(run(), "w1", deps(f.store, proc));
+    await assert.rejects(runOne(run(), "w1", deps(f.store, proc)), /claim is no longer safe/);
     assert.ok(f.calls.heartbeats > 0, "should have checked its claim");
     assert.ok(killed.yes, "should have stopped rather than run alongside the new claimant");
+  });
+
+  it("stops paid work before an unconfirmed heartbeat can reach lease expiry", async () => {
+    const f = fakeStore();
+    const killed = { yes: false };
+    let outCb: (c: string) => void = () => {};
+    const proc: SpawnedProcess = {
+      onStdout: (cb) => (outCb = cb),
+      onStderr: () => {},
+      async wait() {
+        outCb(RESEARCH_OUT);
+        await new Promise((resolve) => setTimeout(resolve, 60));
+        return 0;
+      },
+      kill: () => (killed.yes = true),
+    };
+    const d = deps(f.store, proc);
+    d.heartbeatMs = 5;
+    d.claimLeaseMs = 40;
+    f.store.heartbeat = () => new Promise<boolean>(() => {});
+
+    await assert.rejects(runOne(run(), "w1", d), /claim is no longer safe/);
+
+    assert.equal(killed.yes, true);
+    assert.equal(f.calls.finished.length, 0);
+  });
+
+  it("does not extend the lease safety window when a successful heartbeat response is delayed", async () => {
+    const f = fakeStore();
+    const heartbeatMs = 10;
+    const claimLeaseMs = 300;
+    let heartbeatCalls = 0;
+    let firstHeartbeatRequestedAt = 0;
+    let killedAt = 0;
+    let settleWait: ((code: number | null) => void) | undefined;
+    const proc: SpawnedProcess = {
+      onStdout: () => {},
+      onStderr: () => {},
+      wait: () =>
+        new Promise<number | null>((resolve) => {
+          settleWait = resolve;
+        }),
+      kill: () => {
+        killedAt = performance.now();
+        settleWait?.(null);
+      },
+    };
+    f.store.heartbeat = async () => {
+      heartbeatCalls += 1;
+      if (heartbeatCalls === 1) {
+        firstHeartbeatRequestedAt = performance.now();
+        await new Promise((resolve) => setTimeout(resolve, 180));
+        return true;
+      }
+      return new Promise<boolean>(() => {});
+    };
+    const d = deps(f.store, proc);
+    d.heartbeatMs = heartbeatMs;
+    d.claimLeaseMs = claimLeaseMs;
+
+    await assert.rejects(runOne(run(), "w1", d), /claim is no longer safe/);
+
+    assert.ok(firstHeartbeatRequestedAt > 0, "should have sent a heartbeat");
+    assert.ok(killedAt > 0, "should stop paid work when the next heartbeat remains unconfirmed");
+    assert.ok(
+      killedAt - firstHeartbeatRequestedAt < claimLeaseMs,
+      "should stop before the persisted heartbeat can reach lease expiry",
+    );
   });
 
   it("maps the coordinator's eight stage completions to one finished run", async () => {
@@ -576,6 +645,49 @@ describe("following a run", () => {
     ]);
   });
 
+  it("does not let a rejected completed-stage write bypass package verification", async () => {
+    const f = fakeStore();
+    const stage = DAR_WORKFLOW.stages[0];
+    const output = [
+      JSON.stringify({
+        schema_version: "damm.workflow-event/v1",
+        run_id: "r1",
+        workflow_id: DAR_WORKFLOW.workflow_id,
+        workflow_version: DAR_WORKFLOW.workflow_version,
+        sequence: 1,
+        timestamp: "2026-09-02T00:00:01Z",
+        event: "stage_complete",
+        stage_id: stage.id,
+        stage_ordinal: stage.ordinal,
+        attempt: 1,
+        elapsed_seconds: 10,
+        spent_usd: 0,
+        cumulative_spent_usd: 0,
+        artifacts: [],
+      }),
+      JSON.stringify({
+        schema_version: "damm.workflow-event/v1",
+        run_id: "r1",
+        workflow_id: DAR_WORKFLOW.workflow_id,
+        workflow_version: DAR_WORKFLOW.workflow_version,
+        sequence: 2,
+        timestamp: "2026-09-02T00:00:02Z",
+        event: "workflow_complete",
+      }),
+    ].join("\n");
+    const p = fakeProcess([`${output}\n`], 0);
+    const d = deps(f.store, p.proc);
+    f.store.recordRow = async () => {
+      throw new Error("synthetic database write failure");
+    };
+    d.verifyWorkflow = () => ({ ok: false, reason: "synthetic incomplete package" });
+
+    const status = await runOne(run({ pass: "workflow", vendor: null }), "w1", d);
+
+    assert.equal(status, "failed");
+    assert.match(f.calls.finished[0].reason, /synthetic incomplete package/);
+  });
+
   it("turns workflow budget exhaustion into a terminal failure, not a top-up state", async () => {
     const f = fakeStore();
     const p = fakeProcess(["!! budget exhausted in pass 'research': $500.00 of $500.00\n"], 0);
@@ -605,6 +717,161 @@ describe("following a run", () => {
     const status = await runOne(run({ pass: "workflow", vendor: null }), "w1", d);
     assert.equal(status, "failed");
     assert.match(f.calls.finished[0].reason, /stage 8 is incomplete/);
+  });
+
+  it("keeps the claim alive through Stage 8 verification and publication", async () => {
+    const f = fakeStore();
+    const complete = JSON.stringify({
+      schema_version: "damm.workflow-event/v1",
+      run_id: "r1",
+      workflow_id: DAR_WORKFLOW.workflow_id,
+      workflow_version: DAR_WORKFLOW.workflow_version,
+      sequence: 1,
+      timestamp: "2026-08-26T00:00:01Z",
+      event: "workflow_complete",
+    });
+    const p = fakeProcess([`${complete}\n`], 0);
+    const d = deps(f.store, p.proc);
+    d.heartbeatMs = 5;
+    let heartbeatsAtSpawn = 0;
+    let heartbeatsAtPublicationStart = 0;
+    let heartbeatsAtFinishStart = 0;
+    d.prepareWorkflowInputs = async () => {
+      await new Promise((resolve) => setTimeout(resolve, 20));
+    };
+    d.spawnPipeline = () => {
+      heartbeatsAtSpawn = f.calls.heartbeats;
+      return p.proc;
+    };
+    d.publishWorkflowArtifacts = async () => {
+      heartbeatsAtPublicationStart = f.calls.heartbeats;
+      await new Promise((resolve) => setTimeout(resolve, 30));
+    };
+    const finishRun = f.store.finishRun.bind(f.store);
+    f.store.finishRun = async (...args) => {
+      heartbeatsAtFinishStart = f.calls.heartbeats;
+      await new Promise((resolve) => setTimeout(resolve, 20));
+      return finishRun(...args);
+    };
+
+    const status = await runOne(run({ pass: "workflow", vendor: null }), "w1", d);
+
+    assert.equal(status, "done");
+    assert.ok(
+      heartbeatsAtSpawn > 0,
+      "input preparation and recovery reconciliation must be covered by the lease heartbeat",
+    );
+    assert.ok(
+      heartbeatsAtFinishStart > heartbeatsAtPublicationStart,
+      "the lease must remain live while Stage 8 is verified and copied to shared storage",
+    );
+    assert.ok(
+      f.calls.heartbeats > heartbeatsAtFinishStart,
+      "the lease heartbeat must remain active until the terminal write settles",
+    );
+  });
+
+  it("does not spawn after the claim is lost during workflow preparation", async () => {
+    const f = fakeStore();
+    f.loseClaim();
+    const p = fakeProcess([], 0);
+    const d = deps(f.store, p.proc);
+    d.heartbeatMs = 5;
+    d.prepareWorkflowInputs = async () => {
+      await new Promise((resolve) => setTimeout(resolve, 20));
+    };
+    let spawned = false;
+    d.spawnPipeline = () => {
+      spawned = true;
+      return p.proc;
+    };
+
+    await assert.rejects(
+      runOne(run({ pass: "workflow", vendor: null }), "w1", d),
+      /claim is no longer safe/,
+    );
+
+    assert.equal(spawned, false);
+    assert.ok(f.calls.heartbeats > 0, "the claim must be checked during preparation");
+  });
+
+  it("handles a rejected heartbeat without abandoning the claimed run", async () => {
+    const f = fakeStore();
+    const p = fakeProcess([RESEARCH_OUT], 0);
+    const d = deps(f.store, p.proc);
+    d.heartbeatMs = 5;
+    let heartbeatAttempts = 0;
+    f.store.heartbeat = async () => {
+      heartbeatAttempts += 1;
+      if (heartbeatAttempts === 1) throw new Error("temporary database outage");
+      return true;
+    };
+    d.readLedger = async () => {
+      await new Promise((resolve) => setTimeout(resolve, 30));
+      return null;
+    };
+
+    const status = await runOne(run(), "w1", d);
+
+    assert.equal(status, "done");
+    assert.ok(heartbeatAttempts > 1, "the heartbeat should keep retrying after a transient error");
+  });
+
+  it("does not signal an exited process when an in-flight heartbeat settles after acknowledgement", async () => {
+    const f = fakeStore();
+    const killed = { yes: false };
+    let outCb: (c: string) => void = () => {};
+    let announceHeartbeat!: () => void;
+    const heartbeatStarted = new Promise<void>((resolve) => {
+      announceHeartbeat = resolve;
+    });
+    let settleHeartbeat!: (held: boolean) => void;
+    f.store.heartbeat = () => {
+      announceHeartbeat();
+      return new Promise<boolean>((resolve) => {
+        settleHeartbeat = resolve;
+      });
+    };
+    const proc: SpawnedProcess = {
+      onStdout: (cb) => (outCb = cb),
+      onStderr: () => {},
+      async wait() {
+        outCb(RESEARCH_OUT);
+        await heartbeatStarted;
+        return 0;
+      },
+      kill: () => (killed.yes = true),
+    };
+    const d = deps(f.store, proc);
+    d.heartbeatMs = 1;
+
+    assert.equal(await runOne(run(), "w1", d), "done");
+    assert.equal(killed.yes, false);
+
+    settleHeartbeat(false);
+    await new Promise((resolve) => setImmediate(resolve));
+    assert.equal(killed.yes, false, "a late heartbeat must not signal a stale PID or process group");
+  });
+
+  it("does not report a verified workflow done when its terminal claim write is rejected", async () => {
+    const f = fakeStore();
+    const complete = JSON.stringify({
+      schema_version: "damm.workflow-event/v1",
+      run_id: "r1",
+      workflow_id: DAR_WORKFLOW.workflow_id,
+      workflow_version: DAR_WORKFLOW.workflow_version,
+      sequence: 1,
+      timestamp: "2026-08-26T00:00:01Z",
+      event: "workflow_complete",
+    });
+    const p = fakeProcess([`${complete}\n`], 0);
+    const d = deps(f.store, p.proc);
+    f.store.finishRun = async () => false;
+
+    await assert.rejects(
+      runOne(run({ pass: "workflow", vendor: null }), "w1", d),
+      /terminal status was not recorded/,
+    );
   });
 
   it("keeps a fragmented stderr failure separate from partial stdout", async () => {
@@ -642,6 +909,25 @@ describe("draining the queue", () => {
     assert.equal(handled, 1);
     assert.equal(f.calls.finished[0].status, "failed");
     assert.match(f.calls.finished[0].reason, /python not found/);
+  });
+
+  it("records one terminal failure and never requeues a coordinator exit 78", async () => {
+    const f = fakeStore([run({ id: "terminal-paid-outcome", pass: "workflow", vendor: null })]);
+    let pipelineStarts = 0;
+    const handled = await drain("w1", {
+      ...deps(f.store, fakeProcess([], 78).proc),
+      spawnPipeline: () => {
+        pipelineStarts += 1;
+        return fakeProcess([], 78).proc;
+      },
+    });
+
+    assert.equal(handled, 1);
+    assert.equal(pipelineStarts, 1, "a terminal paid outcome must never replay the coordinator");
+    assert.equal(f.calls.finished.length, 1);
+    assert.equal(f.calls.finished[0].status, "failed");
+    assert.match(f.calls.finished[0].reason, /exited with code 78/);
+    assert.deepEqual(f.calls.released, [], "terminal outcomes are not returned to the queue");
   });
 
   it("finishes the run in flight but claims no new run after a graceful stop", async () => {
@@ -720,6 +1006,160 @@ describe("spawning the real pipeline", () => {
       else process.env.DAMM_PIPELINE_PYTHON = before;
     }
   });
+
+  it(
+    "stops a paid descendant that ignores SIGTERM when the heartbeat loses its claim",
+    { skip: process.platform === "win32" },
+    async () => {
+      const previous = {
+        pipeline: process.env.DAMM_PIPELINE_DIR,
+        python: process.env.DAMM_PIPELINE_PYTHON,
+        ready: process.env.DAR_TEST_PROCESS_TREE_READY,
+        survived: process.env.DAR_TEST_PROCESS_TREE_SURVIVED,
+      };
+      const temp = await mkdtemp(path.join(tmpdir(), "damm-process-tree-"));
+      const pipeline = path.join(temp, "pipeline");
+      const wrapper = path.join(temp, "coordinator.js");
+      const ready = path.join(temp, "grandchild-ready");
+      const survived = path.join(temp, "grandchild-survived");
+      await mkdir(path.join(pipeline, "gauntlet/loop-1/research_pipeline"), { recursive: true });
+      await writeFile(
+        wrapper,
+        `#!/usr/bin/env node
+const { spawn } = require("node:child_process");
+const source = [
+  'const fs = require("node:fs");',
+  'process.on("SIGTERM", () => {});',
+  'fs.writeFileSync(process.env.DAR_TEST_PROCESS_TREE_READY, "ready");',
+  'setTimeout(() => { fs.writeFileSync(process.env.DAR_TEST_PROCESS_TREE_SURVIVED, "survived"); process.exit(0); }, 1250);',
+].join("");
+spawn(process.execPath, ["-e", source], { stdio: "ignore" });
+setInterval(() => {}, 1000);
+`,
+        { mode: 0o755 },
+      );
+      process.env.DAMM_PIPELINE_DIR = pipeline;
+      process.env.DAMM_PIPELINE_PYTHON = wrapper;
+      process.env.DAR_TEST_PROCESS_TREE_READY = ready;
+      process.env.DAR_TEST_PROCESS_TREE_SURVIVED = survived;
+      try {
+        const f = fakeStore();
+        f.store.heartbeat = async () => {
+          try {
+            readFileSync(ready);
+            return false;
+          } catch {
+            return true;
+          }
+        };
+        const real = defaultDeps();
+        await assert.rejects(
+          runOne(run(), "w1", {
+            ...real,
+            store: f.store,
+            heartbeatMs: 10,
+            readLedger: async () => null,
+          }),
+          /claim is no longer safe/,
+        );
+        await new Promise((resolve) => setTimeout(resolve, 1400));
+        await assert.rejects(readFile(survived), { code: "ENOENT" });
+      } finally {
+        for (const [name, value] of Object.entries(previous)) {
+          const key =
+            name === "pipeline"
+              ? "DAMM_PIPELINE_DIR"
+              : name === "python"
+                ? "DAMM_PIPELINE_PYTHON"
+                : name === "ready"
+                  ? "DAR_TEST_PROCESS_TREE_READY"
+                  : "DAR_TEST_PROCESS_TREE_SURVIVED";
+          if (value === undefined) delete process.env[key];
+          else process.env[key] = value;
+        }
+        await rm(temp, { recursive: true, force: true });
+      }
+    },
+  );
+
+  it(
+    "does not signal the process group after its wait has settled",
+    { skip: process.platform === "win32" },
+    async () => {
+      // A delayed escalation that survives `wait()` can target an unrelated process if
+      // the exited coordinator's PID/process-group ID is recycled during the grace
+      // period. The process wrapper must own the whole TERM-to-KILL lifecycle: once its
+      // wait settles, it may never issue another signal for that numeric identity.
+      const previous = {
+        pipeline: process.env.DAMM_PIPELINE_DIR,
+        python: process.env.DAMM_PIPELINE_PYTHON,
+        ready: process.env.DAR_TEST_PROCESS_EXIT_READY,
+      };
+      const temp = await mkdtemp(path.join(tmpdir(), "damm-process-exit-"));
+      const pipeline = path.join(temp, "pipeline");
+      const wrapper = path.join(temp, "coordinator.js");
+      const ready = path.join(temp, "coordinator-ready");
+      await mkdir(path.join(pipeline, "gauntlet/loop-1/research_pipeline"), { recursive: true });
+      await writeFile(
+        wrapper,
+        `#!/usr/bin/env node
+const fs = require("node:fs");
+process.on("SIGTERM", () => process.exit(0));
+fs.writeFileSync(process.env.DAR_TEST_PROCESS_EXIT_READY, "ready");
+setInterval(() => {}, 1000);
+`,
+        { mode: 0o755 },
+      );
+      process.env.DAMM_PIPELINE_DIR = pipeline;
+      process.env.DAMM_PIPELINE_PYTHON = wrapper;
+      process.env.DAR_TEST_PROCESS_EXIT_READY = ready;
+
+      const originalKill = process.kill;
+      const groupSignals: string[] = [];
+      process.kill = ((pid: number, signal?: NodeJS.Signals | number) => {
+        if (pid < 0 && signal) groupSignals.push(String(signal));
+        return originalKill(pid, signal);
+      }) as typeof process.kill;
+
+      try {
+        const proc = defaultDeps().spawnPipeline(run());
+        const wait = proc.wait();
+        for (let attempt = 0; attempt < 100; attempt += 1) {
+          try {
+            readFileSync(ready);
+            break;
+          } catch {
+            await new Promise((resolve) => setTimeout(resolve, 10));
+          }
+        }
+        assert.doesNotThrow(() => readFileSync(ready), "the coordinator did not become ready");
+
+        proc.kill();
+        await wait;
+        const signalsWhenWaitSettled = groupSignals.length;
+        await new Promise((resolve) => setTimeout(resolve, 1200));
+
+        assert.deepEqual(
+          groupSignals.slice(signalsWhenWaitSettled),
+          [],
+          "a stale escalation must not signal a PID/process-group ID after wait settles",
+        );
+      } finally {
+        process.kill = originalKill;
+        for (const [name, value] of Object.entries(previous)) {
+          const key =
+            name === "pipeline"
+              ? "DAMM_PIPELINE_DIR"
+              : name === "python"
+                ? "DAMM_PIPELINE_PYTHON"
+                : "DAR_TEST_PROCESS_EXIT_READY";
+          if (value === undefined) delete process.env[key];
+          else process.env[key] = value;
+        }
+        await rm(temp, { recursive: true, force: true });
+      }
+    },
+  );
 
   it("points a research pass at the configured pipeline directory", () => {
     const before = process.env.DAMM_PIPELINE_DIR;
@@ -1707,6 +2147,85 @@ function stage1EngineInputRecord(
   return matches[0];
 }
 
+function duplicateFirstCentralDirectoryRecord(content: Uint8Array): Uint8Array {
+  const source = new Uint8Array(content);
+  const sourceView = new DataView(source.buffer, source.byteOffset, source.byteLength);
+  let endOffset = -1;
+  for (let offset = source.byteLength - 22; offset >= 0; offset -= 1) {
+    if (
+      sourceView.getUint32(offset, true) === 0x06054b50 &&
+      offset + 22 + sourceView.getUint16(offset + 20, true) === source.byteLength
+    ) {
+      endOffset = offset;
+      break;
+    }
+  }
+  assert.notEqual(endOffset, -1, "synthetic ZIP end record");
+  const centralOffset = sourceView.getUint32(endOffset + 16, true);
+  assert.equal(sourceView.getUint32(centralOffset, true), 0x02014b50);
+  const recordLength =
+    46 +
+    sourceView.getUint16(centralOffset + 28, true) +
+    sourceView.getUint16(centralOffset + 30, true) +
+    sourceView.getUint16(centralOffset + 32, true);
+  const output = new Uint8Array(source.byteLength + recordLength);
+  output.set(source.subarray(0, endOffset));
+  output.set(source.subarray(centralOffset, centralOffset + recordLength), endOffset);
+  output.set(source.subarray(endOffset), endOffset + recordLength);
+  const outputView = new DataView(output.buffer);
+  const outputEnd = endOffset + recordLength;
+  outputView.setUint16(outputEnd + 8, sourceView.getUint16(endOffset + 8, true) + 1, true);
+  outputView.setUint16(outputEnd + 10, sourceView.getUint16(endOffset + 10, true) + 1, true);
+  outputView.setUint32(
+    outputEnd + 12,
+    sourceView.getUint32(endOffset + 12, true) + recordLength,
+    true,
+  );
+  return output;
+}
+
+function rewriteZipEntryDeclaredSize(
+  content: Uint8Array,
+  entryName: string,
+  declaredSize: number,
+): Uint8Array {
+  const output = new Uint8Array(content);
+  const view = new DataView(output.buffer, output.byteOffset, output.byteLength);
+  let endOffset = -1;
+  for (let offset = output.byteLength - 22; offset >= 0; offset -= 1) {
+    if (
+      view.getUint32(offset, true) === 0x06054b50 &&
+      offset + 22 + view.getUint16(offset + 20, true) === output.byteLength
+    ) {
+      endOffset = offset;
+      break;
+    }
+  }
+  assert.notEqual(endOffset, -1, "synthetic ZIP end record");
+  const entryCount = view.getUint16(endOffset + 10, true);
+  let cursor = view.getUint32(endOffset + 16, true);
+  for (let ordinal = 0; ordinal < entryCount; ordinal += 1) {
+    assert.equal(view.getUint32(cursor, true), 0x02014b50, "synthetic central record");
+    const nameLength = view.getUint16(cursor + 28, true);
+    const extraLength = view.getUint16(cursor + 30, true);
+    const commentLength = view.getUint16(cursor + 32, true);
+    const name = new TextDecoder().decode(
+      output.subarray(cursor + 46, cursor + 46 + nameLength),
+    );
+    if (name === entryName) {
+      const localOffset = view.getUint32(cursor + 42, true);
+      assert.equal(view.getUint32(localOffset, true), 0x04034b50, "synthetic local record");
+      view.setUint32(cursor + 24, declaredSize, true);
+      if ((view.getUint16(cursor + 8, true) & 0x0008) === 0) {
+        view.setUint32(localOffset + 22, declaredSize, true);
+      }
+      return output;
+    }
+    cursor += 46 + nameLength + extraLength + commentLength;
+  }
+  assert.fail(`Synthetic ZIP entry ${entryName} was not found.`);
+}
+
 async function withStage8PackageIndexFixture(
   basename: string,
   exercise: (
@@ -2238,6 +2757,90 @@ describe("where a pass's output lives", () => {
         collectWorkflowArtifacts(workflow),
         /bundle does not match its package manifest/,
       );
+    } finally {
+      if (before === undefined) delete process.env.DAMM_PIPELINE_DIR;
+      else process.env.DAMM_PIPELINE_DIR = before;
+      await rm(temp, { recursive: true, force: true });
+    }
+  });
+
+  it("rejects duplicate raw ZIP names before publishing the Stage 8 artifact set", async () => {
+    const before = process.env.DAMM_PIPELINE_DIR;
+    const temp = await mkdtemp(path.join(tmpdir(), "damm-zip-duplicate-name-"));
+    process.env.DAMM_PIPELINE_DIR = temp;
+    try {
+      const workflow = run({
+        pass: "workflow",
+        vendor: null,
+        outBasename: "EGY_zip_duplicate_name",
+      });
+      const fixture = await writeCompletedWorkflow(workflow, completePackageFixtureFiles());
+      const duplicated = duplicateFirstCentralDirectoryRecord(await readFile(fixture.bundle));
+      await writeFile(fixture.bundle, duplicated);
+      await rebindStage8File(fixture.root, "complete_bundle");
+      assert.equal(
+        verifyWorkflowCompletion(workflow).ok,
+        true,
+        "the adversarial outer manifests are internally hash-consistent",
+      );
+      await assert.rejects(
+        collectWorkflowArtifacts(workflow),
+        /bundle does not match its package manifest/,
+      );
+    } finally {
+      if (before === undefined) delete process.env.DAMM_PIPELINE_DIR;
+      else process.env.DAMM_PIPELINE_DIR = before;
+      await rm(temp, { recursive: true, force: true });
+    }
+  });
+
+  it("rejects an oversized declared archive entry before decompressing package content", async () => {
+    const before = process.env.DAMM_PIPELINE_DIR;
+    const temp = await mkdtemp(path.join(tmpdir(), "damm-zip-declared-size-"));
+    process.env.DAMM_PIPELINE_DIR = temp;
+    try {
+      const workflow = run({
+        pass: "workflow",
+        vendor: null,
+        outBasename: "EGY_zip_declared_size",
+      });
+      const fixture = await writeCompletedWorkflow(workflow, completePackageFixtureFiles());
+      const forged = rewriteZipEntryDeclaredSize(
+        await readFile(fixture.bundle),
+        "fixture-package/package-manifest.json",
+        MAX_WORKFLOW_ARTIFACT_BYTES + 1,
+      );
+      await writeFile(fixture.bundle, forged);
+      await rebindStage8File(fixture.root, "complete_bundle");
+      assert.equal(
+        verifyWorkflowCompletion(workflow).ok,
+        true,
+        "the adversarial outer manifests are internally hash-consistent",
+      );
+
+      const JSZip = (await import("jszip")).default;
+      const probeArchive = new JSZip();
+      probeArchive.file("probe.txt", "probe");
+      const probe = probeArchive.file("probe.txt");
+      assert.ok(probe);
+      const entryPrototype = Object.getPrototypeOf(probe) as {
+        async: (type: "uint8array") => Promise<Uint8Array>;
+      };
+      const originalAsync = entryPrototype.async;
+      let decompressionCalls = 0;
+      entryPrototype.async = function patchedAsync(type) {
+        decompressionCalls += 1;
+        return originalAsync.call(this, type);
+      };
+      try {
+        await assert.rejects(
+          collectWorkflowArtifacts(workflow),
+          /bundle does not match its package manifest/,
+        );
+        assert.equal(decompressionCalls, 0, "declared-size rejection precedes decompression");
+      } finally {
+        entryPrototype.async = originalAsync;
+      }
     } finally {
       if (before === undefined) delete process.env.DAMM_PIPELINE_DIR;
       else process.env.DAMM_PIPELINE_DIR = before;

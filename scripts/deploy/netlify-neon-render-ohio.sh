@@ -197,7 +197,7 @@ if [[ "$ENV_FILE" == ".env" ]]; then
 fi
 umask 077
 
-DAMM_SOURCE_COMMIT="ff5aecbfec5c2694a61f282c27db74ea8b99b28c"
+DAMM_SOURCE_COMMIT="68e1994b5facfaaf0ddc49ba3bec108d9bde2c55"
 DAMM_RENDERER_SHA256="95dcef014086f6c01f58678db426fb48d87546b8b6a4315c530801b1ff74c5be"
 
 stop() {
@@ -316,6 +316,7 @@ required_files=(
   migrations/0020_damm_source_pin_cutover.sql
   migrations/0021_damm_source_pin_cutover.sql
   migrations/0022_damm_source_pin_cutover.sql
+  migrations/0023_damm_source_pin_cutover.sql
   docs/DEPLOYMENT-NETLIFY-NEON-RENDER-OHIO.md
 )
 for required_file in "${required_files[@]}"; do
@@ -374,21 +375,21 @@ npm run lint
 npm run build:dev
 npm run verify:netlify
 say "Local validation passed at $DEPLOY_GIT_SHA."
-pause "Continue to account and cost authorization?"
+pause "Continue to infrastructure account and release authorization?"
 
 # ── 2 ─────────────────────────────────────────────────────────────────────
-stage "Provider access and cost authorization"
-say "Both Render 1c-2g services and the worker's persistent disk are billed. Live vendor checks and a complete DAR workflow also consume paid APIs."
+stage "Infrastructure access and release authorization"
+say "Both Render 1c-2g services and the worker's persistent disk are billed. This stage does not authorize provider inference/search or the separately gated paid canary."
 open_url "https://app.netlify.com/"
 open_url "https://console.neon.tech/app/projects"
 open_url "https://dashboard.render.com/"
 step "Confirm you can administer all three accounts, view usage, and rotate their credentials."
 step "Confirm GitHub access to both private repositories, World-Bank-Digital/dar-studio-v2 and World-Bank-Digital/DAMM, including authority for a short-expiry, DAMM-only, Contents: read-only fine-grained token."
 confirm_or_stop \
-  "Are you authorized to create the Neon project, both paid Render services, the worker disk, and run vendor-cost smoke tests?" \
+  "Are you authorized to create the Neon project, both paid Render services, the worker disk, administer release credentials, migrate, and deploy?" \
   "Cost authority is required before any cloud resource is created."
 write_env DEPLOYMENT_ENVIRONMENT "staging"
-pause "Provider access and cost authority are recorded?"
+pause "Infrastructure access and release authority are recorded?"
 
 # ── 3 ─────────────────────────────────────────────────────────────────────
 stage "Worker vendor credentials"
@@ -485,32 +486,34 @@ say "If it is non-null, run the active-workflow query in docs/DEPLOYMENT-NETLIFY
 confirm_or_stop "Did the active-workflow query return zero rows?" \
   "Do not migrate while any workflow is queued, running, or otherwise nonterminal."
 step "Open Backup & Restore, enable Enhanced view if shown, select the root production branch, and click Create snapshot."
-step "Name it with UTC time and the deploy commit, for example pre-0022-YYYYMMDD-HHMM-${DEPLOY_GIT_SHA:0:8}."
+step "Name it with UTC time and the deploy commit, for example pre-0023-YYYYMMDD-HHMM-${DEPLOY_GIT_SHA:0:8}."
 ask NEON_SNAPSHOT_NAME "Exact pre-migration snapshot name:"
 require_value NEON_SNAPSHOT_NAME "$NEON_SNAPSHOT_NAME"
 write_env NEON_SNAPSHOT_NAME "$NEON_SNAPSHOT_NAME"
 confirm_or_stop "Is that snapshot complete and visibly tied to the root production branch?" \
   "A recoverable snapshot is required before migration."
-warn "Existing deployment only: suspend the preceding-pin Render worker before merging or applying 0022. Leave it suspended until the exact repinned worker image is Live; queued arrivals must remain unclaimed and unspent meanwhile."
+warn "Existing deployment only: suspend the preceding-pin Render worker before applying 0023. A reviewed merge is inert only while Netlify builds, Deploy Previews, Render service auto-deploys, and Blueprint Auto Sync are all disabled. Leave the worker suspended until the exact repinned image is Live; queued arrivals must remain unclaimed and unspent meanwhile."
 confirm_or_stop "Is there no preceding-pin worker because this is a new environment, or is the existing worker visibly suspended?" \
-  "Do not merge or migrate while a preceding-pin worker can claim newly pinned runs."
+  "Do not migrate while a preceding-pin worker can claim newly pinned runs."
 
 # ── 7 ─────────────────────────────────────────────────────────────────────
-stage "Apply and verify migration 0022 after 0019, 0020, and 0021"
-warn "This preserves the sealed progressive Stage 1-7 schema and prior source cutovers before repinning the worker to bounded, crash-safe Stage 4 scan recovery. The direct URL is used, and the migrator takes its Postgres advisory lock."
+stage "Apply and verify migration 0023 after 0019 through 0022"
+warn "This preserves the sealed progressive Stage 1-7 schema and prior source cutovers before repinning the worker to durable pre-call reservations, replayable paid outcomes, terminal stage boundaries, and production-byte-bound simulations. The direct URL is used, and the migrator takes its Postgres advisory lock."
 confirm_or_stop "Run the idempotent migration set against this Neon staging database now?" \
   "Migration was not authorized. No worker may be deployed yet."
 DATABASE_URL="$DATABASE_URL" MIGRATION_DATABASE_URL="$DATABASE_URL_DIRECT" npm run db:migrate ||
   stop "Migration failed. Keep the snapshot, read the exact error, and do not deploy the worker."
 open_url "https://console.neon.tech/app/projects/$NEON_PROJECT_ID"
-step "In SQL Editor, query _migrations for 0019_progressive_stage_artifacts.sql, 0020_damm_source_pin_cutover.sql, 0021_damm_source_pin_cutover.sql, and 0022_damm_source_pin_cutover.sql. Require exactly one row for each, in that order."
+step "In SQL Editor, query _migrations for 0019_progressive_stage_artifacts.sql and 0020 through 0023 DAMM source-pin cutovers. Require exactly one row for each, in that order."
 step "Require both progressive-publication tables and their sealing triggers, then run the function checks in the guide. Require pinned_commit=true, renderer_digest=true, and remains_unratified=true."
-confirm_or_stop "Did every 0019, 0020, 0021, and 0022 migration verification query return the exact expected result?" \
+step "Require exactly 23 total migration rows through 0023, repeat the zero-active-workflow query, and run the guide's preserved-failure query. Require both failed run IDs, stage counts, spend, publication/artifact counts, null final set, and null claim to remain unchanged."
+confirm_or_stop "Did every 0019 through 0023 migration verification query return the exact expected result?" \
   "A worker cannot start on an unverified schema or methodology pin."
 write_env MIGRATION_0019_VERIFIED "true"
 write_env MIGRATION_0020_VERIFIED "true"
 write_env MIGRATION_0021_VERIFIED "true"
 write_env MIGRATION_0022_VERIFIED "true"
+write_env MIGRATION_0023_VERIFIED "true"
 
 # ── 8 ─────────────────────────────────────────────────────────────────────
 stage "Import the main branch into Netlify"
@@ -635,7 +638,7 @@ chmod 600 "$ENV_FILE"
 # ── 11 ────────────────────────────────────────────────────────────────────
 stage "Render Ohio Blueprint: worker and artifact gateway"
 open_url "https://dashboard.render.com/"
-say "Migrations 0019, 0020, 0021, and 0022 must already be verified. Render does not run database migrations."
+say "Migrations 0019 through 0023 must already be verified. Render does not run database migrations."
 step "New > Blueprint > Connect World-Bank-Digital/dar-studio-v2; select branch main and path render.yaml."
 step "Review dar-studio-worker: worker/docker, region ohio, plan 1c-2g, auto deploy off, one instance, and no max shutdown delay field."
 step "Review disk dar-studio-worker-data at /var/data, 10 GB. Render forbids a custom max shutdown delay on a disk-backed service, so its documented 30-second default applies; checkpoints and the claim lease provide automatic recovery."
@@ -727,7 +730,7 @@ stage "Render worker and artifact gateway verification"
 open_url "https://dashboard.render.com/worker/$RENDER_WORKER_SERVICE_ID"
 step "Open worker Logs. Require [worker-checkout] installed/reusing, [worker-preflight] ready, and [worker] host/pipeline/interpreter/watching queue lines."
 step "Require DAMM commit $DAMM_SOURCE_COMMIT, clean source, /var/data/checkouts/$DAMM_SOURCE_COMMIT, and /opt/damm-venv/bin/python."
-step "Require renderer SHA-256 $DAMM_RENDERER_SHA256, Pandoc, LibreOffice/soffice, six nonempty vendor variables with pinned SDK imports, blank mode-0600 upstream .env, and queue watching."
+step "Require renderer SHA-256 $DAMM_RENDERER_SHA256, node=22.22.3, python=3.12.13, migrations=23 through 0023, Pandoc, LibreOffice/soffice, six nonempty vendor variables with pinned SDK imports, blank mode-0600 upstream .env, and queue watching."
 warn "Any worker-checkout, worker-preflight, or worker-entrypoint failed line, checkout drift, missing renderer/vendor, or crash loop is a hard stop."
 ask RENDER_WORKER_DEPLOY_ID "Successful Render worker deploy ID:"
 require_value RENDER_WORKER_DEPLOY_ID "$RENDER_WORKER_DEPLOY_ID"
@@ -776,7 +779,7 @@ write_env NETLIFY_ENVIRONMENT_VERIFIED "true"
 stage "Netlify production deploy"
 open_url "https://app.netlify.com/sites/$NETLIFY_PROJECT_SLUG/deploys"
 step "Trigger a production deploy from main after every environment value is saved."
-step "Require [deploy-preflight] success with Netlify CONTEXT=production and BRANCH=main, the migration advisory lock, and an up-to-date migration ledger."
+step "Require [deploy-preflight] success with Netlify CONTEXT=production and BRANCH=main, the migration advisory lock, and an up-to-date exact 23-row ledger through 0023. Netlify must not be the first process to apply 0023."
 step "Require the Netlify adapter output, not .vercel output. Open /, /methodology, and /login over HTTPS."
 step "Confirm email auth works and Google/X visibility exactly matches VITE_GROK_AUTH_ENABLED."
 step "Confirm app-owned loading, error, empty, dialog, and page states retain the explicit white background."
@@ -790,6 +793,12 @@ write_env NETLIFY_DEPLOY_ID "$NETLIFY_DEPLOY_ID"
 write_env NETLIFY_DEPLOY_SHA "$NETLIFY_DEPLOY_SHA"
 confirm_or_stop "Did every web, configuration, and fail-closed check pass without a usable PGLite-backed deployment?" \
   "The web deployment is not ready for workflow smoke testing."
+
+stage "Deployment-only closeout boundary"
+step "Record exact DAR on Netlify/gateway/worker, DAMM $DAMM_SOURCE_COMMIT, node=22.22.3, python=3.12.13, migrations=23 through 0023, private anonymous denial plus authorized access, every automation freeze, zero active workflows, and the unchanged preserved failures."
+warn "Stop here unless post-deployment identity setup and the separately authorized paid canary are explicitly in scope. Deployment completion does not authorize either."
+confirm_or_stop "Are the post-deployment human test identities and one separately authorized named-country paid canary explicitly in scope now?" \
+  "Deployment is complete. Do not create identities, a country workspace, or a paid run."
 
 # ── 15 ────────────────────────────────────────────────────────────────────
 stage "Three registered human identities"
@@ -823,17 +832,26 @@ confirm_or_stop "Did all three exact registered identities authenticate successf
 
 # ── 16 ────────────────────────────────────────────────────────────────────
 stage "Autonomous eight-stage Draft and artifact smoke"
-warn "This stage consumes vendor budget. Country must be the only required launch input."
-confirm_or_stop "Is a complete eight-stage staging workflow spend authorized now?" \
+warn "This stage is outside deployment and consumes vendor budget. Stop here unless a separate explicit paid-canary authorization names one new country; country must remain the only required launch input."
+confirm_or_stop "Is one complete eight-stage staging workflow for a specifically named country separately authorized now?" \
   "Do not launch without explicit vendor-spend authority."
-step "As the owner, create a new Nigeria country workspace, leave all optional upload categories empty, and click Launch Draft DAR workflow once. Never retry, resume, or reuse the failed Nigeria run; capture a new run ID and artifact-set identity."
-step "Observe all eight stages. There must be no human input, review gate, pause, approval, or budget top-up."
+step "Reverify every selected provider model ID and tariff against first-party documentation today. Map the exact Render Jina key to its package/rate; verify its account funding control is acceptably bounded for the canary and record provider-side spend limits where available."
+step "Require exact DAR on Netlify/gateway/worker, DAMM $DAMM_SOURCE_COMMIT, 37-file identity 9eb81998a65a15be6a92be2524cec82a8b5550756c5d910df3b5ca901001489c, expected model/renderer hashes, migrations=23 through 0023, and no unresolved spend reservation."
+step "Require exactly one Live worker instance and possible claimant with confirmed lease margin; zero active workflows; both preserved failures unchanged; stopped Netlify builds after the exact deploy; Deploy Previews off; Render automatic deploys off; Blueprint Auto Sync No; private anonymous denial; and authorized reachability."
+confirm_or_stop "Are every same-day tariff, account-funding, identity, singleton, lease, zero-active, preserved-failure, and automation-freeze prelaunch gate recorded and green?" \
+  "A missing or uncertain paid-canary precondition is NO-GO. Do not create a country workspace."
+ask SMOKE_COUNTRY_NAME "Explicitly authorized canary country name:"
+require_value SMOKE_COUNTRY_NAME "$SMOKE_COUNTRY_NAME"
+step "As the owner, create exactly one new $SMOKE_COUNTRY_NAME country workspace, leave all optional upload categories empty, and click Launch Draft DAR workflow once. Never retry, resume, or reuse a historical failed run; capture the new run ID and artifact-set identity."
+step "At launch and after every stage, record sole claimant/lease margin, immutable publication and input/output hashes, settled spend plus unresolved reservations by provider/model/pass, and cumulative spend against $225, $262.50, $312.50, $350, $400, $425, then strictly below $500. Stage 8 adds no provider cost."
+step "Observe all eight stages. There must be no human input, review gate, pause, approval, budget top-up, provider/model switch, or automatic retry."
 step "As each Stage 1-7 publication appears, require its owner-only report downloads to remain available while later stages run; anonymous and reviewer-only accounts must be denied."
 step "At completion require Draft · pre-review and explicit wording that automation is not G1/G2/G3 or publication readiness."
 step "Download the bundle, Draft MD/DOCX/PDF, cost-benefit XLSX, source XLSX, manifests, and representative artifacts from every stage."
 step "Use the largest real artifact from this run: require Netlify 200 + no-store delivery-grant JSON, with a fixed HTTPS /v1/artifacts endpoint and no capability in any URL."
 step "Require the browser to send the capability only as Authorization: Bearer, without cookies, from APP_ORIGIN; gateway must return 200, private/no-store, filename, length, SHA header, and an exact body hash."
 step "Require anonymous/unassigned denial at Netlify. In an ephemeral history-free client, change one header capability character and replay a separate untouched header capability after >60 seconds; both gateway responses must be the same non-disclosing 404."
+step "Abort without automatic retry/top-up/state repair on identity, tariff, package, or funding drift; a second claimant or unconfirmed lease; missing/malformed/ambiguous/unmetered/over-reservation usage; any paid transport retry; technical failure presented as evidence absence; empty/stale/duplicate/truncated/semantically incomplete product; ledger/checkpoint mismatch; or publication/final-acknowledgement failure. Preserve the run for reconciliation."
 step "During G1 reassignment, require a previously minted but unexpired capability for the superseded reviewer to fail at the gateway immediately."
 step "The repository suite proves an exact synthetic >20 MiB 21-chunk stream plus wrong-package and changed-hash rejection. If this run naturally exceeds 20 MiB, record its live size/hash proof too; never mutate staging rows or distort the country-only workflow to manufacture it."
 ask SMOKE_COUNTRY_ID "Smoke country ID:"
@@ -863,6 +881,7 @@ else
   say "This real package stayed below 20 MiB; the mandatory synthetic 21-chunk regression is the large-stream proof."
 fi
 write_env SMOKE_COUNTRY_ID "$SMOKE_COUNTRY_ID"
+write_env SMOKE_COUNTRY_NAME "$SMOKE_COUNTRY_NAME"
 write_env SMOKE_RUN_ID "$SMOKE_RUN_ID"
 write_env SMOKE_ARTIFACT_SET_ID "$SMOKE_ARTIFACT_SET_ID"
 write_env SMOKE_BUNDLE_SHA256 "$SMOKE_BUNDLE_SHA256"

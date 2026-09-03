@@ -19,6 +19,7 @@
     "format": "prettier --write .",
     "qa:auth": "node scripts/qa-auth.mjs",
     "sim:replay": "node scripts/simulate-workflow.mjs --scenario nigeria-stage6-overlength-v1",
+    "sim:package": "node scripts/simulate-workflow.mjs --scenario nigeria-stage6-through-package-v1",
     "sim:happy": "node scripts/simulate-workflow.mjs --scenario eight-stage-happy-v1",
     "sim:dense": "node scripts/simulate-workflow.mjs --scenario eight-stage-happy-v1 --profile dense",
     "worker": "node --experimental-strip-types --env-file-if-exists=.env scripts/worker.ts"

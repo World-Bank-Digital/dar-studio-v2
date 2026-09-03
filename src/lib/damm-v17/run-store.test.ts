@@ -6,6 +6,7 @@ import { PGlite } from "@electric-sql/pglite";
 
 import type { Sql } from "../db.ts";
 import {
+  claimNextRun,
   createRun,
   deletePendingWorkflowUpload,
   finishRun,
@@ -25,7 +26,7 @@ import {
 } from "./run-store.ts";
 import { DAMM_WORKFLOW_METHODOLOGY, type WorkflowMethodologyIdentity } from "./methodology.ts";
 import { DAR_WORKFLOW, DAR_WORKFLOW_SHA256, MAX_WORKFLOW_UPLOAD_DOCUMENTS } from "./workflow.ts";
-import { defaultVendorFor } from "./runs.ts";
+import { CLAIM_LEASE_MS, defaultVendorFor } from "./runs.ts";
 
 function sqlFor(pg: PGlite): Sql {
   type Queryable = {
@@ -170,6 +171,9 @@ const PRE_0021_DAMM_RENDERER_SHA256 =
   "95dcef014086f6c01f58678db426fb48d87546b8b6a4315c530801b1ff74c5be";
 const PRE_0022_DAMM_SOURCE_COMMIT = "f7dfbbb647e0a45d996e94f62d49f2218d518c94";
 const PRE_0022_DAMM_RENDERER_SHA256 =
+  "95dcef014086f6c01f58678db426fb48d87546b8b6a4315c530801b1ff74c5be";
+const PRE_0023_DAMM_SOURCE_COMMIT = "ff5aecbfec5c2694a61f282c27db74ea8b99b28c";
+const PRE_0023_DAMM_RENDERER_SHA256 =
   "95dcef014086f6c01f58678db426fb48d87546b8b6a4315c530801b1ff74c5be";
 
 async function insertWorkflowMethodology(
@@ -1473,12 +1477,132 @@ describe("0022 DAMM source pin cutover", () => {
            values ('current-0022-launch', 'user-1', 'Egypt', 'EGY', 'workflow',
                    'queued', 500, 'EGY_current_0022_launch')`,
         );
-        await insertWorkflowMethodology(transaction, "current-0022-launch");
+        await insertWorkflowMethodology(transaction, "current-0022-launch", {
+          sourceCommit: PRE_0023_DAMM_SOURCE_COMMIT,
+          rendererSha256: PRE_0023_DAMM_RENDERER_SHA256,
+        });
       });
-      assert.equal(await workflowRunUsesCanonicalMethodology("current-0022-launch", sql), true);
       assert.deepEqual(await workflowMethodologySnapshot("current-0022-launch", sql), {
         ...DAMM_WORKFLOW_METHODOLOGY,
-        rendererSha256: PRE_0022_DAMM_RENDERER_SHA256,
+        sourceCommit: PRE_0023_DAMM_SOURCE_COMMIT,
+        rendererSha256: PRE_0023_DAMM_RENDERER_SHA256,
+      });
+    } finally {
+      await pg.close();
+    }
+  });
+});
+
+describe("0023 DAMM source pin cutover", () => {
+  it("waits for the preceding pin and admits only the new source with the unchanged renderer", async () => {
+    const { pg, sql } = await databaseThroughMigration("0022_damm_source_pin_cutover.sql");
+    try {
+      await sql.transaction(async (transaction) => {
+        await transaction.query(
+          `insert into runs
+            (id, user_id, country_name, iso3, pass, status, ceiling_usd, out_basename)
+           values ('pre-0023-active', 'user-1', 'Egypt', 'EGY', 'workflow',
+                   'queued', 500, 'EGY_pre_0023_active')`,
+        );
+        await insertWorkflowMethodology(transaction, "pre-0023-active", {
+          sourceCommit: PRE_0023_DAMM_SOURCE_COMMIT,
+          rendererSha256: PRE_0023_DAMM_RENDERER_SHA256,
+        });
+      });
+
+      const migration = await readFile(
+        new URL("../../../migrations/0023_damm_source_pin_cutover.sql", import.meta.url),
+        "utf8",
+      );
+      await assert.rejects(pg.exec(migration), /current DAMM source pin/i);
+      assert.deepEqual(
+        (
+          await sql.query<{
+            status: string;
+            source_commit: string;
+            renderer_sha256: string;
+          }>(
+            `select workflow_run.status, methodology.source_commit,
+                    methodology.renderer_sha256
+             from runs workflow_run
+             join workflow_run_methodology methodology on methodology.run_id = workflow_run.id
+             where workflow_run.id = 'pre-0023-active'`,
+          )
+        )[0],
+        {
+          status: "queued",
+          source_commit: PRE_0023_DAMM_SOURCE_COMMIT,
+          renderer_sha256: PRE_0023_DAMM_RENDERER_SHA256,
+        },
+        "a blocked cutover must not rewrite or terminate the preceding workflow",
+      );
+
+      await sql.query(
+        `update runs set status = 'cancelled', finished_at = now(), updated_at = now()
+         where id = 'pre-0023-active'`,
+      );
+      await pg.exec(migration);
+
+      assert.deepEqual(
+        (
+          await sql.query<{
+            status: string;
+            source_commit: string;
+            renderer_sha256: string;
+          }>(
+            `select workflow_run.status, methodology.source_commit,
+                    methodology.renderer_sha256
+             from runs workflow_run
+             join workflow_run_methodology methodology on methodology.run_id = workflow_run.id
+             where workflow_run.id = 'pre-0023-active'`,
+          )
+        )[0],
+        {
+          status: "cancelled",
+          source_commit: PRE_0023_DAMM_SOURCE_COMMIT,
+          renderer_sha256: PRE_0023_DAMM_RENDERER_SHA256,
+        },
+        "the cutover must preserve the terminal workflow's complete frozen identity",
+      );
+
+      await assert.rejects(
+        sql.transaction(async (transaction) => {
+          await transaction.query(
+            `insert into runs
+              (id, user_id, country_name, iso3, pass, status, ceiling_usd, out_basename)
+             values ('stale-0023-launch', 'user-1', 'Egypt', 'EGY', 'workflow',
+                     'queued', 500, 'EGY_stale_0023_launch')`,
+          );
+          await insertWorkflowMethodology(transaction, "stale-0023-launch", {
+            sourceCommit: PRE_0023_DAMM_SOURCE_COMMIT,
+            rendererSha256: PRE_0023_DAMM_RENDERER_SHA256,
+          });
+        }),
+        /current DAMM methodology pin/i,
+      );
+      await assert.rejects(
+        sql.query(
+          `insert into runs
+            (id, user_id, country_name, iso3, pass, status, ceiling_usd, out_basename)
+           values ('missing-0023-pin', 'user-1', 'Egypt', 'EGY', 'workflow',
+                   'queued', 500, 'EGY_missing_0023_pin')`,
+        ),
+        /current DAMM methodology pin/i,
+      );
+
+      await sql.transaction(async (transaction) => {
+        await transaction.query(
+          `insert into runs
+            (id, user_id, country_name, iso3, pass, status, ceiling_usd, out_basename)
+           values ('current-0023-launch', 'user-1', 'Egypt', 'EGY', 'workflow',
+                   'queued', 500, 'EGY_current_0023_launch')`,
+        );
+        await insertWorkflowMethodology(transaction, "current-0023-launch");
+      });
+      assert.equal(await workflowRunUsesCanonicalMethodology("current-0023-launch", sql), true);
+      assert.deepEqual(await workflowMethodologySnapshot("current-0023-launch", sql), {
+        ...DAMM_WORKFLOW_METHODOLOGY,
+        rendererSha256: PRE_0023_DAMM_RENDERER_SHA256,
       });
     } finally {
       await pg.close();
@@ -1871,6 +1995,58 @@ describe("claim-fenced shared workflow artifacts", () => {
         "the run and stale methodology must roll back together",
       );
     } finally {
+      await pg.close();
+    }
+  });
+});
+
+describe("worker claim leases", () => {
+  it("uses the database clock to distinguish fresh and stale heartbeats", async () => {
+    const { pg, sql } = await migratedDatabase();
+    const realDateNow = Date.now;
+    const claimWithFutureApplicationClock = async () => {
+      let databaseQueryStarted = false;
+      const databaseClockSql = instrumentSql(sql, {
+        beforeQuery() {
+          databaseQueryStarted = true;
+          Date.now = realDateNow;
+        },
+      });
+      Date.now = () => realDateNow() + 365 * 24 * 60 * 60 * 1000;
+      const claimed = await claimNextRun("worker-new", databaseClockSql);
+      assert.equal(databaseQueryStarted, true);
+      return claimed;
+    };
+    try {
+      await sql.query(
+        `insert into runs
+          (id, user_id, country_name, iso3, pass, status, ceiling_usd, out_basename,
+           claimed_by, claim_token, heartbeat_at, started_at)
+         values ('fresh-lease', 'user-1', 'Egypt', 'EGY', 'research', 'running', 500,
+                 'EGY_fresh_lease', 'worker-current', 'claim-current', now(), now())`,
+      );
+      assert.equal(
+        await claimWithFutureApplicationClock(),
+        null,
+        "a future-skewed application clock must not make a fresh database heartbeat stale",
+      );
+
+      await sql.query(
+        `insert into runs
+          (id, user_id, country_name, iso3, pass, status, ceiling_usd, out_basename,
+           claimed_by, claim_token, heartbeat_at, started_at)
+         values ('stale-lease', 'user-1', 'Egypt', 'EGY', 'research', 'running', 500,
+                 'EGY_stale_lease', 'worker-dead', 'claim-dead',
+                 now() - ($1::bigint * interval '1 millisecond'), now())`,
+        [CLAIM_LEASE_MS + 1_000],
+      );
+
+      const reclaimed = await claimWithFutureApplicationClock();
+      assert.equal(reclaimed?.id, "stale-lease");
+      assert.equal(reclaimed?.claimedBy, "worker-new");
+      assert.ok(reclaimed?.claimToken);
+    } finally {
+      Date.now = realDateNow;
       await pg.close();
     }
   });

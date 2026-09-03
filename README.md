@@ -143,7 +143,7 @@ methodology manifest. The model remains honestly labelled `draft for review`
 and `ratified: false`; provenance does not imply ratification.
 
 On methodology upgrades, migrations `0011`, `0013`, `0014`, `0015`, `0016`,
-`0017`, `0018`, `0020`, `0021`, and `0022` stop before changing the schema or active source pin
+`0017`, `0018`, `0020`, `0021`, `0022`, and `0023` stop before changing the schema or active source pin
 if an older workflow is still active. Migration `0014` is the immutable source cutover for
 the foresight candidate-register repair. Migration `0015` advances only the
 upstream source commit to the canonical DAMM merge
@@ -180,8 +180,15 @@ recovery pass for completed-but-empty Stage 4 scans, preserves technical
 failures instead of misclassifying them as evidence abstentions, durably reuses
 paid scan results after a crash, and blocks downstream completion while upstream
 country or register failures remain unresolved. The renderer and all other
+methodology identity fields remain unchanged. Migration `0023` advances only the
+source pin to canonical DAMM merge
+`68e1994b5facfaaf0ddc49ba3bec108d9bde2c55` (PR #12), which durably reserves
+conservative paid-call bounds before transport, journals replayable provider
+outcomes, propagates terminal paid failures without stage or coordinator retry,
+strengthens semantic stage gates, bounds archive handling, and binds zero-spend
+simulation identity to all production inputs. The renderer and all other
 methodology identity fields remain unchanged. Deploy `0019` before `0020`, then
-`0021`, then `0022`. Allow an in-flight
+`0021`, `0022`, and `0023`. Allow an in-flight
 workflow to finish under the prior release, then retry the deployment; no run
 is failed or relaunched. A deferred database invariant prevents a still-running
 old app process from committing a missing or stale methodology snapshot,
@@ -229,13 +236,14 @@ not depend on a particular worker's local filesystem.
 ### Zero-spend workflow simulation
 
 Do not use repeated paid staging launches to diagnose deterministic workflow,
-schema, checkpoint, or artifact defects. DAR Studio exposes three local commands
+schema, checkpoint, or artifact defects. DAR Studio exposes four local commands
 backed by the versioned simulation module in the adjacent DAMM source checkout:
 
 ```bash
 npm run sim:replay
 npm run sim:happy
 npm run sim:dense
+npm run sim:package
 ```
 
 `sim:replay` drives the exact observed Stage 6 overlength vector through its
@@ -243,7 +251,9 @@ deterministically chunked, independently checkpointed bounded repairs, then
 requires the real appraisal assembler to complete with six valid options.
 `sim:happy` runs the real eight-stage coordinator and the real Stage 6 appraisal
 logic with a typical synthetic country workload; `sim:dense` exercises the same
-path with a larger synthetic evidence inventory. A different synthetic country
+path with a larger synthetic evidence inventory. `sim:package` executes the real
+Stages 6–8 production path using synthetic predecessor products and verifies the
+final package boundary. A different synthetic country
 can be selected without changing the committed fixture:
 
 ```bash
@@ -264,8 +274,9 @@ EVIDENCE** and uses reserved `sim-`/`fixture/` identities. The production worker
 rejects those identities before execution or publication. Simulation proves
 deterministic code and contract behavior; it does not prove live provider
 behavior or Render, Neon, Netlify, browser-auth, CORS, or gateway deployment
-wiring. After both simulation gates and the repository suite pass, retain one
-fresh authorized paid staging smoke as the final deployment canary.
+wiring. A paid staging canary is outside deployment and requires separate,
+explicit authorization for exactly one named new country after both simulation
+gates and the repository suite pass.
 
 ## Verification
 

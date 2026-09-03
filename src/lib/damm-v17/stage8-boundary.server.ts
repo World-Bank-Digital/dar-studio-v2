@@ -1159,6 +1159,7 @@ function verifyStoredAssessmentInput(
 const ZIP_LOCAL_FILE_HEADER = 0x04034b50;
 const ZIP_CENTRAL_DIRECTORY_HEADER = 0x02014b50;
 const ZIP_END_OF_CENTRAL_DIRECTORY = 0x06054b50;
+const ZIP_DATA_DESCRIPTOR = 0x08074b50;
 const ZIP64_END_OF_CENTRAL_DIRECTORY_LOCATOR = 0x07064b50;
 const ZIP64_EXTRA_FIELD = 0x0001;
 const ZIP_AES_EXTRA_FIELD = 0x9901;
@@ -1218,12 +1219,39 @@ function zipEntryName(bytes: Uint8Array, offset: number, length: number): string
   return name;
 }
 
+function zipDataDescriptorEnd(
+  view: DataView,
+  offset: number,
+  limit: number,
+  expected: { crc32: number; compressedSize: number; uncompressedSize: number },
+): number {
+  const available = limit - offset;
+  if (
+    available >= 16 &&
+    view.getUint32(offset, true) === ZIP_DATA_DESCRIPTOR &&
+    view.getUint32(offset + 4, true) === expected.crc32 &&
+    view.getUint32(offset + 8, true) === expected.compressedSize &&
+    view.getUint32(offset + 12, true) === expected.uncompressedSize
+  ) {
+    return offset + 16;
+  }
+  if (
+    available >= 12 &&
+    view.getUint32(offset, true) === expected.crc32 &&
+    view.getUint32(offset + 4, true) === expected.compressedSize &&
+    view.getUint32(offset + 8, true) === expected.uncompressedSize
+  ) {
+    return offset + 12;
+  }
+  refuse("INVALID_ARCHIVE", "A ZIP data descriptor differs from its central record.");
+}
+
 /**
  * Inspect the raw central directory before JSZip builds its name-keyed object.
  * JSZip necessarily collapses duplicate names, so the raw record count, bounds,
  * encryption state, ZIP64 markers, and local-header bindings must be checked first.
  */
-function inspectZipCentralDirectory(bytes: Uint8Array): readonly string[] {
+export function inspectZipCentralDirectory(bytes: Uint8Array): readonly string[] {
   if (bytes.byteLength < 22) {
     refuse("INVALID_ARCHIVE", "The complete bundle has no ZIP central directory.");
   }
@@ -1276,6 +1304,14 @@ function inspectZipCentralDirectory(bytes: Uint8Array): readonly string[] {
   const names: string[] = [];
   const uniqueNames = new Set<string>();
   const localOffsets = new Set<number>();
+  const localRecords: Array<{
+    offset: number;
+    dataEnd: number;
+    usesDataDescriptor: boolean;
+    crc32: number;
+    compressedSize: number;
+    uncompressedSize: number;
+  }> = [];
   let cursor = centralOffset;
   for (let ordinal = 0; ordinal < entryCount; ordinal += 1) {
     if (
@@ -1338,7 +1374,7 @@ function inspectZipCentralDirectory(bytes: Uint8Array): readonly string[] {
     const localNameOffset = localOffset + 30;
     const localExtraOffset = checkedZipEnd(localNameOffset, localNameLength, centralOffset);
     const dataOffset = checkedZipEnd(localExtraOffset, localExtraLength, centralOffset);
-    checkedZipEnd(dataOffset, compressedSize, centralOffset);
+    const dataEnd = checkedZipEnd(dataOffset, compressedSize, centralOffset);
     if (
       localFlags !== flags ||
       localMethod !== method ||
@@ -1351,20 +1387,60 @@ function inspectZipCentralDirectory(bytes: Uint8Array): readonly string[] {
       refuse("INVALID_ARCHIVE", "A ZIP local header differs from its central record.");
     }
     inspectZipExtraFields(bytes, localExtraOffset, localExtraLength);
-    if (
-      (flags & 0x0008) === 0 &&
-      (localCrc32 !== crc32 ||
-        localCompressedSize !== compressedSize ||
-        localUncompressedSize !== uncompressedSize)
-    ) {
+    const usesDataDescriptor = (flags & 0x0008) !== 0;
+    const localMetadataMatches =
+      localCrc32 === crc32 &&
+      localCompressedSize === compressedSize &&
+      localUncompressedSize === uncompressedSize;
+    const localMetadataIsEmpty =
+      localCrc32 === 0 && localCompressedSize === 0 && localUncompressedSize === 0;
+    if (!localMetadataMatches && (!usesDataDescriptor || !localMetadataIsEmpty)) {
       refuse("INVALID_ARCHIVE", "A ZIP local header has inconsistent byte metadata.");
     }
+    localRecords.push({
+      offset: localOffset,
+      dataEnd,
+      usesDataDescriptor,
+      crc32,
+      compressedSize,
+      uncompressedSize,
+    });
     cursor = recordEnd;
   }
   if (cursor !== centralEnd) {
     refuse("INVALID_ARCHIVE", "The ZIP central directory has unparsed trailing records.");
   }
+  localRecords.sort((left, right) => left.offset - right.offset);
+  let localCursor = 0;
+  for (const [index, local] of localRecords.entries()) {
+    const nextOffset = localRecords[index + 1]?.offset ?? centralOffset;
+    if (local.offset !== localCursor) {
+      refuse("INVALID_ARCHIVE", "The ZIP local record coverage is not exact.");
+    }
+    const recordEnd = local.usesDataDescriptor
+      ? zipDataDescriptorEnd(view, local.dataEnd, nextOffset, local)
+      : local.dataEnd;
+    if (recordEnd !== nextOffset) {
+      refuse("INVALID_ARCHIVE", "The ZIP local record coverage is not exact.");
+    }
+    localCursor = recordEnd;
+  }
+  if (localCursor !== centralOffset) {
+    refuse("INVALID_ARCHIVE", "The ZIP local record coverage is not exact.");
+  }
   return Object.freeze(names);
+}
+
+/** Return JSZip's central-directory size without inflating the entry. */
+export function zipEntryDeclaredSize(entry: unknown): number | null {
+  const candidate = (
+    entry as {
+      _data?: { uncompressedSize?: unknown };
+    }
+  )._data?.uncompressedSize;
+  return Number.isSafeInteger(candidate) && (candidate as number) >= 0
+    ? (candidate as number)
+    : null;
 }
 
 async function verifyArchive(
@@ -1410,17 +1486,7 @@ async function verifyArchive(
     ) {
       refuse("INVALID_ARCHIVE", "The bundle contains missing, misplaced, or unmanifested files.");
     }
-    const declaredSize = (entry: (typeof entries)[number]): number | null => {
-      const candidate = (
-        entry as typeof entry & {
-          _data?: { uncompressedSize?: unknown };
-        }
-      )._data?.uncompressedSize;
-      return Number.isSafeInteger(candidate) && (candidate as number) >= 0
-        ? (candidate as number)
-        : null;
-    };
-    if (declaredSize(manifestEntry) !== authoritativeManifest.byteSize) {
+    if (zipEntryDeclaredSize(manifestEntry) !== authoritativeManifest.byteSize) {
       refuse("INVALID_ARCHIVE", "The archived package manifest declares an invalid size.");
     }
     const archivedManifest = await manifestEntry.async("uint8array");
@@ -1433,7 +1499,7 @@ async function verifyArchive(
     for (const file of files) {
       const entry = archive.file(`${prefix}${file.path}`);
       if (!entry) refuse("INVALID_ARCHIVE", `The bundle omits ${file.path}.`);
-      if (declaredSize(entry) !== file.bytes) {
+      if (zipEntryDeclaredSize(entry) !== file.bytes) {
         refuse("INVALID_ARCHIVE", `Archived file ${file.path} declares an invalid size.`);
       }
       const bytes = await entry.async("uint8array");
