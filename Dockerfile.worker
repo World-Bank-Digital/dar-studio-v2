@@ -44,14 +44,21 @@ RUN python -m venv /opt/damm-venv \
     && /opt/damm-venv/bin/python -B -c \
         "import anthropic, openai, openpyxl; from google import genai"
 
-# The manifest is the only source of the upstream repository and commit. The image
-# carries a clean seed so a runtime disk checkout never depends on outbound Git access.
-# The worker-only damm_git_netrc credential is mounted only for this instruction and
-# is not persisted in an image layer or in the canonical credential-free Git origin.
+# The manifest is the only source of the public upstream repository and commit. The
+# image carries a clean seed so a runtime disk checkout never depends on outbound Git
+# access. Disable every interactive and configured credential path so the build proves
+# that the canonical public source is fetchable anonymously.
 COPY src/data/damm_model_manifest.json /opt/app/src/data/damm_model_manifest.json
-RUN --mount=type=secret,id=damm_git_netrc,dst=/root/.netrc,required=true,mode=0400 \
-    set -eu; \
-    test -s /root/.netrc; \
+RUN set -eu; \
+    git_home="$(mktemp -d)"; \
+    chmod 0700 "$git_home"; \
+    install -d -m 0700 "$git_home/.config"; \
+    export HOME="$git_home"; \
+    export XDG_CONFIG_HOME="$git_home/.config"; \
+    unset GIT_CONFIG_PARAMETERS GIT_CONFIG_COUNT; \
+    export GIT_CONFIG_COUNT=0; \
+    export GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_NOSYSTEM=1; \
+    export GIT_TERMINAL_PROMPT=0 GIT_ASKPASS=/bin/false; \
     repository="$(python -c 'import json; print(json.load(open("/opt/app/src/data/damm_model_manifest.json"))["source"]["repository"])')"; \
     commit="$(python -c 'import json; print(json.load(open("/opt/app/src/data/damm_model_manifest.json"))["source"]["commit"])')"; \
     install -d -m 0755 /opt/damm-seed; \
@@ -59,12 +66,15 @@ RUN --mount=type=secret,id=damm_git_netrc,dst=/root/.netrc,required=true,mode=04
     git -C /opt/damm-seed remote add origin "$repository"; \
     test "$(git -C /opt/damm-seed remote get-url --all origin)" = "$repository"; \
     test "$(git -C /opt/damm-seed remote get-url --push --all origin)" = "$repository"; \
-    HOME=/root GIT_TERMINAL_PROMPT=0 git -C /opt/damm-seed fetch --depth=1 --no-tags origin "$commit"; \
+    GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_NOSYSTEM=1 GIT_TERMINAL_PROMPT=0 GIT_ASKPASS=/bin/false git -C /opt/damm-seed fetch --depth=1 --no-tags origin "$commit"; \
     git -C /opt/damm-seed checkout --detach "$commit"; \
     test "$(git -C /opt/damm-seed rev-parse HEAD)" = "$commit"; \
+    git -C /opt/damm-seed fsck --strict --no-dangling; \
+    test "$(git -C /opt/damm-seed rev-parse --is-shallow-repository)" = "true"; \
     test "$(git -C /opt/damm-seed rev-list --count --all)" = "1"; \
     test -z "$(git -C /opt/damm-seed tag --list)"; \
-    test -z "$(git -C /opt/damm-seed status --porcelain=v1 --untracked-files=no)"; \
+    test -z "$(git -C /opt/damm-seed status --porcelain=v1 --untracked-files=all)"; \
+    rm -rf -- "$git_home"; \
     git config --system --add safe.directory /opt/damm-seed; \
     git config --system --add safe.directory /opt/damm-seed/.git
 

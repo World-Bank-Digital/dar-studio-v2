@@ -1705,3 +1705,27 @@ implementation.
 run, and the final 596/596 complete suite.
 **Meta-lesson:** release validation must bind both results and discovery scope;
 an unexecuted regression is indistinguishable from no regression at all.
+
+### L65 — Repository visibility is part of the deployment credential model
+
+**Incident:** after the canonical DAMM repository became public, the worker image
+and release procedure still required a one-attempt GitHub token and a BuildKit
+Secret File. The obsolete ceremony blocked an otherwise ready deployment on an
+interactive GitHub login and created a credential exposure surface without
+adding source integrity.
+**Root cause:** the source-pin controls tracked repository and commit identity,
+but the deployment contract treated the repository's former private visibility
+as permanent configuration.
+**Fix:** fetch the manifest-pinned public commit anonymously in an empty Git home
+with global/system configuration, credential helpers, prompts, and askpass
+disabled. Verify the exact commit, shallow single-commit graph, no tags, strict
+object integrity, and a clean tracked/untracked tree. The release wizard repeats
+that real anonymous fetch before an existing worker resumes, and requires the
+legacy `damm_git_netrc` Render Secret File to be removed with Save only while the
+worker is suspended.
+**Pinned by:** the red-first public-source worker and deployment-wizard contract
+tests, a credential-scrubbed live GitHub API/`ls-remote` check of canonical DAMM
+`76ca33d...`, and the exact-source Docker build validation.
+**Meta-lesson:** when repository visibility changes, remove obsolete credentials
+without weakening provenance; public availability should reduce secret surface,
+not source identity checks.

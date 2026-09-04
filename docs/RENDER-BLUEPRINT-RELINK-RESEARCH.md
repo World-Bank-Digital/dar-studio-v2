@@ -77,14 +77,14 @@ association.
     Dockerfile/context, instance count, and all environment-variable names.
 11. Before clicking **Deploy Blueprint**, decide whether a worker rebuild is
     acceptable. If it is not, stop at the reviewed plan and ask Render support
-    for an in-place migration. If it is, follow the complete credential
-    ceremony in steps 8–16 of the
+    for an in-place migration. If it is, follow the public-source cutover in the
     [deployment runbook](DEPLOYMENT-NETLIFY-NEON-RENDER-OHIO.md): require zero
-    active workflows, verify the exact source, suspend the worker before token
-    creation or upload, use a shortest-expiry DAMM-only Contents-read token,
-    verify its persisted value without printing it, repeat the source and
-    zero-active checks before resume, and revoke on every terminal or aborted
-    path.
+    active workflows, verify the exact DAR source, prove an anonymous shallow
+    fetch of the exact public DAMM commit in an isolated Git environment, remove
+    the legacy `damm_git_netrc` Secret File with Save only while the worker is
+    suspended, repeat the source and zero-active checks immediately before
+    resume, and require the settled build to contain no GitHub source
+    credential.
 12. Deploy the new Blueprint only in a controlled window. Confirm both original
     service IDs remain attached, set the new Blueprint's Auto Sync to **No**,
     verify service auto-deploy remains off, and compare health and deployment
