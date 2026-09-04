@@ -20,7 +20,7 @@ import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
-import { useSessionRole } from "@/lib/session";
+import { useSessionRole } from "@/lib/session-context";
 import { model, indicatorById, pillarIds, useCaseIds } from "@/lib/damm-v17/model";
 import {
   getWorkspace,

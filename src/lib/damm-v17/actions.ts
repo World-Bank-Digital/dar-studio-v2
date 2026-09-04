@@ -48,6 +48,11 @@ import {
 } from "@/lib/damm/providers";
 import { SEARCH_PROVIDER_IDS, isSearchProviderId, verifySearchKey } from "@/lib/damm/search";
 import { teamAdminEmails } from "@/lib/damm/teamkeys";
+import {
+  saveUserSettingsPatch,
+  validateSettingsPatch,
+  type UserSettingsMutation,
+} from "./settings-store.ts";
 
 export type { Economy };
 
@@ -503,36 +508,13 @@ export const getSettings = createServerFn({ method: "GET" })
 
 export const saveSettings = createServerFn({ method: "POST" })
   .middleware([authMiddleware])
-  .validator(
-    (input: {
-      role: string;
-      actorName: string;
-      activeProvider?: string | null;
-      activeSearchProvider?: string | null;
-    }) => input,
-  )
+  .validator((input: UserSettingsMutation) => validateSettingsPatch(input))
   .handler(async ({ context, data }) => {
+    if (context.userId !== data.expectedUserId) {
+      throw new Error("Authenticated user changed; reload settings before saving.");
+    }
     const sql = await getSql();
-    const existing = await sql<{
-      active_provider: string | null;
-      active_search_provider: string | null;
-    }>`
-      select active_provider, active_search_provider from user_settings where user_id = ${context.userId}`;
-    const provider =
-      data.activeProvider !== undefined
-        ? data.activeProvider
-        : (existing[0]?.active_provider ?? null);
-    const search =
-      data.activeSearchProvider !== undefined
-        ? data.activeSearchProvider
-        : (existing[0]?.active_search_provider ?? null);
-    await sql`insert into user_settings (user_id, acting_role, actor_name, active_provider, active_search_provider)
-      values (${context.userId}, ${data.role}, ${data.actorName}, ${provider}, ${search})
-      on conflict (user_id) do update set
-        acting_role = excluded.acting_role,
-        actor_name = excluded.actor_name,
-        active_provider = excluded.active_provider,
-        active_search_provider = excluded.active_search_provider`;
+    await saveUserSettingsPatch(sql, context.userId, data);
     return { ok: true as const };
   });
 

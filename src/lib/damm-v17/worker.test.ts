@@ -161,6 +161,19 @@ describe("how the worker invokes the pipeline", () => {
     assert.equal(args[args.indexOf("--vendor") + 1], defaultVendorFor("workflow"));
     assert.ok(args.includes("--resume"), "a reclaimed worker resumes without a human gate");
   });
+
+  it("refuses a stale canonical run that names an unapproved vendor before invocation", () => {
+    assert.throws(
+      () =>
+        argsFor(
+          run({
+            pass: "workflow",
+            vendor: "gemini/gemini-3.1-pro-preview",
+          }),
+        ),
+      /canonical workflow vendor/i,
+    );
+  });
 });
 
 describe("freezing optional uploads at launch", () => {

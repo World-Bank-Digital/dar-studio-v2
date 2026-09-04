@@ -1541,3 +1541,167 @@ worker, metadata drift, malformed archive entries, and a generated PDF smoke.
 **Meta-lesson:** a serverless build is ready only when its final archive—not the
 source tree—runs a representative workload under the target OS, CPU, libc, and
 runtime contract.
+
+### L58 — A one-use private-source credential is part of the release transaction
+
+**Incident:** rebuilding the Render worker from a private, separately owned DAMM
+repository required temporary Git read access. Treating that access as ordinary
+service configuration would leave a reusable credential in both the provider
+and operator process after the only build that needed it.
+**Root cause:** build-time source authorization has a shorter lifetime and a
+narrower purpose than runtime configuration, but both enter through the same
+provider environment surface.
+**Fix:** while the worker is suspended, create the shortest-lived fine-grained
+token scoped to the one repository and Contents read; write only the exact
+three-line netrc secret; reopen and compare it byte-for-byte; resume exactly
+once; and wait for the deployment to become terminal. Then revoke the token,
+clear the operator's in-memory copies, remove the provider secret with a
+save-without-deploy action, and independently prove the running source pin and
+queue state. Never leave the credential available for a speculative retry.
+**Pinned by:** the 2026-09-04 worker closeout: deploy
+`dep-dad7te67bikc73a2cr2g` reached Live on exact DAR `62780d4...`, startup
+installed exact DAMM `68e1994...`, the token was deleted, the secret-file table
+returned empty, and no second deployment occurred.
+**Meta-lesson:** a temporary build credential is not setup residue. Creation,
+one authorized use, revocation, provider cleanup, and runtime proof form one
+indivisible release step.
+
+### L59 — Provider success must be followed by independent acceptance reads
+
+**Incident:** a successful worker or web deployment can coexist with a moved
+source ref, an unintended extra deploy, reopened automation, a missing
+migration, a newly claimed workflow, stale private-access credentials, or a
+changed terminal failure. None of those conditions is disproved by a green
+provider status alone.
+**Root cause:** provider lifecycle status establishes that its process started;
+it does not establish the application's cross-provider identity, database, or
+access-control invariants.
+**Fix:** after worker start, repeat the exact source and read-only Neon checks;
+after web publication, read deploy metadata and Function runtime directly,
+prove that exactly one deploy followed the frozen baseline, and re-read every
+automation control. Exercise anonymous denial and an authorized session against
+both production and the unique deploy, probe the auth session without creating
+an identity, recheck gateway disclosure behavior, and finish with another
+repeatable-read, read-only workflow audit.
+**Pinned by:** the 2026-09-04 closeout independently observed Node 22 streamed
+Function metadata, one exact-titled CLI production deploy, stopped Netlify
+builds, disabled previews and Render auto-deploys, a disconnected Blueprint with
+unchanged Live services and worker disk, 401 anonymous denial, authorized route
+200s, gateway private 404s, 23 migrations, zero active workflows, and both
+Nigeria failures unchanged.
+**Meta-lesson:** deployment is an event; readiness is a separately observed
+system state.
+
+### L60 — A paused Blueprint still retains a manual synchronization capability
+
+**Incident:** Blueprint Auto Sync was disabled, but the connected Blueprint
+still retained a private Sync Hook capable of initiating a manual sync. That
+hook was unnecessary after both exact service deploys were Live and increased
+the terminal release state's control surface.
+**Root cause:** disabling an automatic trigger changes when synchronization
+happens; it does not remove every remaining synchronization authority or the
+provider object that owns it.
+**Fix:** keep Auto Sync off throughout the one-use credentialed build, then wait
+until the worker and gateway are stable on recorded deploy IDs and commits.
+Disconnect only when Render explicitly confirms that the managed resources will
+not be deleted. Do not probe the retired hook because the probe can be the
+trigger. Instead, verify the Blueprint and hook are unavailable, then re-read
+both services, their deploy identities and automation settings, and the worker
+disk. Remove stale Blueprint ID/auto-sync ledger rows and record only
+`RENDER_BLUEPRINT_STATE=disconnected`.
+**Pinned by:** the 2026-09-04 disconnect left the worker and gateway Live on
+their unchanged deploys, both service auto-deploy and PR-preview controls Off,
+and the 10 GB worker disk attached at `/var/data`; it caused no sync or deploy.
+The deployment-wizard regression fixes this terminal ordering and ledger shape.
+**Meta-lesson:** a disabled trigger is not the same as removed authority. Once a
+temporary orchestration surface has served its purpose, retire it and prove its
+managed runtime survived independently.
+
+### L61 — A mirrored source-identity inventory needs a real cross-repository execution gate
+
+**Incident:** DAMM added `semantic_repair.py` to the production dependency
+closure and regenerated its simulation fixtures, while DAR's simulation adapter
+and its unit-test copy both still listed the preceding 37 files. The duplicated
+unit test remained green because code and expectation drifted together; the first
+real zero-spend simulation failed the aggregate source-identity gate.
+**Root cause:** two locally identical inventories prove internal agreement, not
+agreement with the independently versioned upstream repository.
+**Fix:** add the shared repair module to both explicit inventories and require all
+seven real, secret-free simulation combinations in the deployment wizard before
+any infrastructure step. The upstream fixture's aggregate digest now supplies the
+independent side of the comparison.
+**Pinned by:** the initial `eight-stage-happy-v1/minimal` failure on the 37-file
+adapter, the corrected 38-file aggregate
+`b867d6960ac6e0f446e89f9c341b6283fdb3ddfe4326070049bf4a5c097e134c`,
+the adapter inventory regression, and the deployment-wizard all-simulation
+regression.
+**Meta-lesson:** when repositories share a cryptographic contract, at least one
+release gate must execute both real sides; mirrored mocks cannot establish
+cross-repository identity.
+
+### L62 — Every source-pin cutover must advance the historical readability set
+
+**Incident:** migration 0024 and the application manifest correctly advanced to
+DAMM `76ca33d...`, but the approval store did not initially recognize the
+preceding deployed `68e1994...` source/renderer pair as historical. Its completed
+packages would fail closed instead of remaining audit-readable after the cutover.
+**Root cause:** the database gate, current application identity, and historical
+approval identities are separate enforcement surfaces; advancing only the first
+two leaves a compatibility hole.
+**Fix:** add the exact preceding source and renderer pair to the immutable
+historical-methodology list. A cutover regression now builds decisions and a
+release under that pair, applies migration 0024, proves the complete audit
+snapshot unchanged, keeps the old chain read-only, and admits a new current-pin
+package.
+**Pinned by:** the focused historical-package regression and the complete DAR
+suite after migration 0024.
+**Meta-lesson:** a methodology repin is a three-part change: reject stale active
+work, accept the new identity, and preserve recognized terminal history without
+granting it new authority.
+
+### L63 — UI session state must be owned by the authenticated identity
+
+**Incident:** acting role and actor-name state survived in a shared React
+provider while authentication changed accounts or signed out. Until the next
+settings request settled, the UI could expose the preceding account's acting
+identity; a late response could also overwrite state for the new account or a
+newer local edit. The same settings path sent unawaited full-row snapshots, so
+out-of-order role, actor-name, provider, or search-mode writes could silently
+restore stale sibling fields or write an old account's choice into a new one.
+**Root cause:** session settings were treated as component-global state instead
+of data owned by one authenticated user, asynchronous hydration had no revision
+fence, and each write replaced every mutable setting without ordering or
+binding the request to the initiating principal.
+**Fix:** store the owning user ID with the role and actor name, derive an
+immediate identity-specific fallback whenever that ID changes, and accept an
+asynchronous settings result only while its hydration revision is current.
+Local edits invalidate pending hydration. Persist only the changed field with
+an atomic upsert, serialize writes per client surface, require the server's
+authenticated user to match the request's expected user ID, and remount the
+settings surface when the account changes. Keep the context and constants in a
+non-component module so this boundary also remains stable under Fast Refresh.
+**Pinned by:** ten focused account-switch, sign-out, missing-settings,
+field-preservation, and mutation-validation regressions, plus the 596/596 full
+suite, warning-free lint, and TypeScript validation.
+**Meta-lesson:** cached UI state that carries authority or attribution must be
+explicitly identity-owned; loading is not permission to display the previous
+principal's values.
+
+### L64 — A green suite is meaningful only if its file selection is proved
+
+**Incident:** the repository's full-test script selected nested
+`src/lib/**/*.test.ts` files but omitted four test files directly under
+`src/lib`. Adding an account-session regression did not change the reported
+total, and enabling the missing top-level set exposed a dormant, internally
+contradictory HTML-escaping expectation.
+**Root cause:** the shell's `**` expansion was assumed to include zero directory
+levels, but the invoked command matched only nested paths. Test counts were
+treated as proof without reconciling them against the test-file inventory.
+**Fix:** explicitly include `src/lib/*.test.ts` in the full-test command and
+correct the legacy escaping test to require encoded ampersands, angle brackets,
+quotes, and apostrophes, matching its security claim and the production
+implementation.
+**Pinned by:** the initial 588/589 red full run, the 12/12 top-level regression
+run, and the final 596/596 complete suite.
+**Meta-lesson:** release validation must bind both results and discovery scope;
+an unexecuted regression is indistinguishable from no regression at all.

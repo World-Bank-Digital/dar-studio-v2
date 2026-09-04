@@ -131,6 +131,8 @@ const PRE_0022_DAMM_RENDERER_SHA256 =
 const PRE_0023_DAMM_SOURCE_COMMIT = "ff5aecbfec5c2694a61f282c27db74ea8b99b28c";
 const PRE_0023_DAMM_RENDERER_SHA256 =
   "95dcef014086f6c01f58678db426fb48d87546b8b6a4315c530801b1ff74c5be";
+const PRE_0024_DAMM_SOURCE_COMMIT = "68e1994b5facfaaf0ddc49ba3bec108d9bde2c55";
+const PRE_0024_DAMM_RENDERER_SHA256 = PRE_0023_DAMM_RENDERER_SHA256;
 
 interface Fixture {
   pg: PGlite;
@@ -241,10 +243,10 @@ async function makePackageHistorical(
       "workflow_approval_assignment_supersessions",
       "workflow_approval_decisions",
     ]) {
-      await fx.sql.query(
-        `update ${table} set target_identity_sha256 = $2 where package_id = $1`,
-        [fx.approvalPackage.id, targetIdentitySha256],
-      );
+      await fx.sql.query(`update ${table} set target_identity_sha256 = $2 where package_id = $1`, [
+        fx.approvalPackage.id,
+        targetIdentitySha256,
+      ]);
     }
     const releases = await fx.sql.query<{ id: string; manifest_json: Record<string, unknown> }>(
       `select id, manifest_json from workflow_approval_releases where package_id = $1`,
@@ -708,11 +710,15 @@ describe("post-completion human approval store", () => {
       );
       assert.ok(signed.release);
 
-      fx = await makePackageHistorical(fx);
+      fx = await makePackageHistorical(
+        fx,
+        PRE_0024_DAMM_SOURCE_COMMIT,
+        PRE_0024_DAMM_RENDERER_SHA256,
+      );
       const beforeCutover = await approvalAuditSnapshot(fx);
       await fx.pg.exec(
         await readFile(
-          new URL("../../../migrations/0023_damm_source_pin_cutover.sql", import.meta.url),
+          new URL("../../../migrations/0024_damm_source_pin_cutover.sql", import.meta.url),
           "utf8",
         ),
       );
@@ -721,15 +727,13 @@ describe("post-completion human approval store", () => {
         beforeCutover,
         "the append-only cutover must not rewrite any historical run, artifact, approval, or release identity",
       );
-      const reopened = unwrap(
-        await ensureApprovalPackage(fx.countryId, USERS.owner.id, fx.sql),
-      );
+      const reopened = unwrap(await ensureApprovalPackage(fx.countryId, USERS.owner.id, fx.sql));
       assert.equal(reopened.id, fx.approvalPackage.id);
-      assert.equal(reopened.methodology.sourceCommit, PRE_0023_DAMM_SOURCE_COMMIT);
-      assert.equal(reopened.methodology.rendererSha256, PRE_0023_DAMM_RENDERER_SHA256);
+      assert.equal(reopened.methodology.sourceCommit, PRE_0024_DAMM_SOURCE_COMMIT);
+      assert.equal(reopened.methodology.rendererSha256, PRE_0024_DAMM_RENDERER_SHA256);
       const state = unwrap(await getOwnerApprovalState(fx.countryId, USERS.owner.id, fx.sql));
-      assert.equal(state.package.methodology.sourceCommit, PRE_0023_DAMM_SOURCE_COMMIT);
-      assert.equal(state.package.methodology.rendererSha256, PRE_0023_DAMM_RENDERER_SHA256);
+      assert.equal(state.package.methodology.sourceCommit, PRE_0024_DAMM_SOURCE_COMMIT);
+      assert.equal(state.package.methodology.rendererSha256, PRE_0024_DAMM_RENDERER_SHA256);
       assert.notEqual(state.package.targetIdentitySha256, originalTarget);
       assert.deepEqual(
         state.decisions.map((decision) => decision.id),
@@ -739,11 +743,11 @@ describe("post-completion human approval store", () => {
       assert.equal(state.release?.targetIdentitySha256, state.package.targetIdentitySha256);
       assert.equal(
         (state.release?.manifest.methodology as Record<string, unknown>).sourceCommit,
-        PRE_0023_DAMM_SOURCE_COMMIT,
+        PRE_0024_DAMM_SOURCE_COMMIT,
       );
       assert.equal(
         (state.release?.manifest.methodology as Record<string, unknown>).rendererSha256,
-        PRE_0023_DAMM_RENDERER_SHA256,
+        PRE_0024_DAMM_RENDERER_SHA256,
       );
       assert.equal(state.lifecycle, "approved_draft");
 
@@ -956,9 +960,7 @@ describe("post-completion human approval store", () => {
       const unmaterialized = await ensureApprovalPackage(fx.countryId, USERS.owner.id, fx.sql);
       assert.equal(unmaterialized.ok, false);
       if (!unmaterialized.ok) assert.equal(unmaterialized.error.code, "HISTORICAL_SOURCE_PIN");
-      const opened = unwrap(
-        await openOwnerApprovalState(fx.countryId, USERS.owner.id, fx.sql),
-      );
+      const opened = unwrap(await openOwnerApprovalState(fx.countryId, USERS.owner.id, fx.sql));
       assert.equal(opened.package.id, historicalPackageId);
       assert.equal(opened.packageHistory.length, 1);
       assert.equal(opened.packageHistory[0].currentMethodology, false);
@@ -1002,12 +1004,7 @@ describe("post-completion human approval store", () => {
       assert.equal(opened.ok, false);
       if (!opened.ok) assert.equal(opened.error.code, "METHODOLOGY_UNVERIFIED");
       const explicitlySelected = unwrap(
-        await openOwnerApprovalState(
-          fx.countryId,
-          USERS.owner.id,
-          fx.sql,
-          historicalPackageId,
-        ),
+        await openOwnerApprovalState(fx.countryId, USERS.owner.id, fx.sql, historicalPackageId),
       );
       assert.equal(explicitlySelected.package.id, historicalPackageId);
     } finally {
@@ -1075,7 +1072,7 @@ describe("post-completion human approval store", () => {
         }));
         await assert.rejects(
           fx.sql.query(
-          `insert into workflow_approval_decisions
+            `insert into workflow_approval_decisions
             (id, package_id, target_identity_sha256, assignment_id, gate, actor_kind,
              reviewer_user_id, reviewer_name, reviewer_email, declared_role, decision,
              notes, reviewer_affirmation, reviewer_affirmation_version,

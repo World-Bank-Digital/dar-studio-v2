@@ -175,6 +175,8 @@ const PRE_0022_DAMM_RENDERER_SHA256 =
 const PRE_0023_DAMM_SOURCE_COMMIT = "ff5aecbfec5c2694a61f282c27db74ea8b99b28c";
 const PRE_0023_DAMM_RENDERER_SHA256 =
   "95dcef014086f6c01f58678db426fb48d87546b8b6a4315c530801b1ff74c5be";
+const PRE_0024_DAMM_SOURCE_COMMIT = "68e1994b5facfaaf0ddc49ba3bec108d9bde2c55";
+const POST_0024_DAMM_SOURCE_COMMIT = "76ca33d97f0809a6be7477447786953317aa41b5";
 
 async function insertWorkflowMethodology(
   sql: Sql,
@@ -1597,13 +1599,99 @@ describe("0023 DAMM source pin cutover", () => {
            values ('current-0023-launch', 'user-1', 'Egypt', 'EGY', 'workflow',
                    'queued', 500, 'EGY_current_0023_launch')`,
         );
-        await insertWorkflowMethodology(transaction, "current-0023-launch");
+        await insertWorkflowMethodology(transaction, "current-0023-launch", {
+          sourceCommit: PRE_0024_DAMM_SOURCE_COMMIT,
+          rendererSha256: PRE_0023_DAMM_RENDERER_SHA256,
+        });
       });
-      assert.equal(await workflowRunUsesCanonicalMethodology("current-0023-launch", sql), true);
+      assert.equal(await workflowRunUsesCanonicalMethodology("current-0023-launch", sql), false);
       assert.deepEqual(await workflowMethodologySnapshot("current-0023-launch", sql), {
         ...DAMM_WORKFLOW_METHODOLOGY,
+        sourceCommit: PRE_0024_DAMM_SOURCE_COMMIT,
         rendererSha256: PRE_0023_DAMM_RENDERER_SHA256,
       });
+    } finally {
+      await pg.close();
+    }
+  });
+});
+
+describe("0024 DAMM source pin cutover", () => {
+  it("blocks an active preceding pin, preserves it when terminal, and admits only the reviewed source", async () => {
+    assert.equal(DAMM_WORKFLOW_METHODOLOGY.sourceCommit, POST_0024_DAMM_SOURCE_COMMIT);
+    const { pg, sql } = await databaseThroughMigration("0023_damm_source_pin_cutover.sql");
+    try {
+      await sql.transaction(async (transaction) => {
+        await transaction.query(
+          `insert into runs
+            (id, user_id, country_name, iso3, pass, status, ceiling_usd, out_basename)
+           values ('pre-0024-active', 'user-1', 'Egypt', 'EGY', 'workflow',
+                   'queued', 500, 'EGY_pre_0024_active')`,
+        );
+        await insertWorkflowMethodology(transaction, "pre-0024-active", {
+          sourceCommit: PRE_0024_DAMM_SOURCE_COMMIT,
+          rendererSha256: PRE_0023_DAMM_RENDERER_SHA256,
+        });
+      });
+
+      const migration = await readFile(
+        new URL("../../../migrations/0024_damm_source_pin_cutover.sql", import.meta.url),
+        "utf8",
+      );
+      await assert.rejects(pg.exec(migration), /current DAMM source pin/i);
+      assert.deepEqual(await workflowMethodologySnapshot("pre-0024-active", sql), {
+        ...DAMM_WORKFLOW_METHODOLOGY,
+        sourceCommit: PRE_0024_DAMM_SOURCE_COMMIT,
+        rendererSha256: PRE_0023_DAMM_RENDERER_SHA256,
+      });
+
+      await sql.query(
+        `update runs set status = 'cancelled', finished_at = now(), updated_at = now()
+         where id = 'pre-0024-active'`,
+      );
+      await pg.exec(migration);
+      assert.deepEqual(
+        (
+          await sql.query<{ status: string; source_commit: string }>(
+            `select workflow_run.status, methodology.source_commit
+             from runs workflow_run
+             join workflow_run_methodology methodology on methodology.run_id = workflow_run.id
+             where workflow_run.id = 'pre-0024-active'`,
+          )
+        )[0],
+        { status: "cancelled", source_commit: PRE_0024_DAMM_SOURCE_COMMIT },
+      );
+
+      await assert.rejects(
+        sql.transaction(async (transaction) => {
+          await transaction.query(
+            `insert into runs
+              (id, user_id, country_name, iso3, pass, status, ceiling_usd, out_basename)
+             values ('stale-0024-launch', 'user-1', 'Egypt', 'EGY', 'workflow',
+                     'queued', 500, 'EGY_stale_0024_launch')`,
+          );
+          await insertWorkflowMethodology(transaction, "stale-0024-launch", {
+            sourceCommit: PRE_0024_DAMM_SOURCE_COMMIT,
+            rendererSha256: PRE_0023_DAMM_RENDERER_SHA256,
+          });
+        }),
+        /current DAMM methodology pin/i,
+      );
+
+      await sql.transaction(async (transaction) => {
+        await transaction.query(
+          `insert into runs
+            (id, user_id, country_name, iso3, pass, status, ceiling_usd, out_basename)
+           values ('current-0024-launch', 'user-1', 'Egypt', 'EGY', 'workflow',
+                   'queued', 500, 'EGY_current_0024_launch')`,
+        );
+        await insertWorkflowMethodology(transaction, "current-0024-launch");
+      });
+      assert.equal(await workflowRunUsesCanonicalMethodology("current-0024-launch", sql), true);
+      assert.equal(
+        (await workflowMethodologySnapshot("current-0024-launch", sql))?.sourceCommit,
+        POST_0024_DAMM_SOURCE_COMMIT,
+      );
     } finally {
       await pg.close();
     }
@@ -2137,6 +2225,30 @@ describe("worker claim release", () => {
 });
 
 describe("serialized canonical launch inputs", () => {
+  it("does not persist a canonical workflow with an unapproved vendor", async () => {
+    const { pg, sql } = await migratedDatabase();
+    try {
+      await insertCountry(sql, "country-vendor-guard");
+      await assert.rejects(
+        createRun(
+          {
+            ...workflowRunInput("run-vendor-guard", "country-vendor-guard"),
+            vendor: "gemini/gemini-3.1-pro-preview",
+          },
+          sql,
+        ),
+        /canonical workflow vendor/i,
+      );
+      const [{ count }] = await sql.query<{ count: number }>(
+        "select count(*)::int as count from runs where id = $1",
+        ["run-vendor-guard"],
+      );
+      assert.equal(Number(count), 0);
+    } finally {
+      await pg.close();
+    }
+  });
+
   it("never reports a successful late upload that the launch snapshot omitted", async () => {
     const { pg, sql } = await migratedDatabase();
     try {
