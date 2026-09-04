@@ -143,7 +143,7 @@ methodology manifest. The model remains honestly labelled `draft for review`
 and `ratified: false`; provenance does not imply ratification.
 
 On methodology upgrades, migrations `0011`, `0013`, `0014`, `0015`, `0016`,
-`0017`, `0018`, `0020`, `0021`, `0022`, `0023`, and `0024` stop before changing the schema or active source pin
+`0017`, `0018`, `0020`, `0021`, `0022`, `0023`, `0024`, and `0025` stop before changing the schema or active source pin
 if an older workflow is still active. Migration `0014` is the immutable source cutover for
 the foresight candidate-register repair. Migration `0015` advances only the
 upstream source commit to the canonical DAMM merge
@@ -196,8 +196,15 @@ for invalid Stage 3, Stage 5, and Stage 7 model output, fails closed on corrupte
 semantic-repair checkpoints, and refreshes the verified tariff evidence. Its
 production dependency closure contains 38 tracked files with aggregate SHA-256
 `b867d6960ac6e0f446e89f9c341b6283fdb3ddfe4326070049bf4a5c097e134c`.
-The renderer and all other methodology identity fields remain unchanged. Deploy
-`0019` before `0020`, then `0021`, `0022`, `0023`, and `0024`. Allow an in-flight
+The renderer and all other methodology identity fields remain unchanged.
+Migration `0025` advances only the source pin to canonical DAMM PR #14 merge
+`d81d267133eed52b5fdcc599bfecf8d72496f292`. It rejects an unknown pricing or
+reasoning vendor before price/ledger setup, credential access, model discovery,
+or transport. The model, schema, workflow, engine, renderer, tariff artifact,
+and ratification fields remain unchanged; the 38-file production dependency
+closure is
+`118908785e9d061c387dde163507f39288b00176c6897ee6f7d8943311860f34`.
+Deploy `0019` before `0020`, then `0021`, `0022`, `0023`, `0024`, and `0025`. Allow an in-flight
 workflow to finish under the prior release, then retry the deployment; no run
 is failed or relaunched. A deferred database invariant prevents a still-running
 old app process from committing a missing or stale methodology snapshot,
