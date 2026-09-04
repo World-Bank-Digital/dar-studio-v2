@@ -506,63 +506,53 @@ test("the deployment wizard requires exact post-cutover runtime and database evi
   assert.match(wizard, /Netlify must not be the first process to apply 0024/);
 });
 
-test("the deployment wizard keeps the private DAMM build credential out of env values", () => {
+test("the deployment wizard deploys the public DAMM source without a build credential", () => {
   const wizard = readFileSync(join(root, "scripts/deploy/netlify-neon-render-ohio.sh"), "utf8");
+  const manifest = JSON.parse(
+    readFileSync(join(root, "src/data/damm_model_manifest.json"), "utf8"),
+  );
+  const declaredRepository = wizard.match(/^DAMM_PUBLIC_REPOSITORY="([^"]+)"$/m)?.[1];
 
-  assert.match(wizard, /Secret Files > Add Secret File/);
-  assert.match(wizard, /damm_git_netrc/);
-  assert.match(wizard, /machine github\.com/);
-  assert.match(wizard, /Contents permission Read-only/);
-  assert.match(wizard, /Metadata Read-only appears automatically/);
-  assert.match(wizard, /RUN --mount=type=secret,id=damm_git_netrc/);
-  assert.match(wizard, /fetch --depth=1 --no-tags origin/);
-  assert.match(wizard, /Refresh origin\/main before a one-attempt token is created/);
+  assert.match(wizard, /public DAMM/i);
+  assert.match(wizard, /anonymous[^\n]*(?:without|no)[^\n]*(?:credential|token)/i);
+  assert.match(wizard, /Remove[^\n]*damm_git_netrc Secret File/i);
+  assert.doesNotMatch(
+    wizard,
+    /Secret Files > Add Secret File[^\n]*damm_git_netrc|type=secret,id=damm_git_netrc|create[^\n]*fine-grained PAT/i,
+  );
   assert.match(
     wizard,
-    /Refresh origin\/main again immediately before the build credential is loaded/,
+    /GIT_CONFIG_GLOBAL=\/dev\/null GIT_CONFIG_NOSYSTEM=1 GIT_TERMINAL_PROMPT=0 GIT_ASKPASS=\/bin\/false/,
   );
+  assert.equal(declaredRepository, manifest.source.repository);
+  assert.match(wizard, /app manifest does not pin the canonical public DAMM repository/i);
+  assert.match(wizard, /https:\/\/github\.com\/World-Bank-Digital\/DAMM/);
+  assert.match(wizard, /refs\/heads\/main/);
+  const anonymousProbe = wizard.match(/^read_anonymous_damm_main\(\) \{[\s\S]*?^\}/m)?.[0];
+  assert.ok(anonymousProbe, "the isolated anonymous DAMM probe must be defined");
+  assert.match(anonymousProbe, /mktemp -d/);
+  assert.match(anonymousProbe, /install -d -m 0700/);
+  assert.match(anonymousProbe, /unset GIT_CONFIG_PARAMETERS GIT_CONFIG_COUNT/);
+  assert.match(anonymousProbe, /export GIT_CONFIG_COUNT=0/);
+  assert.match(anonymousProbe, /GIT_CONFIG_GLOBAL=\/dev\/null/);
+  assert.match(anonymousProbe, /GIT_CONFIG_NOSYSTEM=1/);
+  assert.match(anonymousProbe, /GIT_TERMINAL_PROMPT=0/);
+  assert.match(anonymousProbe, /GIT_ASKPASS=\/bin\/false/);
+  assert.match(anonymousProbe, /credential\.helper=/);
+  assert.match(anonymousProbe, /ls-remote "\$DAMM_PUBLIC_REPOSITORY" refs\/heads\/main/);
+  assert.match(anonymousProbe, /trap[^\n]*rm -rf -- "\$audit_root"/);
+  assert.ok((wizard.match(/read_anonymous_damm_main/g) ?? []).length >= 3);
+  assert.ok((wizard.match(/== "\$DAMM_SOURCE_COMMIT"/g) ?? []).length >= 2);
+  assert.match(wizard, /fetch --depth=1 --no-tags origin/);
   assert.match(wizard, /Refresh origin\/main again immediately before resume/);
   assert.match(wizard, /Render's displayed latest commit to build/);
-  assert.ok((wizard.match(/git fetch --quiet origin main/g) ?? []).length >= 4);
-  assert.match(wizard, /Before every live-token upload or replacement/);
-  assert.match(wizard, /including this initial one/);
-  assert.match(wizard, /service to be visibly Suspended/);
-  assert.match(wizard, /Only after the source identity and suspension gates pass, create/);
-  assert.match(wizard, /Pre-load source check failed:[^\n]*immediately revoke/);
-  assert.match(wizard, /Pre-resume source check failed:[^\n]*immediately revoke/);
-  assert.match(wizard, /require the Secret Files editor to leave edit mode/);
-  assert.match(wizard, /compare the persisted value byte-for-byte/);
-  assert.match(wizard, /Persistence mismatch:[^\n]*immediately revoke/);
+  assert.ok((wizard.match(/git fetch --quiet origin main/g) ?? []).length >= 2);
+  assert.match(wizard, /visibly Suspended/);
   assert.match(wizard, /active-workflow query still return zero rows/);
-  assert.match(wizard, /Zero-active gate failed:[^\n]*immediately revoke/);
+  assert.match(wizard, /Zero-active gate failed:[^\n]*keep the worker suspended/);
   assert.match(wizard, /Resume the suspended worker/);
   assert.match(wizard, /Render starts the exact latest-commit build/);
   assert.match(wizard, /Live, Failed, or Canceled/);
-  assert.match(wizard, /delete\/revoke its fine-grained PAT/);
-  assert.doesNotMatch(wizard, /Save Changes[^\n]*automatically starts/i);
-  assert.ok(
-    wizard.indexOf("set Auto Sync to No") < wizard.indexOf("Secret Files > Add Secret File"),
-  );
-  assert.ok(
-    wizard.indexOf("Refresh origin/main before a one-attempt token is created") <
-      wizard.indexOf("Before every live-token upload or replacement"),
-  );
-  assert.ok(
-    wizard.indexOf("Before every live-token upload or replacement") <
-      wizard.indexOf("Only after the source identity and suspension gates pass, create"),
-  );
-  assert.ok(
-    wizard.indexOf("Only after the source identity and suspension gates pass, create") <
-      wizard.indexOf("Refresh origin/main again immediately before the build credential is loaded"),
-  );
-  assert.ok(
-    wizard.indexOf("Refresh origin/main again immediately before the build credential is loaded") <
-      wizard.indexOf("Secret Files > Add Secret File"),
-  );
-  assert.ok(
-    wizard.indexOf("compare the persisted value byte-for-byte") <
-      wizard.indexOf("active-workflow query still return zero rows"),
-  );
   assert.ok(
     wizard.indexOf("active-workflow query still return zero rows") <
       wizard.indexOf("Refresh origin/main again immediately before resume"),
@@ -577,30 +567,108 @@ test("the deployment wizard keeps the private DAMM build credential out of env v
   );
   assert.ok(
     wizard.indexOf("Resume the suspended worker") <
-      wizard.indexOf("delete/revoke its fine-grained PAT"),
+      wizard.indexOf("Wait until that deploy reaches a terminal state"),
   );
   assert.ok(
-    wizard.indexOf("delete/revoke its fine-grained PAT") <
+    wizard.indexOf("Wait until that deploy reaches a terminal state") <
       wizard.indexOf('ask RENDER_WORKER_DEPLOY_SHA "Commit SHA shown for the worker deploy:"'),
   );
   assert.ok(
-    wizard.indexOf("delete/revoke its fine-grained PAT") <
+    wizard.indexOf("Wait until that deploy reaches a terminal state") <
       wizard.indexOf('open_url "$ARTIFACT_GATEWAY_URL/healthz"'),
   );
-  const credentialNames =
-    /(?:damm_git_netrc|DAMM_(?:GIT_)?(?:TOKEN|PAT|PASSWORD)|GITHUB_(?:TOKEN|PAT|PASSWORD)|GH_(?:TOKEN|PAT|PASSWORD))/i;
-  for (const command of [
-    "ask",
-    "ask_secret",
-    "generate_secret",
-    "set_secret",
-    "set_var",
-    "write_env",
-    "write_optional",
-  ]) {
-    assert.doesNotMatch(wizard, new RegExp(`\\b${command}\\s+${credentialNames.source}`, "i"));
+});
+
+test("a new Render environment accepts one initial worker build without a duplicate resume", () => {
+  const wizard = readFileSync(join(root, "scripts/deploy/netlify-neon-render-ohio.sh"), "utf8");
+  const newEnvironmentBranch = wizard.match(
+    /if confirm "Is this a new Render environment[\s\S]*?^else$/m,
+  )?.[0];
+  const workerCutover = wizard.match(
+    /if \[\[ "\$RENDER_WORKER_NEEDS_RESUME" == "true" \]\]; then[\s\S]*?^fi$/m,
+  )?.[0];
+
+  assert.ok(newEnvironmentBranch, "the new-environment branch must be present");
+  assert.ok(workerCutover, "the conditional worker cutover must be present");
+  assert.match(newEnvironmentBranch, /RENDER_WORKER_NEEDS_RESUME="false"/);
+  assert.match(newEnvironmentBranch, /both initial credential-free deploys Live/);
+  assert.doesNotMatch(newEnvironmentBranch, /Resume the suspended worker/);
+  const zeroActive = newEnvironmentBranch.indexOf(
+    "Does the active-workflow query still return zero rows before the initial Blueprint deploy",
+  );
+  const sourceRefresh = newEnvironmentBranch.indexOf(
+    "Refresh both bound source identities immediately before the initial Blueprint deploy",
+  );
+  const deployAuthorization = newEnvironmentBranch.indexOf("Deploy this billed Blueprint now?");
+  const deployClick = newEnvironmentBranch.indexOf("Click Deploy Blueprint");
+  const disableAutoSync = newEnvironmentBranch.indexOf(
+    "Immediately open the new Blueprint's Settings page and set Auto Sync to No",
+  );
+  const awaitTerminal = newEnvironmentBranch.indexOf(
+    "Wait for both initial credential-free deploys to reach terminal states",
+  );
+  for (const [label, index] of Object.entries({
+    zeroActive,
+    sourceRefresh,
+    deployAuthorization,
+    deployClick,
+    disableAutoSync,
+    awaitTerminal,
+  })) {
+    assert.notEqual(index, -1, `${label} gate must be present in the new-environment path`);
   }
-  assert.match(wizard, /key:\[\[:space:\]\]\*\(damm_git_netrc\|/);
+  assert.ok(zeroActive < sourceRefresh);
+  assert.ok(sourceRefresh < deployAuthorization);
+  assert.ok(deployAuthorization < deployClick);
+  assert.ok(deployClick < disableAutoSync);
+  assert.ok(disableAutoSync < awaitTerminal);
+  assert.match(workerCutover, /if \[\[ "\$RENDER_WORKER_NEEDS_RESUME" == "true" \]\]/);
+  assert.match(workerCutover, /Resume the suspended worker/);
+  assert.match(workerCutover, /else[\s\S]*initial credential-free worker deploy still Live/);
+  assert.equal((workerCutover.match(/Resume the suspended worker/g) ?? []).length, 1);
+});
+
+test("the new-environment runbook closes source and automation races before accepting its one build", () => {
+  const guide = readFileSync(join(root, "docs/DEPLOYMENT-NETLIFY-NEON-RENDER-OHIO.md"), "utf8");
+  const section = guide.match(/### 11\. Create both Render Ohio services[\s\S]*?(?=### 12\.)/)?.[0];
+  assert.ok(section, "the new-environment Render section must exist");
+
+  const zeroActive = section.indexOf("Reconfirm zero active workflows before clicking");
+  const sourceRefresh = section.indexOf(
+    "Refresh both bound source identities immediately before clicking",
+  );
+  const deployClick = section.indexOf("click **Deploy Blueprint** once");
+  const disableAutoSync = section.indexOf(
+    "Immediately open the created Blueprint's **Settings** and set **Auto Sync: No**",
+  );
+  const awaitTerminal = section.indexOf(
+    "Wait for both initial credential-free deploys to reach terminal states",
+  );
+  for (const [label, index] of Object.entries({
+    zeroActive,
+    sourceRefresh,
+    deployClick,
+    disableAutoSync,
+    awaitTerminal,
+  })) {
+    assert.notEqual(index, -1, `${label} gate must be documented`);
+  }
+  assert.ok(zeroActive < sourceRefresh);
+  assert.ok(sourceRefresh < deployClick);
+  assert.ok(deployClick < disableAutoSync);
+  assert.ok(disableAutoSync < awaitTerminal);
+  assert.match(section, /without starting a second build/);
+});
+
+test("the release contract permits only one credential-free worker build at a time", () => {
+  const handoff = readFileSync(join(root, "HANDOFF.md"), "utf8");
+
+  assert.doesNotMatch(handoff, /permit exactly one credential-free build/);
+  assert.match(handoff, /permit one credential-free build at a time/);
+  assert.match(
+    handoff,
+    /terminal failure or cancellation[\s\S]{0,180}source and\s+zero-active gates?[\s\S]{0,120}retry/i,
+  );
 });
 
 test("the final Render release ledger records a disconnected Blueprint without changing services", () => {

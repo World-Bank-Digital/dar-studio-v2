@@ -3,11 +3,22 @@
 _Updated 2026-09-04. Read this document and [LEARNINGS.md](LEARNINGS.md) before
 changing retrieval, scoring, drafting, or export behavior._
 
-## Final actual-country readiness candidate — 2026-09-04
+## Final actual-country readiness and credential-free cutover candidate — 2026-09-04
 
-This is the authoritative unreleased successor to the deployed state recorded
-below. Production must continue to be read from the next section until this
-candidate is reviewed, merged, migrated, and deployed.
+This is the authoritative current readiness record. The methodology candidate
+was merged as DAR `591179373c62ee67893ecc72c9c3e67105de5f4b`, migration `0024`
+was applied, and the artifact gateway was deployed from that commit. This
+unreleased successor removes the now-obsolete private-repository credential
+ceremony before the worker and Netlify complete the cutover.
+
+- At the time this successor was prepared, Neon snapshot
+  `pre-0024-20260904-1149-59117937` existed, exactly 24 unique migrations through
+  `0024_damm_source_pin_cutover.sql` were present, and a repeatable-read audit
+  found zero active workflows. Render gateway deploy
+  `dep-dadb3rm7bikc73adubkg` was Live on DAR `5911793...`; the worker remained
+  intentionally suspended on `62780d4...`; and Netlify remained frozen on
+  deploy `6a9a81f1164fafc97fa6a49b` from `62780d4...`. No paid workflow was
+  launched and neither preserved Nigeria failure was mutated.
 
 - Canonical DAMM `main` is
   `76ca33d97f0809a6be7477447786953317aa41b5` (PR #13). Its exact 38-file
@@ -49,22 +60,26 @@ candidate is reviewed, merged, migrated, and deployed.
   late reads or writes cannot overwrite a newer account or local edit. Passkey
   refresh and Fast Refresh boundaries are warning-free.
 - Local validation is green: DAMM research tests 308/308, model parity 470/470,
-  workflow contract 7/7, Loop 1 machine 17/17 and survey 16/16; DAR 596/596,
-  focused workflow/worker/database 159/159, TypeScript, warning-free lint,
-  development and Netlify builds, shell syntax, formatting, and all seven
-  simulations.
+  workflow contract 7/7, Loop 1 machine 17/17 and survey 16/16; DAR 599/599 and
+  focused credential-free worker/deployment contracts 34/34; TypeScript,
+  warning-free lint, development and Netlify builds, shell syntax, formatting,
+  the cold production worker image build, and all seven simulations.
 - Provider identifiers and tariffs were revalidated on 2026-09-04 from official
   first-party documentation and recorded in
   `docs/PAID-CANARY-PROVIDER-AUDIT-2026-09-04.md`. No numeric tariff drift was
   found. The mutable Anthropic Haiku alias and credential-specific Gemini/Jina
   limitations remain explicit uncertainty, not silent fallback authority.
-- The remaining zero-spend release sequence is: review and merge the exact DAR
-  candidate; keep Netlify builds/previews and Render service auto-deploys off;
-  keep the Blueprint disconnected; suspend the worker; prove zero active
-  workflows; snapshot Neon; apply and verify migration 0024 as row 24; deploy
-  the exact merged DAR commit to worker, gateway, and Netlify; then repeat all
-  identity, access, automation, and immutable-failure reads. Do not launch a
-  country workflow during that sequence.
+- The remaining zero-spend release sequence is: review and merge this exact DAR
+  successor; keep Netlify builds/previews and Render service auto-deploys off;
+  keep the Blueprint disconnected and worker suspended; re-prove zero active
+  workflows, the 24-row migration ledger, and unchanged Nigeria failures;
+  update the expected deploy identity; deploy the gateway from the exact merged
+  commit; prove the public DAMM pin anonymously; remove or confirm absence of the
+  legacy worker Secret File; resume the worker without an overlapping deploy;
+  verify its settled identity/runtime/ledger and reservation state; deploy
+  Netlify last from one clean hash-bound build; then repeat every identity,
+  access, automation, and immutable-failure read. Do not launch a country
+  workflow during that sequence.
 
 The candidate materially reduces known systemic failure paths, but no software
 review can guarantee a hiccup-free live provider run. The only remaining
@@ -1104,10 +1119,14 @@ Stage 7 cache integrity, refreshed provider tariffs, and the 38-file simulation
 identity. Apply `0019` through `0024` in filename order and require exactly 24
 migration-ledger rows through `0024`. Require zero active workflows and suspend
 the preceding-pin worker before the database cutover. Keep it suspended until
-every pre-resume identity, persisted-secret, and zero-active gate passes; then
-permit exactly one credentialed build of the bound commit and revoke its
-credential as soon as the attempt settles. A migration or deployment must never
-terminate, claim, or relaunch an in-flight workflow.
+every pre-resume identity, anonymous-source, and zero-active gate passes; then
+permit one credential-free build at a time of the bound commit, with no
+overlapping manual or automated deploy. A terminal failure or cancellation must
+be investigated while the worker remains suspended; repeat every source and
+zero-active gate before authorizing a retry. The public DAMM fetch must run with
+configured and interactive credential paths disabled. A
+migration or deployment must never terminate, claim, or relaunch an in-flight
+workflow.
 The deferred database invariant also rejects stale launches, newly inserted
 stale terminal rows, and transitions that would turn a failed/cancelled stale
 run into a completed workflow.

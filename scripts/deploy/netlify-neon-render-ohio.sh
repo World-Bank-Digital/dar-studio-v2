@@ -198,6 +198,7 @@ fi
 umask 077
 
 DAMM_SOURCE_COMMIT="76ca33d97f0809a6be7477447786953317aa41b5"
+DAMM_PUBLIC_REPOSITORY="https://github.com/World-Bank-Digital/DAMM"
 DAMM_RENDERER_SHA256="95dcef014086f6c01f58678db426fb48d87546b8b6a4315c530801b1ff74c5be"
 NETLIFY_RELEASE_IMAGE="node:22.22.3-bookworm@sha256:46e94f8cf91baab69a2deb3153e74eeffd73c20c7cc1d8432f5b96469eaa0322"
 NETLIFY_FUNCTION_RUNTIME="nodejs22.x"
@@ -241,6 +242,54 @@ validate_same_neon_database() {
   local pooled_name="$1" direct_name="$2"
   printf '%s\0%s' "${!pooled_name}" "${!direct_name}" |
     node scripts/validate-neon-deployment-urls.mjs pair
+}
+
+read_anonymous_damm_main() {
+  (
+    set -eu
+    local audit_root audit_home audit_repo remote_sha
+    audit_root=$(mktemp -d)
+    trap 'rm -rf -- "$audit_root"' EXIT HUP INT TERM
+    audit_home="$audit_root/home"
+    audit_repo="$audit_root/repository"
+    install -d -m 0700 "$audit_home" "$audit_home/.config" "$audit_repo"
+    export HOME="$audit_home" XDG_CONFIG_HOME="$audit_home/.config"
+    unset GIT_CONFIG_PARAMETERS GIT_CONFIG_COUNT
+    export GIT_CONFIG_COUNT=0
+    export GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_NOSYSTEM=1
+    export GIT_TERMINAL_PROMPT=0 GIT_ASKPASS=/bin/false
+    remote_sha=$(git -c credential.helper= ls-remote "$DAMM_PUBLIC_REPOSITORY" refs/heads/main |
+      awk 'NR == 1 { print $1 }')
+    [[ "$remote_sha" == "$DAMM_SOURCE_COMMIT" ]]
+    git -C "$audit_repo" init --quiet
+    git -C "$audit_repo" remote add origin "$DAMM_PUBLIC_REPOSITORY"
+    git -C "$audit_repo" -c credential.helper= fetch --quiet --depth=1 --no-tags origin "$DAMM_SOURCE_COMMIT"
+    git -C "$audit_repo" checkout --quiet --detach "$DAMM_SOURCE_COMMIT"
+    [[ "$(git -C "$audit_repo" rev-parse HEAD)" == "$DAMM_SOURCE_COMMIT" ]]
+    [[ "$(git -C "$audit_repo" rev-parse FETCH_HEAD)" == "$DAMM_SOURCE_COMMIT" ]]
+    [[ "$(git -C "$audit_repo" rev-parse --is-shallow-repository)" == "true" ]]
+    [[ "$(git -C "$audit_repo" rev-list --count --all)" == "1" ]]
+    [[ -z "$(git -C "$audit_repo" tag --list)" ]]
+    [[ -z "$(git -C "$audit_repo" status --porcelain=v1 --untracked-files=all)" ]]
+    git -C "$audit_repo" fsck --strict --no-dangling >/dev/null
+    printf '%s' "$remote_sha"
+  )
+}
+
+verify_bound_release_sources() {
+  (
+    set -eu
+    local local_sha tracking_sha remote_sha damm_sha
+    git fetch --quiet origin main
+    local_sha=$(git rev-parse HEAD)
+    tracking_sha=$(git rev-parse origin/main)
+    remote_sha=$(git ls-remote origin refs/heads/main | awk 'NR == 1 { print $1 }')
+    [[ "$local_sha" == "$DEPLOY_GIT_SHA" ]]
+    [[ "$tracking_sha" == "$DEPLOY_GIT_SHA" ]]
+    [[ "$remote_sha" == "$DEPLOY_GIT_SHA" ]]
+    damm_sha=$(read_anonymous_damm_main)
+    [[ "$damm_sha" == "$DAMM_SOURCE_COMMIT" ]]
+  )
 }
 
 remove_env() {
@@ -330,8 +379,14 @@ for required_file in "${required_files[@]}"; do
 done
 grep -Fq "\"commit\": \"$DAMM_SOURCE_COMMIT\"" src/data/damm_model_manifest.json ||
   stop "The app manifest does not pin the authorized canonical DAMM merge."
+grep -Fq "\"repository\": \"$DAMM_PUBLIC_REPOSITORY\"" src/data/damm_model_manifest.json ||
+  stop "The app manifest does not pin the canonical public DAMM repository."
 grep -Fq "\"sha256\": \"$DAMM_RENDERER_SHA256\"" src/data/damm_model_manifest.json ||
   stop "The app manifest does not pin the authorized DAMM renderer digest."
+ANONYMOUS_DAMM_MAIN_SHA=$(read_anonymous_damm_main) ||
+  stop "The canonical public DAMM commit is not anonymously fetchable without a credential."
+[[ "$ANONYMOUS_DAMM_MAIN_SHA" == "$DAMM_SOURCE_COMMIT" ]] ||
+  stop "The canonical public DAMM main branch moved away from the pinned source commit."
 grep -q "name: dar-studio-artifacts" render.yaml || stop "render.yaml does not declare the artifact gateway."
 grep -q "healthCheckPath: /healthz" render.yaml || stop "render.yaml does not declare the artifact gateway health check."
 [[ "$(grep -c "region: ohio" render.yaml)" -eq 2 ]] || stop "render.yaml does not pin both Render services to Ohio."
@@ -351,14 +406,11 @@ for render_key in DATABASE_URL ARTIFACT_DELIVERY_SECRET APP_ORIGIN EXA_API_KEY J
   grep -q "key: $render_key" render.yaml || stop "render.yaml is missing required environment key $render_key."
 done
 [[ "$(grep -c "key: DATABASE_URL" render.yaml)" -eq 2 ]] || stop "Both Render services must receive their own pooled DATABASE_URL."
-grep -Fq "RUN --mount=type=secret,id=damm_git_netrc,dst=/root/.netrc,required=true,mode=0400" Dockerfile.worker ||
-  stop "Dockerfile.worker does not require the private DAMM BuildKit secret mount."
-grep -Fq 'HOME=/root GIT_TERMINAL_PROMPT=0 git -C /opt/damm-seed fetch --depth=1 --no-tags origin "$commit"' Dockerfile.worker ||
-  stop "Dockerfile.worker does not shallow-fetch only the pinned private DAMM commit."
-if grep -Eiq '^[[:space:]]*(ARG|ENV)[[:space:]].*(damm_git_netrc|DAMM_(GIT_)?(TOKEN|PAT|PASSWORD)|GITHUB_(TOKEN|PAT|PASSWORD)|GH_(TOKEN|PAT|PASSWORD))' Dockerfile.worker ||
-   grep -Eiq '^[[:space:]]*(damm_git_netrc|DAMM_(GIT_)?(TOKEN|PAT|PASSWORD)|GITHUB_(TOKEN|PAT|PASSWORD)|GH_(TOKEN|PAT|PASSWORD))[[:space:]]*=' Dockerfile.worker ||
-   grep -Eiq 'key:[[:space:]]*(damm_git_netrc|DAMM_(GIT_)?(TOKEN|PAT|PASSWORD)|GITHUB_(TOKEN|PAT|PASSWORD)|GH_(TOKEN|PAT|PASSWORD))' render.yaml; then
-  stop "The private DAMM build credential must never be a Docker ARG, image ENV, or Render environment variable."
+grep -Fq 'GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_NOSYSTEM=1 GIT_TERMINAL_PROMPT=0 GIT_ASKPASS=/bin/false git -C /opt/damm-seed fetch --depth=1 --no-tags origin "$commit"' Dockerfile.worker ||
+  stop "Dockerfile.worker does not anonymously shallow-fetch only the pinned public DAMM commit."
+if grep -Eiq '(type=secret|/root/\.netrc|DAMM_(GIT_)?(TOKEN|PAT|PASSWORD)|GITHUB_(TOKEN|PAT|PASSWORD)|GH_(TOKEN|PAT|PASSWORD))' Dockerfile.worker ||
+   grep -Eiq 'key:[[:space:]]*(DAMM_(GIT_)?(TOKEN|PAT|PASSWORD)|GITHUB_(TOKEN|PAT|PASSWORD)|GH_(TOKEN|PAT|PASSWORD))' render.yaml; then
+  stop "The public DAMM build must not accept a source credential through BuildKit, Docker, or Render."
 fi
 grep -q "MIGRATION_DATABASE_URL" scripts/migrate.mjs ||
   stop "The migrator does not separate the direct migration URL from pooled runtime DATABASE_URL."
@@ -395,7 +447,7 @@ open_url "https://app.netlify.com/"
 open_url "https://console.neon.tech/app/projects"
 open_url "https://dashboard.render.com/"
 step "Confirm you can administer all three accounts, view usage, and rotate their credentials."
-step "Confirm GitHub access to both private repositories, World-Bank-Digital/dar-studio-v2 and World-Bank-Digital/DAMM, including authority for a short-expiry, DAMM-only, Contents: read-only fine-grained token."
+step "Confirm GitHub access to World-Bank-Digital/dar-studio-v2 and anonymous read access to the public DAMM repository. The worker build must not receive a GitHub source credential or token."
 confirm_or_stop \
   "Are you authorized to create the Neon project, both paid Render services, the worker disk, administer release credentials, migrate, and deploy?" \
   "Cost authority is required before any cloud resource is created."
@@ -675,83 +727,62 @@ step "Review disk dar-studio-worker-data at /var/data, 10 GB. Render forbids a c
 step "Review dar-studio-artifacts: web/docker, region ohio, plan 1c-2g, auto deploy off, one instance, health /healthz, max shutdown delay 300 seconds, no disk."
 if confirm "Is this a new Render environment with no existing worker or gateway?"; then
   RENDER_ENVIRONMENT_MODE="new"
+  RENDER_WORKER_NEEDS_RESUME="false"
   step "New environment only: New > Blueprint > Connect World-Bank-Digital/dar-studio-v2; select branch main and path render.yaml."
   step "At the initial worker sync:false prompts enter pooled DATABASE_URL and EXA, JINA, PERPLEXITY, ANTHROPIC, OPENAI, and GEMINI keys."
   step "For dar-studio-artifacts enter the same pooled DATABASE_URL, the generated ARTIFACT_DELIVERY_SECRET, and APP_ORIGIN=$NETLIFY_URL. Render supplies PORT; do not add it."
   step "Do not enter MIGRATION_DATABASE_URL, DAR_KEY_SECRET, BETTER_AUTH_SECRET, broker values, or any other Netlify-only value."
-  warn "Render prompts for sync:false values only during initial Blueprint creation. Verify every key before deployment. Do not create the one-attempt GitHub token yet."
+  warn "Render prompts for sync:false values only during initial Blueprint creation. Verify every runtime key before deployment. The public DAMM build uses no GitHub credential."
   confirm_or_stop "Does the review exactly match both Ohio services, the one worker disk, main commit, and each service's required secrets?" \
     "Do not create mismatched or incompletely configured paid services."
+  confirm_or_stop "Does the active-workflow query still return zero rows before the initial Blueprint deploy?" \
+    "Do not create a worker while any workflow is nonterminal."
+  say "Refresh both bound source identities immediately before the initial Blueprint deploy."
+  verify_bound_release_sources ||
+    stop "A bound DAR or public DAMM source identity moved or became unreachable. Do not click Deploy Blueprint; restart from a reviewed source state."
   confirm_or_stop "Deploy this billed Blueprint now?" \
     "The paid Render mutation was not authorized."
-  step "Click Deploy Blueprint. The gateway may succeed, but the worker's first build should reach Failed because the required build secret is deliberately absent. Do not wait for worker success or diagnose that expected first failure; continue as soon as the worker resource exists."
+  step "Click Deploy Blueprint once. The worker fetches the public DAMM source anonymously; do not start an overlapping manual deploy."
   step "Immediately open the new Blueprint's Settings page and set Auto Sync to No. Service auto-deploy is already off in render.yaml."
-  confirm_or_stop "Are Blueprint Auto Sync and both services' automatic deploy triggers off?" \
-    "Do not upload a live build credential while a repository push can trigger an unplanned Blueprint sync."
+  confirm_or_stop "Are Blueprint Auto Sync and both services' automatic deploy triggers off while the initial builds settle?" \
+    "Do not leave source automation enabled during the initial build."
+  step "Wait for both initial credential-free deploys to reach terminal states—Live, Failed, or Canceled—without starting a second build."
+  confirm_or_stop "Are both initial credential-free deploys Live on exactly $DEPLOY_GIT_SHA with zero active workflows?" \
+    "Do not accept or retry an automatic, failed, canceled, wrong-commit, credential-bearing, or active-workflow initial deployment."
 else
   RENDER_ENVIRONMENT_MODE="existing"
+  RENDER_WORKER_NEEDS_RESUME="true"
   step "Existing deployment: keep an already-disconnected Blueprint disconnected and open the exact worker and gateway services directly."
-  step "Existing deployment path: do not create or deploy a Blueprint. Re-read both service configurations, their required secrets, the worker disk, and the frozen automatic-deploy settings directly."
+  step "Existing deployment path: do not create or deploy a Blueprint. Re-read both service configurations, their required runtime secrets, the worker disk, and the frozen automatic-deploy settings directly."
   confirm_or_stop "Is the existing worker visibly Suspended, is the Blueprint absent, and do both services exactly match the reviewed Ohio configuration with automatic deploys off?" \
     "Do not change or deploy an existing service until its identity, configuration, automation freeze, and worker suspension are reverified."
+  say "Refresh both bound source identities before the existing gateway deploy."
+  verify_bound_release_sources ||
+    stop "A bound DAR or public DAMM source identity moved or became unreachable. Keep the worker suspended and restart from a reviewed source state."
   step "With the existing worker still visibly Suspended, manually deploy the exact gateway commit first while the worker remains suspended. Require the gateway deploy to settle Live on $DEPLOY_GIT_SHA without changing its configuration."
   confirm_or_stop "Is the existing gateway Live on exactly $DEPLOY_GIT_SHA while the worker remains visibly Suspended?" \
-    "Do not load a worker build credential until the gateway identity is exact and the worker remains unable to claim work."
+    "Do not resume the worker until the gateway identity is exact and the worker remains unable to claim work."
 fi
-say "Refresh origin/main before a one-attempt token is created."
-git fetch --quiet origin main ||
-  stop "Could not refresh origin/main. Do not create or load a one-attempt PAT."
-PRE_CREDENTIAL_TRACKING_SHA=$(git rev-parse origin/main) ||
-  stop "Could not resolve cached origin/main. Do not create or load a one-attempt PAT."
-PRE_CREDENTIAL_REMOTE_SHA=$(git ls-remote origin refs/heads/main | awk 'NR == 1 { print $1 }') ||
-  stop "Could not resolve direct GitHub main. Do not create or load a one-attempt PAT."
-[[ "$PRE_CREDENTIAL_TRACKING_SHA" == "$DEPLOY_GIT_SHA" &&
-   "$PRE_CREDENTIAL_REMOTE_SHA" == "$DEPLOY_GIT_SHA" ]] ||
-  stop "origin/main moved after validation. Do not create a PAT; restart from the new clean merged main."
-step "Before every live-token upload or replacement, including this initial one and every retry, suspend dar-studio-worker and require the service to be visibly Suspended. A Failed or idle service is not equivalent."
-confirm_or_stop "Is dar-studio-worker visibly Suspended before the live token is entered?" \
-  "Do not enter or save a live build credential on an unsuspended worker."
-step "Only after the source identity and suspension gates pass, create a short-expiry fine-grained token in GitHub: resource owner World-Bank-Digital; only repository DAMM; Contents permission Read-only. Metadata Read-only appears automatically; grant nothing else."
-step "Wait for organization approval if required. Keep the active token only in a password manager or secure clipboard; do not paste it into this wizard or $ENV_FILE. If this attempt is abandoned at any later gate, immediately revoke it."
-confirm_or_stop "Is the active, short-expiry, DAMM-only read token ready for the suspended worker's Secret File?" \
-  "Immediately revoke any token already created; do not continue without an active narrowly scoped credential."
-say "Refresh origin/main again immediately before the build credential is loaded."
-git fetch --quiet origin main ||
-  stop "Pre-load source check failed: keep the worker suspended and immediately revoke the active PAT."
-PRE_LOAD_TRACKING_SHA=$(git rev-parse origin/main) ||
-  stop "Pre-load source check failed: keep the worker suspended and immediately revoke the active PAT."
-PRE_LOAD_REMOTE_SHA=$(git ls-remote origin refs/heads/main | awk 'NR == 1 { print $1 }') ||
-  stop "Pre-load source check failed: keep the worker suspended and immediately revoke the active PAT."
-[[ "$PRE_LOAD_TRACKING_SHA" == "$DEPLOY_GIT_SHA" &&
-   "$PRE_LOAD_REMOTE_SHA" == "$DEPLOY_GIT_SHA" ]] ||
-  stop "Pre-load source check failed: origin/main moved; keep the worker suspended and immediately revoke the active PAT."
-step "Open dar-studio-worker > Environment > Secret Files > Add Secret File. Filename: damm_git_netrc. Contents: three lines—machine github.com, login x-access-token, password followed by the token."
-step "Never put this credential in an environment variable, Docker ARG, URL, log, repository file, or the artifact gateway. Keep it short-lived and rotate it before a later build."
-step "Submit Save Changes and require the Secret Files editor to leave edit mode. Reopen Edit > View secret file and compare the persisted value byte-for-byte with the just-created token without printing it. A click or populated field is not persistence evidence."
-confirm_or_stop "Did the saved damm_git_netrc value exactly match the just-created token after a fresh read?" \
-  "Persistence mismatch: keep the worker suspended and immediately revoke the loaded PAT. Do not build with an unverified credential."
-confirm_or_stop "Does the active-workflow query still return zero rows?" \
-  "Zero-active gate failed: keep the worker suspended and immediately revoke the loaded PAT. Do not resume while any workflow is nonterminal."
-say "Refresh origin/main again immediately before resume."
-git fetch --quiet origin main ||
-  stop "Pre-resume source check failed: keep the worker suspended and immediately revoke the loaded PAT."
-PRE_RESUME_TRACKING_SHA=$(git rev-parse origin/main) ||
-  stop "Pre-resume source check failed: keep the worker suspended and immediately revoke the loaded PAT."
-PRE_RESUME_REMOTE_SHA=$(git ls-remote origin refs/heads/main | awk 'NR == 1 { print $1 }') ||
-  stop "Pre-resume source check failed: keep the worker suspended and immediately revoke the loaded PAT."
-[[ "$PRE_RESUME_TRACKING_SHA" == "$DEPLOY_GIT_SHA" &&
-   "$PRE_RESUME_REMOTE_SHA" == "$DEPLOY_GIT_SHA" ]] ||
-  stop "Pre-resume source check failed: origin/main moved; keep the worker suspended, immediately revoke the loaded PAT, and restart from the new clean merged main."
-confirm_or_stop "Does Render's displayed latest commit to build equal $DEPLOY_GIT_SHA?" \
-  "Keep the worker suspended and immediately revoke the loaded PAT; never resume a different commit."
-step "Resume the suspended worker. Render starts the exact latest-commit build; do not start an overlapping manual deploy. Require BuildKit secret ID damm_git_netrc and no credential in build output."
-step "Wait until that credentialed deploy reaches a terminal state—Live, Failed, or Canceled—then immediately delete/revoke its fine-grained PAT in GitHub. Do this before inspecting or retrying any failure."
-step "The running worker never needs GitHub. The saved Render file may remain, but it must now contain only the revoked, inert value."
-confirm_or_stop "Has the PAT been revoked after the settled credentialed deploy attempt?" \
-  "Never leave a live source credential mounted after an image-build attempt ends."
-step "Verify the settled deploy is Live on commit $DEPLOY_GIT_SHA. If it failed, was canceled, or used another commit, stop and diagnose it with the token revoked. Every retry requires revalidating origin/main against $DEPLOY_GIT_SHA, suspending the worker again before creating a fresh short-expiry token, placing and re-reading it in the Secret File, reconfirming zero active workflows, and repeating the immediate pre-resume source/Render target checks; resume only after exact persistence and identity are proved, and revoke that new token as soon as the attempt settles."
-confirm_or_stop "Is the worker deploy Live on the exact recorded commit, with its build PAT already revoked?" \
-  "Do not continue to runtime verification from a failed, canceled, wrong-commit, or live-token deploy."
+if [[ "$RENDER_WORKER_NEEDS_RESUME" == "true" ]]; then
+  step "Require dar-studio-worker to be visibly Suspended. A Failed or idle service is not equivalent. Remove the legacy damm_git_netrc Secret File with Save only; verify that no deploy starts and the worker remains Suspended."
+  confirm_or_stop "Is the service still visibly Suspended with damm_git_netrc absent and no GitHub source credential configured?" \
+    "Do not resume a worker that can receive an unnecessary source credential."
+  confirm_or_stop "Does the active-workflow query still return zero rows?" \
+    "Zero-active gate failed: keep the worker suspended. Do not resume while any workflow is nonterminal."
+  say "Refresh origin/main again immediately before resume."
+  verify_bound_release_sources ||
+    stop "Pre-resume source check failed: a bound DAR or public DAMM identity moved or became unreachable; keep the worker suspended and restart from a reviewed source state."
+  confirm_or_stop "Does Render's displayed latest commit to build equal $DEPLOY_GIT_SHA?" \
+    "Keep the worker suspended; never resume a different commit."
+  step "Resume the suspended worker. Render starts the exact latest-commit build; do not start an overlapping manual deploy. Require the public DAMM fetch to be anonymous, with no build credential or token configured."
+  step "Wait until that deploy reaches a terminal state—Live, Failed, or Canceled—before inspecting or retrying any failure."
+  step "Verify the settled deploy is Live on commit $DEPLOY_GIT_SHA. Every retry requires revalidating origin/main, suspending the worker, reconfirming zero active workflows, and repeating the immediate pre-resume source/Render target checks."
+  confirm_or_stop "Is the credential-free worker deploy Live on the exact recorded commit?" \
+    "Do not continue to runtime verification from a failed, canceled, wrong-commit, or credential-bearing deploy."
+else
+  confirm_or_stop "Is the initial credential-free worker deploy still Live on exactly $DEPLOY_GIT_SHA, with zero active workflows and no GitHub source credential configured?" \
+    "Do not continue from a wrong-commit, credential-bearing, or active-workflow initial deploy."
+fi
 ask RENDER_WORKER_SERVICE_ID "dar-studio-worker service ID from its Settings page or URL:"
 require_value RENDER_WORKER_SERVICE_ID "$RENDER_WORKER_SERVICE_ID"
 ask RENDER_ARTIFACT_SERVICE_ID "dar-studio-artifacts service ID from its Settings page or URL:"

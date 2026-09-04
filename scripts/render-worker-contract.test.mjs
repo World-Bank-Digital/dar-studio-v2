@@ -168,35 +168,40 @@ describe("Render worker deployment contract", () => {
     }
   });
 
-  it("takes the private DAMM repository and commit through an ephemeral build credential", () => {
+  it("fetches the public DAMM commit without accepting a build credential", () => {
     const dockerfile = read("Dockerfile.worker");
     const instructions = dockerfile.replace(/\\\r?\n[ \t]*/g, " ");
     const manifest = JSON.parse(read("src/data/damm_model_manifest.json"));
     assert.match(dockerfile, /damm_model_manifest\.json/);
-    assert.match(
-      dockerfile,
-      /RUN --mount=type=secret,id=damm_git_netrc,dst=\/root\/\.netrc,required=true,mode=0400/,
-    );
-    assert.equal((dockerfile.match(/type=secret,id=damm_git_netrc/g) ?? []).length, 1);
-    assert.equal((dockerfile.match(/\/root\/\.netrc/g) ?? []).length, 2);
+    assert.doesNotMatch(dockerfile, /type=secret|damm_git_netrc|\/root\/\.netrc/);
     assert.match(dockerfile, /git -C \/opt\/damm-seed init --quiet/);
     assert.match(dockerfile, /install -d -m 0755 \/opt\/damm-seed/);
+    assert.match(dockerfile, /git_home="\$\(mktemp -d\)"/);
+    assert.match(dockerfile, /export HOME="\$git_home"/);
+    assert.match(dockerfile, /export XDG_CONFIG_HOME="\$git_home\/\.config"/);
+    assert.match(dockerfile, /unset GIT_CONFIG_PARAMETERS GIT_CONFIG_COUNT/);
+    assert.match(dockerfile, /export GIT_CONFIG_COUNT=0/);
+    assert.match(dockerfile, /export GIT_CONFIG_GLOBAL=\/dev\/null GIT_CONFIG_NOSYSTEM=1/);
     assert.match(
       dockerfile,
-      /HOME=\/root GIT_TERMINAL_PROMPT=0 git -C \/opt\/damm-seed fetch --depth=1 --no-tags origin "\$commit"/,
+      /GIT_CONFIG_GLOBAL=\/dev\/null GIT_CONFIG_NOSYSTEM=1 GIT_TERMINAL_PROMPT=0 GIT_ASKPASS=\/bin\/false git -C \/opt\/damm-seed fetch --depth=1 --no-tags origin "\$commit"/,
     );
     assert.doesNotMatch(dockerfile, /git clone/);
     assert.match(dockerfile, /remote get-url --all origin\)" = "\$repository"/);
     assert.match(dockerfile, /remote get-url --push --all origin\)" = "\$repository"/);
     assert.match(dockerfile, /git -C \/opt\/damm-seed checkout --detach "\$commit"/);
+    assert.match(dockerfile, /git -C \/opt\/damm-seed fsck --strict --no-dangling/);
+    assert.match(dockerfile, /rev-parse --is-shallow-repository\)" = "true"/);
     assert.match(dockerfile, /rev-list --count --all\)" = "1"/);
     assert.match(dockerfile, /test -z "\$\(git -C \/opt\/damm-seed tag --list\)"/);
+    assert.match(dockerfile, /status --porcelain=v1 --untracked-files=all/);
+    assert.match(dockerfile, /rm -rf -- "\$git_home"/);
     assert.match(dockerfile, /verifyPipelineMethodology/);
     assert.doesNotMatch(dockerfile, new RegExp(manifest.source.commit));
     assert.doesNotMatch(dockerfile, /World-Bank-Digital\/DAMM/);
     assert.doesNotMatch(
       instructions,
-      /^\s*(?:ARG|ENV)\s+.*(?:damm_git_netrc|DAMM_(?:GIT_)?(?:TOKEN|PAT|PASSWORD)|GITHUB_(?:TOKEN|PAT|PASSWORD)|GH_(?:TOKEN|PAT|PASSWORD))/gim,
+      /^\s*(?:ARG|ENV)\s+.*(?:DAMM_(?:GIT_)?(?:TOKEN|PAT|PASSWORD)|GITHUB_(?:TOKEN|PAT|PASSWORD)|GH_(?:TOKEN|PAT|PASSWORD))/gim,
     );
     assert.doesNotMatch(dockerfile, /https:\/\/[^/\s]+@github\.com/);
     assert.doesNotMatch(instructions, /^\s*(?:COPY|ADD).*netrc/gim);
@@ -204,141 +209,65 @@ describe("Render worker deployment contract", () => {
     assert.doesNotMatch(dockerfile, /credential\.helper|http\.[^\s]*extraheader/i);
     assert.doesNotMatch(
       dockerfile,
-      /\b(?:cat|head|tail|sed|awk|grep|strings|base64|xxd|od|hexdump)\b[^;\n]*(?:\/root\/\.netrc|damm_git_netrc)/i,
+      /\b(?:cat|head|tail|sed|awk|grep|strings|base64|xxd|od|hexdump)\b[^;\n]*\/root\/\.netrc/i,
     );
-    assert.match(read(".gitignore"), /^damm_git_netrc$/m);
-    assert.doesNotMatch(read("render.yaml"), /key:\s*damm_git_netrc/i);
+    assert.doesNotMatch(read(".gitignore"), /^damm_git_netrc$/m);
+    assert.doesNotMatch(read("render.yaml"), /key:\s*(?:damm_git_netrc|DAMM_(?:GIT_)?TOKEN)/i);
   });
 
-  it("requires the private DAMM build credential without committing or printing it", () => {
+  it("documents a credential-free, fail-closed worker cutover for the public DAMM source", () => {
     const wizard = read("scripts/deploy/netlify-neon-render-ohio.sh");
     const guide = read("docs/DEPLOYMENT-NETLIFY-NEON-RENDER-OHIO.md");
     for (const deploymentSurface of [wizard, guide]) {
-      assert.match(deploymentSurface, /damm_git_netrc/);
-      assert.match(deploymentSurface, /Contents(?::| permission)? Read-only/i);
-      assert.match(deploymentSurface, /Metadata(?::)?\s+Read-only.*automatically/i);
-      assert.match(deploymentSurface, /before every live-token upload or replacement/i);
+      assert.match(deploymentSurface, /public DAMM/i);
       assert.match(
         deploymentSurface,
-        /initial (?:one|upload)[^\n]*visibly (?:\*\*)?Suspended/i,
+        /anonymously?[\s\S]{0,100}(?:without|no)[\s\S]{0,100}(?:credential|token)/i,
       );
-      assert.match(deploymentSurface, /Only after the source identity and suspension gates pass/i);
-      assert.match(deploymentSurface, /leave edit mode/i);
-      assert.match(deploymentSurface, /byte-for-byte/i);
-      assert.match(
+      assert.match(deploymentSurface, /remove[^\n]*damm_git_netrc/i);
+      assert.doesNotMatch(
         deploymentSurface,
-        /(?:Persistence mismatch|value differs)[^\n]*immediately revoke/i,
+        /Add Secret File[^\n]*damm_git_netrc|type=secret,id=damm_git_netrc|create[^\n]*fine-grained PAT|credentialed deploy/i,
       );
+      assert.match(deploymentSurface, /https:\/\/github\.com\/World-Bank-Digital\/DAMM(?:\.git)?/);
       assert.match(deploymentSurface, /zero (?:rows|active workflows)/i);
-      assert.match(
-        deploymentSurface,
-        /(?:Zero-active gate failed|query is nonzero)[^\n]*immediately revoke/i,
+      const sourcePreresumeMatch = deploymentSurface.match(
+        /origin\/main[\s\S]{0,80}again\s+immediately before resume/i,
       );
-      assert.match(
-        deploymentSurface,
-        /(?:Refresh origin\/main before a one-attempt token|Before creating the live credential)/i,
-      );
-      assert.match(
-        deploymentSurface,
-        /(?:Refresh origin\/main again immediately before the build credential|After the token is active and immediately before loading it)/i,
-      );
-      assert.match(
-        deploymentSurface,
-        /(?:Pre-load source check failed|pre-load source check fails)[^\n]*immediately revoke/i,
-      );
-      assert.match(
-        deploymentSurface,
-        /(?:Pre-resume source check failed|pre-resume source check fails)[^\n]*immediately revoke/i,
-      );
-      assert.match(deploymentSurface, /origin\/main again immediately before resume/i);
+      assert.ok(sourcePreresumeMatch);
       assert.match(deploymentSurface, /displayed latest commit to build/i);
       assert.match(deploymentSurface, /resume the suspended worker/i);
       assert.match(deploymentSurface, /Live.*Failed.*Cancel/i);
-      assert.match(deploymentSurface, /(?:delete|revoke).*PAT/i);
-      assert.doesNotMatch(deploymentSurface, /\b(?:cat|echo|printf)\b.*damm_git_netrc/i);
-      assert.doesNotMatch(deploymentSurface, /Save Changes[^\n]*automatically (?:starts|triggers)/i);
-      assert.ok(
-        deploymentSurface.indexOf("Auto Sync: No") <
-          deploymentSurface.indexOf("Secret Files > Add Secret File"),
-      );
       const gatewayVerificationMarker =
         deploymentSurface === wizard
           ? 'open_url "$ARTIFACT_GATEWAY_URL/healthz"'
           : "For `dar-studio-artifacts`, open";
-      const credentialSuspensionMarker = "Before every live-token upload or replacement";
-      const tokenCreationMarker = "Only after the source identity and suspension gates pass";
-      const sourcePrecreationMarker =
-        deploymentSurface === wizard
-          ? "Refresh origin/main before a one-attempt token is created"
-          : "Before creating the live credential";
-      const sourcePreloadMarker =
-        deploymentSurface === wizard
-          ? "Refresh origin/main again immediately before the build credential is loaded"
-          : "After the token is active and immediately before loading it";
-      const credentialSaveMarker =
-        deploymentSurface === wizard ? 'step "Submit Save Changes' : "Submit **Save Changes**";
-      const persistedReadMarker =
-        deploymentSurface === wizard
-          ? "Reopen Edit > View secret file"
-          : "Reopen **Edit > View secret file**";
       const zeroActiveMarker =
         deploymentSurface === wizard
           ? "active-workflow query still return zero rows"
           : "Reconfirm zero active workflows";
-      const sourcePreresumeMarker = "origin/main again immediately before resume";
+      const sourcePreresumeIndex = sourcePreresumeMatch.index;
+      assert.notEqual(sourcePreresumeIndex, undefined);
       const renderTargetMarker = "Render's displayed latest commit to build";
       const resumeMarker =
         deploymentSurface === wizard
           ? 'step "Resume the suspended worker'
           : "Resume the suspended worker";
-      const oneAttemptRevocationMarker =
+      const terminalMatch = deploymentSurface.match(
         deploymentSurface === wizard
-          ? 'step "Wait until that credentialed deploy reaches a terminal state'
-          : "Wait for that credentialed deploy to reach a terminal state";
-      assert.ok(
-        deploymentSurface.indexOf(oneAttemptRevocationMarker) <
-          deploymentSurface.indexOf(gatewayVerificationMarker),
+          ? /step "Wait until that deploy reaches a terminal state/
+          : /Wait for that\s+deploy to reach a terminal state/,
       );
+      assert.ok(terminalMatch);
+      const terminalIndex = terminalMatch.index;
+      assert.notEqual(terminalIndex, undefined);
+      assert.ok(terminalIndex < deploymentSurface.indexOf(gatewayVerificationMarker));
+      assert.ok(deploymentSurface.indexOf(zeroActiveMarker) < sourcePreresumeIndex);
+      assert.ok(sourcePreresumeIndex < deploymentSurface.indexOf(renderTargetMarker));
       assert.ok(
-        deploymentSurface.indexOf(sourcePrecreationMarker) <
-          deploymentSurface.indexOf(credentialSuspensionMarker),
+        deploymentSurface.indexOf(renderTargetMarker) < deploymentSurface.indexOf(resumeMarker),
       );
-      assert.ok(
-        deploymentSurface.indexOf(credentialSuspensionMarker) <
-          deploymentSurface.indexOf(tokenCreationMarker),
-      );
-      assert.ok(
-        deploymentSurface.indexOf(tokenCreationMarker) <
-          deploymentSurface.indexOf(sourcePreloadMarker),
-      );
-      assert.ok(
-        deploymentSurface.indexOf(sourcePreloadMarker) <
-          deploymentSurface.indexOf("Secret Files > Add Secret File"),
-      );
-      assert.ok(
-        deploymentSurface.indexOf(credentialSaveMarker) <
-          deploymentSurface.indexOf(persistedReadMarker),
-      );
-      assert.ok(
-        deploymentSurface.indexOf(persistedReadMarker) <
-          deploymentSurface.indexOf(zeroActiveMarker),
-      );
-      assert.ok(
-        deploymentSurface.indexOf(zeroActiveMarker) <
-          deploymentSurface.indexOf(sourcePreresumeMarker),
-      );
-      assert.ok(
-        deploymentSurface.indexOf(sourcePreresumeMarker) <
-          deploymentSurface.indexOf(renderTargetMarker),
-      );
-      assert.ok(
-        deploymentSurface.indexOf(renderTargetMarker) <
-          deploymentSurface.indexOf(resumeMarker),
-      );
-      assert.ok(
-        deploymentSurface.indexOf(resumeMarker) <
-          deploymentSurface.indexOf(oneAttemptRevocationMarker),
-      );
+      assert.ok(deploymentSurface.indexOf(resumeMarker) < terminalIndex);
     }
   });
 
