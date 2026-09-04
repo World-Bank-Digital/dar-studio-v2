@@ -1729,3 +1729,55 @@ tests, a credential-scrubbed live GitHub API/`ls-remote` check of canonical DAMM
 **Meta-lesson:** when repository visibility changes, remove obsolete credentials
 without weakening provenance; public availability should reduce secret surface,
 not source identity checks.
+
+### L66 — A stored provider key needs a bounded, identity-owned model-management path
+
+**Incident:** model and search keys could be saved and retested, but changing a
+stored model required re-entering the secret into a free-text form. Team
+provider changes could also leave the preceding provider's model ID in that
+form. The database therefore held enough authority to contact a provider while
+the interface lacked a safe way to discover and select the exact models visible
+to that credential.
+**Root cause:** key verification and model selection were treated as the same
+operation. The provider adapters exposed model listing internally, but there
+was no authenticated server seam that resolved an owned stored credential,
+kept its plaintext server-side, bounded the untrusted catalogue, and committed
+an independently revalidated selection.
+**Fix:** add explicit personal-owner and team-administrator catalogue refresh
+and selection operations. Reject redirects; bound response bytes, model count,
+and identifier shape; expose partial-list status; never return key material;
+re-read the live catalogue before exact-membership selection; and reject
+concurrent credential or model changes. Recheck team authority in the commit
+transaction and write the team audit event atomically. Reset the team model
+default when its provider changes. Keep this legacy drafting setting isolated
+from the release-pinned canonical workflow.
+**Pinned by:** provider-catalogue regressions for redirect handling,
+oversized/malformed/partial input, filtering and exact membership; stored-key
+regressions for identity and scope, secret isolation, hostile fields,
+personal/team updates, concurrent mutation, and transactional rollback; plus
+the complete DAR validation suite and build gates.
+**Meta-lesson:** possession of a stored secret is not a safe selector. Resolve
+authority and provider identity from the stored row, treat catalogue metadata
+as bounded untrusted input, and separate administrative model management from
+immutable paid-workflow inference identity.
+
+### L67 — Unknown provider identity must fail before pricing or ledger setup
+
+**Incident:** DAMM's exact-model tariff check rejected an unknown model for each
+known inference vendor, but an entirely unknown vendor fell through to an empty
+price object. The later dispatch lookup still stopped before paid transport, yet
+the request had already crossed the pricing boundary with a false zero-dollar
+estimate.
+**Root cause:** `_price` treated a missing vendor table like a sparse known
+table, and `LLM` validated the resolved model tariff without first validating
+that the reasoning-vendor family itself was supported.
+**Fix:** reject pricing identities absent from `prices.json` (including metadata
+keys) and reject reasoning vendors absent from the explicit model-preference
+map during `LLM` construction. Both checks run before reservation, ledger
+mutation, credential lookup, model discovery, or transport.
+**Pinned by:** the red-first unknown-vendor regression in DAMM
+`test_vendors.py`, the complete vendor test module, and the zero-spend pipeline
+suite.
+**Meta-lesson:** fail-closed pricing begins at the outermost identity. Validating
+only models inside recognized families still leaves an unknown family looking
+free until a later layer notices it cannot dispatch.

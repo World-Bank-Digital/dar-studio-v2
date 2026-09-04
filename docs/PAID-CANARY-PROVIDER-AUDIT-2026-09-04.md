@@ -6,6 +6,31 @@
 - **Artifact SHA-256:** `86651e181fd8795c2a65171ae298b22bbff76e9438b916102a2ae0c0547bf6bf`
 - **Production code identity:** 38 tracked files; aggregate SHA-256 `b867d6960ac6e0f446e89f9c341b6283fdb3ddfe4326070049bf4a5c097e134c`
 
+## 2026-09-05 official-document recheck
+
+The same first-party tariff and identifier sources below were re-read on
+2026-09-05. No numeric tariff or exact model-ID drift was found for the fixed
+Opus 5 primary/Terra challenger canary profile or its pinned retrieval modes.
+The prior qualifications remain material: the Haiku short alias is mutable,
+GPT-5.6 Sol's short-context price is promotional through at least 2026-11-21,
+Gemini 3.1 remains a preview unavailable to the inspected Free-tier credential,
+and Jina's `$0.05`/million returned-token conversion remains specific to the
+inspected account package rather than a universal public list price.
+
+All five provider model-list endpoints used by the administrative stored-key
+selector were checked against first-party references on 2026-09-05:
+[Anthropic `GET /v1/models`](https://platform.claude.com/docs/en/api/models/list),
+[OpenAI `GET /v1/models`](https://developers.openai.com/api/reference/resources/models/methods/list),
+[Gemini `GET /v1beta/models`](https://ai.google.dev/api/models#method:-models.list),
+[xAI `GET /v1/models`](https://docs.x.ai/developers/rest-api-reference/inference/models),
+and
+[OpenRouter `GET /api/v1/models`](https://openrouter.ai/docs/api/api-reference/models/list-all-models-and-their-properties).
+Each is a metadata request authenticated by the stored credential. A successful
+listing sends no prompt and invokes no inference, but does not establish
+inference entitlement, quota, funds, or service health. Accordingly, the
+selector is explicit, single-attempt, fixed-endpoint, redirect-rejecting,
+response-bounded, and isolated from canonical workflow inference identity.
+
 ## Scope and method
 
 Every numeric tariff and every model identifier in `prices.json` was compared with current, provider-owned documentation. Authenticated account observations are recorded separately from public tariff facts below. No provider inference, search, retrieval, or test request was made, and this audit incurred no provider spend.

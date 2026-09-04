@@ -1,7 +1,74 @@
 # HANDOFF — DAR Studio v2
 
-_Updated 2026-09-04. Read this document and [LEARNINGS.md](LEARNINGS.md) before
+_Updated 2026-09-05. Read this document and [LEARNINGS.md](LEARNINGS.md) before
 changing retrieval, scoring, drafting, or export behavior._
+
+## Stored-key model-catalogue release candidate — 2026-09-05
+
+This is the authoritative current development record. It supplements, without
+changing, the deployed actual-country readiness state below.
+
+- The candidate branch `feat/stored-key-model-catalogue` starts from DAR
+  `992114b932354a11c7595ce44b40f276503c1a7b`, which remains exact on local
+  `main`, `origin/main`, direct GitHub `main`, Netlify, and both Render services.
+  Canonical DAMM GitHub `main` remains
+  `76ca33d97f0809a6be7477447786953317aa41b5`. No deployment, migration,
+  workspace, paid provider operation, or Nigeria-run mutation is part of this
+  candidate.
+- Personal model-key owners and team-key administrators can explicitly refresh
+  the stored key's provider catalogue and select an exact returned drafting
+  candidate without re-entering the key. The secret is decrypted only on the
+  server and never returned to the browser.
+- Refresh uses fixed first-party endpoints, rejects redirects, has one
+  20-second attempt, bounds an untrusted response at 1,000,000 bytes and 500
+  valid model IDs, filters Gemini entries that do not advertise
+  `generateContent`, and reports provider pagination or local truncation rather
+  than claiming an incomplete list is exhaustive. A catalogue request sends no
+  prompt and invokes no inference, but it is credentialed metadata activity;
+  listing does not prove inference entitlement, quota, funds, or provider
+  health.
+- Selection independently re-reads the provider catalogue and requires exact
+  positive membership. Browser inputs are reduced to a validated user fence,
+  credential scope/ID, and model ID. Personal keys remain owner-scoped; team
+  keys require administrator authority before provider access and again in the
+  commit transaction. The update rejects concurrent key or model changes, and
+  a team selection plus its non-secret audit event commits atomically.
+- This is intentionally an administrative/legacy drafting capability. It does
+  not feed `startDarWorkflow`, the worker environment, a queued or resumable
+  run, DAMM checkpoints, spend reservations, stage publications, or final
+  package identity. The actual-country workflow remains release-pinned to the
+  reviewed Opus 5 primary and Terra challenger configuration.
+- Red-first regressions cover stored-secret isolation, personal and team
+  authorization, hostile browser fields, oversized/malformed/partial
+  catalogues, redirect refusal, exact-membership revalidation, concurrent
+  changes, and rollback on audit failure. Exact-tree validation is green:
+  stored-key/provider focused tests 33/33, complete DAR tests 621/621 across
+  108 suites, TypeScript, warning-free lint, formatting/diff checks, and the
+  development/Netlify adapter build and output verification.
+- The audit also found a separate DAMM fail-closed ordering defect: an unknown
+  vendor could acquire an empty zero-dollar tariff and fail only when dispatch
+  was attempted. Branch `fix/reject-unknown-vendor`, based on DAMM GitHub
+  `76ca33d...`, now rejects unknown pricing and reasoning vendors during
+  construction, before ledger mutation, credential access, or transport. Its
+  updated 38-file production-code identity is
+  `118908785e9d061c387dde163507f39288b00176c6897ee6f7d8943311860f34`.
+  Exact-tree validation is green: vendor tests 45/45, complete research tests
+  309/309, model parity 470/470, workflow contract 7/7, Loop 1 machine 17/17,
+  survey 16/16, and workbook parity 6/6. All seven secret-free simulations also
+  pass: the three happy profiles and through-package profile produce valid
+  package ZIPs, the three Stage 6 overlength profiles prove bounded recovery,
+  and every profile records `$0.00` spend plus zero network, database,
+  subprocess, and capability activity. This branch is not yet merged,
+  application-pinned, migrated, or deployed; the current fixed canonical vendor
+  was never exposed to the defect.
+
+The 2026-09-05 official-document recheck found no provider tariff or exact-ID
+drift for the fixed canary profile. Jina's `$0.05`/million returned-token value
+remains an authenticated account observation rather than a universal public
+tariff, and GPT-5.6 Sol's documented promotional period still requires a
+recheck after 2026-11-21. The next paid evidence gap remains exactly one
+separately authorized controlled country canary; catalogue refresh or selection
+is not that authorization.
 
 ## Final actual-country readiness and credential-free cutover candidate — 2026-09-04
 
