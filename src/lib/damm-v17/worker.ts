@@ -48,7 +48,15 @@ import {
 } from "./model.ts";
 import { canonicalIndicatorCensus, runMethodologyManifest } from "./methodology.ts";
 import { parseChunk, statusOnExit, type RunEvent } from "./run-output.ts";
-import { CLAIM_LEASE_MS, type ClaimedRun, type Run, type RunPass, type RunStatus } from "./runs.ts";
+import {
+  CLAIM_LEASE_MS,
+  defaultVendorFor,
+  isCanonicalWorkflowVendor,
+  type ClaimedRun,
+  type Run,
+  type RunPass,
+  type RunStatus,
+} from "./runs.ts";
 import type { WorkflowArtifactWrite } from "./run-store.ts";
 import { extractZipEntryExact, inspectZipArchive } from "./stage8-boundary.server.ts";
 import {
@@ -415,6 +423,11 @@ export async function writeWorkflowUploadSnapshot(
 }
 
 export function argsFor(run: Run): { script: string; args: string[] } {
+  if (run.pass === "workflow" && !isCanonicalWorkflowVendor(run.vendor)) {
+    throw new Error(
+      `The canonical workflow vendor is ${defaultVendorFor("workflow")}; refusing stale launch vendor ${run.vendor}.`,
+    );
+  }
   const dir = scriptDir();
   // Exhaustive on purpose. A pass with no entry here must not fall through to the
   // research orchestrator: that would run a full 57-row research pass under another

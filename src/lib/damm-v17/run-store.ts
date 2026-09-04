@@ -26,7 +26,15 @@ import {
   MAX_WORKFLOW_UPLOAD_SOURCE_BYTES_PER_DOCUMENT,
   MAX_WORKFLOW_UPLOAD_SOURCE_BYTES_TOTAL,
 } from "./workflow.ts";
-import { CLAIM_LEASE_MS, type ClaimedRun, type Run, type RunPass, type RunStatus } from "./runs.ts";
+import {
+  CLAIM_LEASE_MS,
+  defaultVendorFor,
+  isCanonicalWorkflowVendor,
+  type ClaimedRun,
+  type Run,
+  type RunPass,
+  type RunStatus,
+} from "./runs.ts";
 
 const CANONICAL_UPLOAD_KINDS = DAR_WORKFLOW.optional_launch_inputs.map((input) => input.id);
 
@@ -280,6 +288,11 @@ async function createRunLocked(input: CreateRunInput, sql: Sql): Promise<Run> {
 }
 
 export async function createRun(input: CreateRunInput, database?: Sql): Promise<Run> {
+  if (input.pass === "workflow" && !isCanonicalWorkflowVendor(input.vendor ?? null)) {
+    throw new Error(
+      `The canonical workflow vendor must be ${defaultVendorFor("workflow")}; received ${input.vendor}.`,
+    );
+  }
   const sql = database ?? (await getSql());
   return input.countryId
     ? withCountryRunLock(input.countryId, (transaction) => createRunLocked(input, transaction), sql)

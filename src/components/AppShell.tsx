@@ -2,7 +2,7 @@ import { Link, useRouterState } from "@tanstack/react-router";
 import { UserButton } from "@/lib/auth/gates";
 import { useCurrentUser } from "@/lib/auth/use-current-user";
 import { disclaimer } from "@/lib/damm-v17/model";
-import { ACTING_ROLES, useSessionRole } from "@/lib/session";
+import { ACTING_ROLES, useSessionRole } from "@/lib/session-context";
 import { FolderOpen, Scale, Settings } from "lucide-react";
 
 function Mark() {
@@ -33,9 +33,24 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             <span className="font-display text-lg font-semibold tracking-tight">DAR Studio</span>
           </Link>
           <nav className="ml-4 hidden items-center gap-1 sm:flex">
-            <NavLink to="/" active={path === "/"} icon={<FolderOpen className="size-4" />} label="Portfolio" />
-            <NavLink to="/methodology" active={path.startsWith("/methodology")} icon={<Scale className="size-4" />} label="Methodology" />
-            <NavLink to="/settings" active={path.startsWith("/settings")} icon={<Settings className="size-4" />} label="Settings" />
+            <NavLink
+              to="/"
+              active={path === "/"}
+              icon={<FolderOpen className="size-4" />}
+              label="Portfolio"
+            />
+            <NavLink
+              to="/methodology"
+              active={path.startsWith("/methodology")}
+              icon={<Scale className="size-4" />}
+              label="Methodology"
+            />
+            <NavLink
+              to="/settings"
+              active={path.startsWith("/settings")}
+              icon={<Settings className="size-4" />}
+              label="Settings"
+            />
           </nav>
           <div className="ml-auto flex items-center gap-2">
             {user ? (
@@ -44,7 +59,10 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                 <UserButton />
               </>
             ) : (
-              <Link to="/login" className="rounded-sm border border-border-strong px-3 py-2 text-sm">
+              <Link
+                to="/login"
+                className="rounded-sm border border-border-strong px-3 py-2 text-sm"
+              >
                 Sign in
               </Link>
             )}

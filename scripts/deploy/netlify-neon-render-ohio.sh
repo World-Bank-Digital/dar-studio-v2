@@ -184,7 +184,7 @@ finish() {
 # Replace the example below. Set TOTAL_STAGES to match the stages you write.
 # ──────────────────────────────────────────────────────────────────────────
 
-TOTAL_STAGES=18
+TOTAL_STAGES=19
 
 # A database URL contains a password. Never honor caller-supplied shell tracing
 # while this wizard handles secrets.
@@ -197,7 +197,7 @@ if [[ "$ENV_FILE" == ".env" ]]; then
 fi
 umask 077
 
-DAMM_SOURCE_COMMIT="68e1994b5facfaaf0ddc49ba3bec108d9bde2c55"
+DAMM_SOURCE_COMMIT="76ca33d97f0809a6be7477447786953317aa41b5"
 DAMM_RENDERER_SHA256="95dcef014086f6c01f58678db426fb48d87546b8b6a4315c530801b1ff74c5be"
 NETLIFY_RELEASE_IMAGE="node:22.22.3-bookworm@sha256:46e94f8cf91baab69a2deb3153e74eeffd73c20c7cc1d8432f5b96469eaa0322"
 NETLIFY_FUNCTION_RUNTIME="nodejs22.x"
@@ -322,6 +322,7 @@ required_files=(
   migrations/0021_damm_source_pin_cutover.sql
   migrations/0022_damm_source_pin_cutover.sql
   migrations/0023_damm_source_pin_cutover.sql
+  migrations/0024_damm_source_pin_cutover.sql
   docs/DEPLOYMENT-NETLIFY-NEON-RENDER-OHIO.md
 )
 for required_file in "${required_files[@]}"; do
@@ -379,6 +380,11 @@ npm run typecheck
 npm run lint
 npm run build:dev
 npm run verify:netlify
+for simulation_profile in minimal typical dense; do
+  node scripts/simulate-workflow.mjs --scenario eight-stage-happy-v1 --profile "$simulation_profile"
+  node scripts/simulate-workflow.mjs --scenario nigeria-stage6-overlength-v1 --profile "$simulation_profile"
+done
+node scripts/simulate-workflow.mjs --scenario nigeria-stage6-through-package-v1 --profile typical
 say "Local validation passed at $DEPLOY_GIT_SHA."
 pause "Continue to infrastructure account and release authorization?"
 
@@ -491,34 +497,44 @@ say "If it is non-null, run the active-workflow query in docs/DEPLOYMENT-NETLIFY
 confirm_or_stop "Did the active-workflow query return zero rows?" \
   "Do not migrate while any workflow is queued, running, or otherwise nonterminal."
 step "Open Backup & Restore, enable Enhanced view if shown, select the root production branch, and click Create snapshot."
-step "Name it with UTC time and the deploy commit, for example pre-0023-YYYYMMDD-HHMM-${DEPLOY_GIT_SHA:0:8}."
+step "Name it with UTC time and the deploy commit, for example pre-0024-YYYYMMDD-HHMM-${DEPLOY_GIT_SHA:0:8}."
 ask NEON_SNAPSHOT_NAME "Exact pre-migration snapshot name:"
 require_value NEON_SNAPSHOT_NAME "$NEON_SNAPSHOT_NAME"
 write_env NEON_SNAPSHOT_NAME "$NEON_SNAPSHOT_NAME"
 confirm_or_stop "Is that snapshot complete and visibly tied to the root production branch?" \
   "A recoverable snapshot is required before migration."
-warn "Existing deployment only: suspend the preceding-pin Render worker before applying 0023. A reviewed merge is inert only while Netlify builds, Deploy Previews, Render service auto-deploys, and Blueprint Auto Sync are all disabled. Leave the worker suspended until the exact repinned image is Live; queued arrivals must remain unclaimed and unspent meanwhile."
+warn "Existing deployment only: suspend the preceding-pin Render worker before applying 0024. A reviewed merge is inert only while Netlify builds and Deploy Previews are disabled, Render service auto-deploys are off, and any Blueprint is disconnected. Leave the worker suspended until the exact repinned image is Live; queued arrivals must remain unclaimed and unspent meanwhile."
 confirm_or_stop "Is there no preceding-pin worker because this is a new environment, or is the existing worker visibly suspended?" \
   "Do not migrate while a preceding-pin worker can claim newly pinned runs."
+step "For an existing site, freshly re-read Netlify Project configuration > Build & deploy after the worker suspension gate and require builds stopped and Deploy Previews disabled. For a new environment, require that no Netlify site exists yet."
+confirm_or_stop "Are Netlify builds still stopped and Deploy Previews still disabled, or does no Netlify site exist yet?" \
+  "Do not migrate while a Git update could create an unreviewed Netlify build or preview."
+step "Freshly open both existing Render services and require automatic deploys and PR previews to remain off. If this is a new environment, confirm that neither service exists yet."
+confirm_or_stop "Do both existing Render services still have automatic deploys off, or are both services not yet created?" \
+  "Do not migrate while either Render service can deploy automatically."
+step "Freshly inspect the Render Blueprint list. Require the provisioning Blueprint to remain disconnected or absent; do not reconnect it for this check."
+confirm_or_stop "Is the provisioning Blueprint still disconnected or absent?" \
+  "Do not migrate while a Blueprint can synchronize the repository into managed services."
 
 # ── 7 ─────────────────────────────────────────────────────────────────────
-stage "Apply and verify migration 0023 after 0019 through 0022"
-warn "This preserves the sealed progressive Stage 1-7 schema and prior source cutovers before repinning the worker to durable pre-call reservations, replayable paid outcomes, terminal stage boundaries, and production-byte-bound simulations. The direct URL is used, and the migrator takes its Postgres advisory lock."
+stage "Apply and verify migration 0024 after 0019 through 0023"
+warn "This preserves the sealed progressive Stage 1-7 schema and prior source cutovers before repinning the worker to verified completed-checkpoint accounting, bounded semantic repair at Stages 3, 5, and 7, fail-closed cache integrity, and refreshed tariffs. The direct URL is used, and the migrator takes its Postgres advisory lock."
 confirm_or_stop "Run the idempotent migration set against this Neon staging database now?" \
   "Migration was not authorized. No worker may be deployed yet."
 DATABASE_URL="$DATABASE_URL" MIGRATION_DATABASE_URL="$DATABASE_URL_DIRECT" npm run db:migrate ||
   stop "Migration failed. Keep the snapshot, read the exact error, and do not deploy the worker."
 open_url "https://console.neon.tech/app/projects/$NEON_PROJECT_ID"
-step "In SQL Editor, query _migrations for 0019_progressive_stage_artifacts.sql and 0020 through 0023 DAMM source-pin cutovers. Require exactly one row for each, in that order."
+step "In SQL Editor, query _migrations for 0019_progressive_stage_artifacts.sql and 0020 through 0024 DAMM source-pin cutovers. Require exactly one row for each, in that order."
 step "Require both progressive-publication tables and their sealing triggers, then run the function checks in the guide. Require pinned_commit=true, renderer_digest=true, and remains_unratified=true."
-step "Require exactly 23 total migration rows through 0023, repeat the zero-active-workflow query, and run the guide's preserved-failure query. Require both failed run IDs, stage counts, spend, publication/artifact counts, null final set, and null claim to remain unchanged."
-confirm_or_stop "Did every 0019 through 0023 migration verification query return the exact expected result?" \
+step "Require exactly 24 total migration rows through 0024, repeat the zero-active-workflow query, and run the guide's preserved-failure query. Require both failed run IDs, stage counts, spend, publication/artifact counts, null final set, and null claim to remain unchanged."
+confirm_or_stop "Did every 0019 through 0024 migration verification query return the exact expected result?" \
   "A worker cannot start on an unverified schema or methodology pin."
 write_env MIGRATION_0019_VERIFIED "true"
 write_env MIGRATION_0020_VERIFIED "true"
 write_env MIGRATION_0021_VERIFIED "true"
 write_env MIGRATION_0022_VERIFIED "true"
 write_env MIGRATION_0023_VERIFIED "true"
+write_env MIGRATION_0024_VERIFIED "true"
 
 # ── 8 ─────────────────────────────────────────────────────────────────────
 stage "Import or verify the main branch in Netlify, then freeze builds"
@@ -653,23 +669,35 @@ chmod 600 "$ENV_FILE"
 # ── 11 ────────────────────────────────────────────────────────────────────
 stage "Render Ohio Blueprint: worker and artifact gateway"
 open_url "https://dashboard.render.com/"
-say "Migrations 0019 through 0023 must already be verified. Render does not run database migrations."
-step "New > Blueprint > Connect World-Bank-Digital/dar-studio-v2; select branch main and path render.yaml."
+say "Migrations 0019 through 0024 must already be verified. Render does not run database migrations."
 step "Review dar-studio-worker: worker/docker, region ohio, plan 1c-2g, auto deploy off, one instance, and no max shutdown delay field."
 step "Review disk dar-studio-worker-data at /var/data, 10 GB. Render forbids a custom max shutdown delay on a disk-backed service, so its documented 30-second default applies; checkpoints and the claim lease provide automatic recovery."
 step "Review dar-studio-artifacts: web/docker, region ohio, plan 1c-2g, auto deploy off, one instance, health /healthz, max shutdown delay 300 seconds, no disk."
-step "At the initial worker sync:false prompts enter pooled DATABASE_URL and EXA, JINA, PERPLEXITY, ANTHROPIC, OPENAI, and GEMINI keys."
-step "For dar-studio-artifacts enter the same pooled DATABASE_URL, the generated ARTIFACT_DELIVERY_SECRET, and APP_ORIGIN=$NETLIFY_URL. Render supplies PORT; do not add it."
-step "Do not enter MIGRATION_DATABASE_URL, DAR_KEY_SECRET, BETTER_AUTH_SECRET, broker values, or any other Netlify-only value."
-warn "Render prompts for sync:false values only during initial Blueprint creation. Verify every key before deployment. Do not create the one-attempt GitHub token yet."
-confirm_or_stop "Does the review exactly match both Ohio services, the one worker disk, main commit, and each service's required secrets?" \
-  "Do not create mismatched or incompletely configured paid services."
-confirm_or_stop "Deploy this billed Blueprint now?" \
-  "The paid Render mutation was not authorized."
-step "Click Deploy Blueprint. The gateway may succeed, but the worker's first build should reach Failed because the required build secret is deliberately absent. Do not wait for worker success or diagnose that expected first failure; continue as soon as the worker resource exists."
-step "Immediately open the new Blueprint's Settings page and set Auto Sync to No. Service auto-deploy is already off in render.yaml."
-confirm_or_stop "Are Blueprint Auto Sync and both services' automatic deploy triggers off?" \
-  "Do not upload a live build credential while a repository push can trigger an unplanned Blueprint sync."
+if confirm "Is this a new Render environment with no existing worker or gateway?"; then
+  RENDER_ENVIRONMENT_MODE="new"
+  step "New environment only: New > Blueprint > Connect World-Bank-Digital/dar-studio-v2; select branch main and path render.yaml."
+  step "At the initial worker sync:false prompts enter pooled DATABASE_URL and EXA, JINA, PERPLEXITY, ANTHROPIC, OPENAI, and GEMINI keys."
+  step "For dar-studio-artifacts enter the same pooled DATABASE_URL, the generated ARTIFACT_DELIVERY_SECRET, and APP_ORIGIN=$NETLIFY_URL. Render supplies PORT; do not add it."
+  step "Do not enter MIGRATION_DATABASE_URL, DAR_KEY_SECRET, BETTER_AUTH_SECRET, broker values, or any other Netlify-only value."
+  warn "Render prompts for sync:false values only during initial Blueprint creation. Verify every key before deployment. Do not create the one-attempt GitHub token yet."
+  confirm_or_stop "Does the review exactly match both Ohio services, the one worker disk, main commit, and each service's required secrets?" \
+    "Do not create mismatched or incompletely configured paid services."
+  confirm_or_stop "Deploy this billed Blueprint now?" \
+    "The paid Render mutation was not authorized."
+  step "Click Deploy Blueprint. The gateway may succeed, but the worker's first build should reach Failed because the required build secret is deliberately absent. Do not wait for worker success or diagnose that expected first failure; continue as soon as the worker resource exists."
+  step "Immediately open the new Blueprint's Settings page and set Auto Sync to No. Service auto-deploy is already off in render.yaml."
+  confirm_or_stop "Are Blueprint Auto Sync and both services' automatic deploy triggers off?" \
+    "Do not upload a live build credential while a repository push can trigger an unplanned Blueprint sync."
+else
+  RENDER_ENVIRONMENT_MODE="existing"
+  step "Existing deployment: keep an already-disconnected Blueprint disconnected and open the exact worker and gateway services directly."
+  step "Existing deployment path: do not create or deploy a Blueprint. Re-read both service configurations, their required secrets, the worker disk, and the frozen automatic-deploy settings directly."
+  confirm_or_stop "Is the existing worker visibly Suspended, is the Blueprint absent, and do both services exactly match the reviewed Ohio configuration with automatic deploys off?" \
+    "Do not change or deploy an existing service until its identity, configuration, automation freeze, and worker suspension are reverified."
+  step "With the existing worker still visibly Suspended, manually deploy the exact gateway commit first while the worker remains suspended. Require the gateway deploy to settle Live on $DEPLOY_GIT_SHA without changing its configuration."
+  confirm_or_stop "Is the existing gateway Live on exactly $DEPLOY_GIT_SHA while the worker remains visibly Suspended?" \
+    "Do not load a worker build credential until the gateway identity is exact and the worker remains unable to claim work."
+fi
 say "Refresh origin/main before a one-attempt token is created."
 git fetch --quiet origin main ||
   stop "Could not refresh origin/main. Do not create or load a one-attempt PAT."
@@ -724,8 +752,6 @@ confirm_or_stop "Has the PAT been revoked after the settled credentialed deploy 
 step "Verify the settled deploy is Live on commit $DEPLOY_GIT_SHA. If it failed, was canceled, or used another commit, stop and diagnose it with the token revoked. Every retry requires revalidating origin/main against $DEPLOY_GIT_SHA, suspending the worker again before creating a fresh short-expiry token, placing and re-reading it in the Secret File, reconfirming zero active workflows, and repeating the immediate pre-resume source/Render target checks; resume only after exact persistence and identity are proved, and revoke that new token as soon as the attempt settles."
 confirm_or_stop "Is the worker deploy Live on the exact recorded commit, with its build PAT already revoked?" \
   "Do not continue to runtime verification from a failed, canceled, wrong-commit, or live-token deploy."
-ask RENDER_BLUEPRINT_ID "Render Blueprint ID from its Settings page or URL:"
-require_value RENDER_BLUEPRINT_ID "$RENDER_BLUEPRINT_ID"
 ask RENDER_WORKER_SERVICE_ID "dar-studio-worker service ID from its Settings page or URL:"
 require_value RENDER_WORKER_SERVICE_ID "$RENDER_WORKER_SERVICE_ID"
 ask RENDER_ARTIFACT_SERVICE_ID "dar-studio-artifacts service ID from its Settings page or URL:"
@@ -734,8 +760,6 @@ ask ARTIFACT_GATEWAY_URL "dar-studio-artifacts public HTTPS origin (no trailing 
 require_value ARTIFACT_GATEWAY_URL "$ARTIFACT_GATEWAY_URL"
 [[ "$ARTIFACT_GATEWAY_URL" =~ ^https://[a-z0-9]([a-z0-9-]*[a-z0-9])?\.onrender\.com$ ]] ||
   stop "ARTIFACT_GATEWAY_URL must be the exact Render HTTPS origin with no path or trailing slash."
-write_env RENDER_BLUEPRINT_ID "$RENDER_BLUEPRINT_ID"
-write_env RENDER_BLUEPRINT_AUTO_SYNC "disabled"
 write_env RENDER_WORKER_SERVICE_ID "$RENDER_WORKER_SERVICE_ID"
 write_env RENDER_ARTIFACT_SERVICE_ID "$RENDER_ARTIFACT_SERVICE_ID"
 write_env ARTIFACT_GATEWAY_URL "$ARTIFACT_GATEWAY_URL"
@@ -745,7 +769,7 @@ stage "Render worker and artifact gateway verification"
 open_url "https://dashboard.render.com/worker/$RENDER_WORKER_SERVICE_ID"
 step "Open worker Logs. Require [worker-checkout] installed/reusing, [worker-preflight] ready, and [worker] host/pipeline/interpreter/watching queue lines."
 step "Require DAMM commit $DAMM_SOURCE_COMMIT, clean source, /var/data/checkouts/$DAMM_SOURCE_COMMIT, and /opt/damm-venv/bin/python."
-step "Require renderer SHA-256 $DAMM_RENDERER_SHA256, node=22.22.3, python=3.12.13, migrations=23 through 0023, Pandoc, LibreOffice/soffice, six nonempty vendor variables with pinned SDK imports, blank mode-0600 upstream .env, and queue watching."
+step "Require renderer SHA-256 $DAMM_RENDERER_SHA256, node=22.22.3, python=3.12.13, migrations=24 through 0024, Pandoc, LibreOffice/soffice, six nonempty vendor variables with pinned SDK imports, blank mode-0600 upstream .env, and queue watching."
 warn "Any worker-checkout, worker-preflight, or worker-entrypoint failed line, checkout drift, missing renderer/vendor, or crash loop is a hard stop."
 ask RENDER_WORKER_DEPLOY_ID "Successful Render worker deploy ID:"
 require_value RENDER_WORKER_DEPLOY_ID "$RENDER_WORKER_DEPLOY_ID"
@@ -768,6 +792,22 @@ write_env RENDER_ARTIFACT_DEPLOY_ID "$RENDER_ARTIFACT_DEPLOY_ID"
 write_env RENDER_ARTIFACT_DEPLOY_SHA "$RENDER_ARTIFACT_DEPLOY_SHA"
 confirm_or_stop "Are both services stable, on the exact commit, and free of preflight, health, or disclosure failures?" \
   "Do not expose Netlify or launch a workflow while either Render service is unverified."
+if [[ "$RENDER_ENVIRONMENT_MODE" == "new" ]]; then
+  step "Only now inspect the newly created Blueprint, open its Settings page, and choose Disconnect Blueprint. Require the confirmation to say: Resources will no longer sync automatically from your Blueprint file. This will not delete the file itself. This will not delete the managed resources. You can always connect your file later from the Blueprint page."
+  confirm_or_stop "Does the disconnection confirmation explicitly preserve the managed worker and gateway without a deploy or billing action?" \
+    "Do not disconnect if the warning differs, deletes a managed resource, triggers a deploy, or has any billing effect."
+  step "Confirm Disconnect Blueprint, then require the Blueprint to disappear and its Sync Hook to be unavailable. Do not request the old Sync Hook URL with any HTTP method because a probe could trigger a sync."
+else
+  step "If the Blueprint is already absent, do not reconnect it. Re-open the Blueprint list and require it to remain absent; do not create, deploy, synchronize, or disconnect anything."
+fi
+confirm_or_stop "Is the Blueprint already disconnected, or was disconnected only after the safe preservation confirmation?" \
+  "Do not continue unless the Blueprint is absent and no disconnection changed a managed resource, triggered a deploy, or had any billing effect."
+step "Re-read both services after disconnection. Require that the worker and gateway remain Live on their unchanged deploy IDs and commits, both retain Auto-Deploy and PR Previews Off, and the worker disk remains attached at /var/data with its recorded size."
+confirm_or_stop "Is the Blueprint disconnected while both managed services and the worker disk remain unchanged?" \
+  "Do not record a safe terminal state until the services, deploy identities, automation freezes, and disk are independently reverified."
+remove_env RENDER_BLUEPRINT_ID
+remove_env RENDER_BLUEPRINT_AUTO_SYNC
+write_env RENDER_BLUEPRINT_STATE "disconnected"
 
 # ── 13 ────────────────────────────────────────────────────────────────────
 stage "Netlify production-only environment"
@@ -1074,7 +1114,7 @@ cleanup_netlify_release ||
 trap - EXIT HUP INT TERM
 (( NETLIFY_DEPLOY_STATUS == 0 )) ||
   stop "The exact manual Netlify production deploy failed. Builds remain stopped; inspect the failed manual attempt before any retry."
-step "Require [deploy-preflight] success with Netlify CONTEXT=production, BRANCH=main, and COMMIT_REF exactly equal to EXPECTED_DEPLOY_GIT_SHA=$DEPLOY_GIT_SHA before Vite or migration starts. Require the migration advisory lock and an up-to-date exact 23-row ledger through 0023. Netlify must not be the first process to apply 0023."
+step "Require [deploy-preflight] success with Netlify CONTEXT=production, BRANCH=main, and COMMIT_REF exactly equal to EXPECTED_DEPLOY_GIT_SHA=$DEPLOY_GIT_SHA before Vite or migration starts. Require the migration advisory lock and an up-to-date exact 24-row ledger through 0024. Netlify must not be the first process to apply 0024."
 step "Require the Netlify adapter output, not .vercel output. Open /, /methodology, and /login over HTTPS."
 step "Require the deployed server Function metadata to show Node.js 22.x and streamed invocation; any Node 24.x runtime is a hard stop."
 step "Confirm email auth works and Google/X visibility exactly matches VITE_GROK_AUTH_ENABLED."
@@ -1093,7 +1133,7 @@ confirm_or_stop "Did the build freeze remain closed and did exactly one intended
   "Account for any extra deploy before closing the release."
 
 stage "Deployment-only closeout boundary"
-step "Record exact DAR on Netlify/gateway/worker, DAMM $DAMM_SOURCE_COMMIT, node=22.22.3, python=3.12.13, migrations=23 through 0023, private anonymous denial plus authorized access, every automation freeze, zero active workflows, and the unchanged preserved failures."
+step "Record exact DAR on Netlify/gateway/worker, DAMM $DAMM_SOURCE_COMMIT, node=22.22.3, python=3.12.13, migrations=24 through 0024, private anonymous denial plus authorized access, every automation freeze, zero active workflows, and the unchanged preserved failures."
 warn "Stop here unless post-deployment identity setup and the separately authorized paid canary are explicitly in scope. Deployment completion does not authorize either."
 if ! confirm "Are the post-deployment human test identities and one separately authorized named-country paid canary explicitly in scope now?"; then
   DEPLOYMENT_DEPLOYED_AT_UTC=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
@@ -1141,8 +1181,8 @@ warn "This stage is outside deployment and consumes vendor budget. Stop here unl
 confirm_or_stop "Is one complete eight-stage staging workflow for a specifically named country separately authorized now?" \
   "Do not launch without explicit vendor-spend authority."
 step "Reverify every selected provider model ID and tariff against first-party documentation today. Map the exact Render Jina key to its package/rate; verify its account funding control is acceptably bounded for the canary and record provider-side spend limits where available."
-step "Require exact DAR on Netlify/gateway/worker, DAMM $DAMM_SOURCE_COMMIT, 37-file identity 9eb81998a65a15be6a92be2524cec82a8b5550756c5d910df3b5ca901001489c, expected model/renderer hashes, migrations=23 through 0023, and no unresolved spend reservation."
-step "Require exactly one Live worker instance and possible claimant with confirmed lease margin; zero active workflows; both preserved failures unchanged; stopped Netlify builds after the exact deploy; Deploy Previews off; Render automatic deploys off; Blueprint Auto Sync No; private anonymous denial; and authorized reachability."
+step "Require exact DAR on Netlify/gateway/worker, DAMM $DAMM_SOURCE_COMMIT, 38-file identity b867d6960ac6e0f446e89f9c341b6283fdb3ddfe4326070049bf4a5c097e134c, expected model/renderer hashes, migrations=24 through 0024, and no unresolved spend reservation."
+step "Require exactly one Live worker instance and possible claimant with confirmed lease margin; zero active workflows; both preserved failures unchanged; stopped Netlify builds after the exact deploy; Deploy Previews off; Render automatic deploys off; Blueprint disconnected with no Sync Hook; private anonymous denial; and authorized reachability."
 confirm_or_stop "Are every same-day tariff, account-funding, identity, singleton, lease, zero-active, preserved-failure, and automation-freeze prelaunch gate recorded and green?" \
   "A missing or uncertain paid-canary precondition is NO-GO. Do not create a country workspace."
 ask SMOKE_COUNTRY_NAME "Explicitly authorized canary country name:"

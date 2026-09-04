@@ -18,7 +18,7 @@ import {
   basenameFor,
   canResume,
   canRunAutomatedChallenge,
-  defaultVendorFor,
+  vendorForLaunch,
   isRunnable,
   producesEvidence,
   canTransition,
@@ -208,10 +208,7 @@ async function queueRun(userId: string, data: StartRunInput) {
 
   // Resolved rather than left null, so the run records the vendor it actually used and
   // the app never displays a default the pipeline might resolve differently.
-  const vendor =
-    data.pass === "workflow"
-      ? (data.vendor ?? defaultVendorFor("research"))
-      : (data.vendor ?? defaultVendorFor(data.pass));
+  const vendor = vendorForLaunch(data.pass, data.vendor);
 
   let run: Run;
   try {

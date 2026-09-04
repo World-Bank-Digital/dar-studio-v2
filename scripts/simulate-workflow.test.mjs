@@ -37,6 +37,7 @@ const UPSTREAM_PRODUCTION_CODE_FILES = Object.freeze([
   "gauntlet/loop-1/research_pipeline/workflow_inputs.py",
   "gauntlet/loop-1/research_pipeline/foresight_contract.py",
   "gauntlet/loop-1/research_pipeline/gates.py",
+  "gauntlet/loop-1/research_pipeline/semantic_repair.py",
   "gauntlet/loop-1/research_pipeline/cell_schema.py",
   "gauntlet/loop-1/research_pipeline/nso_registry.py",
   "gauntlet/loop-1/research_pipeline/country_names.py",
@@ -169,10 +170,7 @@ describe("workflow simulation adapter", () => {
   });
 
   it("mirrors the complete upstream production-code identity set", () => {
-    assert.deepEqual(
-      [...SOURCE_IDENTITY_FILES].sort(),
-      [...UPSTREAM_PRODUCTION_CODE_FILES].sort(),
-    );
+    assert.deepEqual([...SOURCE_IDENTITY_FILES].sort(), [...UPSTREAM_PRODUCTION_CODE_FILES].sort());
   });
 
   it("passes only a small allowlisted environment to the child", () => {

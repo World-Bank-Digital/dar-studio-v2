@@ -37,6 +37,10 @@ export const APPROVAL_ASSESSMENT_INPUT_ARTIFACT_KEY = "assessment-input";
 // the pairs explicit so individually recognized hashes cannot be mixed across releases.
 const HISTORICAL_DAMM_SOURCE_RENDERER_PAIRS = [
   {
+    sourceCommit: "68e1994b5facfaaf0ddc49ba3bec108d9bde2c55",
+    rendererSha256: "95dcef014086f6c01f58678db426fb48d87546b8b6a4315c530801b1ff74c5be",
+  },
+  {
     sourceCommit: "ff5aecbfec5c2694a61f282c27db74ea8b99b28c",
     rendererSha256: "95dcef014086f6c01f58678db426fb48d87546b8b6a4315c530801b1ff74c5be",
   },
@@ -2143,10 +2147,10 @@ export async function getAssignedReview(
       : !currentMethodology
         ? "This historical package remains audit-readable, but its methodology is no longer current; start a new Draft package for approval."
         : terminal
-        ? "This package requires revision; its approval chain is closed."
-        : alreadyDecided
-          ? `${assignment.gate.toUpperCase()} already has an immutable decision.`
-          : "G2 controls unlock only after accepted human G1 review.";
+          ? "This package requires revision; its approval chain is closed."
+          : alreadyDecided
+            ? `${assignment.gate.toUpperCase()} already has an immutable decision.`
+            : "G2 controls unlock only after accepted human G1 review.";
     return {
       package: approvalPackage,
       assignment,

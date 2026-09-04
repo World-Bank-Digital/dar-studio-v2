@@ -4,7 +4,9 @@
   "sideEffects": false,
   "type": "module",
   "overrides": {
-    "nf3": "0.3.17"
+    "nf3": "0.3.17",
+    "sharp": "0.35.4",
+    "toml": "4.2.0"
   },
   "scripts": {
     "dev": "vite dev --host 0.0.0.0 --port 8080",
@@ -14,7 +16,7 @@
     "verify:netlify": "NETLIFY=true npm run build:dev && node scripts/verify-netlify-output.mjs",
     "preview": "vite preview --host 0.0.0.0 --port 8080",
     "typecheck": "tsc --noEmit",
-    "test": "node --experimental-strip-types --test src/lib/**/*.test.ts src/lib/damm/*.test.ts scripts/**/*.test.mjs",
+    "test": "node --experimental-strip-types --test src/lib/*.test.ts src/lib/**/*.test.ts src/lib/damm/*.test.ts scripts/**/*.test.mjs",
     "lint": "eslint .",
     "format": "prettier --write .",
     "qa:auth": "node scripts/qa-auth.mjs",
@@ -102,7 +104,6 @@
     "netlify-cli": "27.4.2",
     "nitro": "3.0.260610-beta",
     "playwright": "^1.62.0",
-    "pptxgenjs": "^4.0.1",
     "prettier": "^3.4.0",
     "typescript": "^5.7.0",
     "typescript-eslint": "^8.56.1",

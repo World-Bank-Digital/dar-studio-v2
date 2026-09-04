@@ -22,6 +22,7 @@ import {
   basenameFor,
   canRunAutomatedChallenge,
   defaultVendorFor,
+  vendorForLaunch,
   VENDOR_CHOICES,
   projectToFinish,
   producesEvidence,
@@ -246,6 +247,15 @@ describe("which name a pass writes under", () => {
 });
 
 describe("which vendor may run the automated challenge", () => {
+  it("does not let even an administrative caller override the canonical workflow vendor", () => {
+    assert.equal(
+      vendorForLaunch("workflow", "gemini/gemini-3.1-pro-preview"),
+      "anthropic/claude-opus-5",
+    );
+    assert.equal(vendorForLaunch("workflow", "openai/gpt-5.6-terra"), "anthropic/claude-opus-5");
+    assert.equal(vendorForLaunch("research", "openai/gpt-5.6-terra"), "openai/gpt-5.6-terra");
+  });
+
   it("allows an automated challenger from another vendor family", () => {
     assert.ok(canRunAutomatedChallenge("anthropic/claude-opus-5", "openai/gpt-5.6-terra").ok);
   });

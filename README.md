@@ -143,7 +143,7 @@ methodology manifest. The model remains honestly labelled `draft for review`
 and `ratified: false`; provenance does not imply ratification.
 
 On methodology upgrades, migrations `0011`, `0013`, `0014`, `0015`, `0016`,
-`0017`, `0018`, `0020`, `0021`, `0022`, and `0023` stop before changing the schema or active source pin
+`0017`, `0018`, `0020`, `0021`, `0022`, `0023`, and `0024` stop before changing the schema or active source pin
 if an older workflow is still active. Migration `0014` is the immutable source cutover for
 the foresight candidate-register repair. Migration `0015` advances only the
 upstream source commit to the canonical DAMM merge
@@ -187,8 +187,17 @@ conservative paid-call bounds before transport, journals replayable provider
 outcomes, propagates terminal paid failures without stage or coordinator retry,
 strengthens semantic stage gates, bounds archive handling, and binds zero-spend
 simulation identity to all production inputs. The renderer and all other
-methodology identity fields remain unchanged. Deploy `0019` before `0020`, then
-`0021`, `0022`, and `0023`. Allow an in-flight
+methodology identity fields remain unchanged. Migration `0024` advances only the
+source pin to canonical DAMM merge
+`76ca33d97f0809a6be7477447786953317aa41b5` (PR #13). It re-emits the terminal
+completion event when a crash-reclaimed coordinator verifies an already-complete
+checkpoint, applies one distinct bounded semantic repair before terminal failure
+for invalid Stage 3, Stage 5, and Stage 7 model output, fails closed on corrupted
+semantic-repair checkpoints, and refreshes the verified tariff evidence. Its
+production dependency closure contains 38 tracked files with aggregate SHA-256
+`b867d6960ac6e0f446e89f9c341b6283fdb3ddfe4326070049bf4a5c097e134c`.
+The renderer and all other methodology identity fields remain unchanged. Deploy
+`0019` before `0020`, then `0021`, `0022`, `0023`, and `0024`. Allow an in-flight
 workflow to finish under the prior release, then retry the deployment; no run
 is failed or relaunched. A deferred database invariant prevents a still-running
 old app process from committing a missing or stale methodology snapshot,

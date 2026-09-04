@@ -24,16 +24,16 @@ This topology is not ready merely because the web build and worker start. Do not
 3. **Deploy Previews must not share staging secrets, and production must build only the reviewed commit.** `DATABASE_URL`, authentication secrets, encryption keys, email credentials, and platform AI keys belong only to the production deploy context of this staging project. Disable Deploy Previews and branch deploys. The committed build preflight requires Netlify `CONTEXT=production`, `BRANCH=main`, and a full `COMMIT_REF` exactly equal to `EXPECTED_DEPLOY_GIT_SHA`, so a preview, branch build, or different commit fails even if secrets were scoped incorrectly. A preview that can read or write the staging database is a hard stop.
 4. **Deployed social sign-in must be honest.** The baked Grok preview OAuth client accepts only `*.grok-sandbox.com` callbacks. It is not a Netlify credential. Either register a per-app broker client with the two exact callbacks in this guide, or use a committed deployment mode that keeps email/password auth enabled while hiding Google and X. `VITE_AUTH_ENABLED=false` is not an email-only mode: with a hosted database it intentionally fails closed, and without that guard it would collapse users into the shared development identity.
 5. **Public self-sign-up exposes platform spend.** A registered user can create a country and launch the country-only autonomous workflow, which consumes the worker's platform vendor keys. Keep the staging Netlify project Private unless an application-level invitation/launch authorization and abuse controls have been implemented. Use one authorized Netlify member session to switch among the three application test identities, or invite each intended reviewer through Netlify on a plan that supports it.
-6. **Migration 0023 follows 0019 through 0022 before the repinned Render worker deploys.** Take a Neon recovery snapshot, prove there are no active workflows, run migrations with the direct Neon connection, and verify exactly one ledger row for each current migration. `0019_progressive_stage_artifacts.sql` first installs transactionally sealed, owner-only Stage 1–7 publications without historical backfill. `0020_damm_source_pin_cutover.sql` then advances the worker to canonical DAMM PR #8 merge `e866e7a1fffd5edb14f53da5e038f69b2ec29af2` and renderer SHA-256 `95dcef014086f6c01f58678db426fb48d87546b8b6a4315c530801b1ff74c5be`, containing independently checkpointed bounded Stage 6 repair chunks and consulting-report exports. `0021_damm_source_pin_cutover.sql` advances only the source pin to canonical DAMM PR #9 merge `f7dfbbb647e0a45d996e94f62d49f2218d518c94`, which normalizes Stage 6 and Stage 8 XLSX bytes to frozen workflow/package timestamps. `0022_damm_source_pin_cutover.sql` advances only the source pin to canonical DAMM PR #10 merge `ff5aecbfec5c2694a61f282c27db74ea8b99b28c`, which adds bounded, crash-safe Stage 4 scan recovery and prevents technical or upstream scan failures from being accepted as a complete lane. `0023_damm_source_pin_cutover.sql` advances only the source pin to canonical DAMM PR #12 merge `68e1994b5facfaaf0ddc49ba3bec108d9bde2c55`, which adds durable pre-transport spend reservation, replayable paid outcomes, terminal paid-failure propagation, semantic downstream gates, bounded artifact handling, and production-byte-bound simulations. The renderer and remaining methodology identity stay unchanged. Only after all five gates pass may the Render worker and artifact gateway deploy; neither service runs migrations.
+6. **Migration 0024 follows 0019 through 0023 before the repinned Render worker deploys.** Take a Neon recovery snapshot, prove there are no active workflows, run migrations with the direct Neon connection, and verify exactly one ledger row for each current migration. `0019_progressive_stage_artifacts.sql` first installs transactionally sealed, owner-only Stage 1–7 publications without historical backfill. `0020_damm_source_pin_cutover.sql` then advances the worker to canonical DAMM PR #8 merge `e866e7a1fffd5edb14f53da5e038f69b2ec29af2` and renderer SHA-256 `95dcef014086f6c01f58678db426fb48d87546b8b6a4315c530801b1ff74c5be`, containing independently checkpointed bounded Stage 6 repair chunks and consulting-report exports. `0021_damm_source_pin_cutover.sql` advances only the source pin to canonical DAMM PR #9 merge `f7dfbbb647e0a45d996e94f62d49f2218d518c94`, which normalizes Stage 6 and Stage 8 XLSX bytes to frozen workflow/package timestamps. `0022_damm_source_pin_cutover.sql` advances only the source pin to canonical DAMM PR #10 merge `ff5aecbfec5c2694a61f282c27db74ea8b99b28c`, which adds bounded, crash-safe Stage 4 scan recovery and prevents technical or upstream scan failures from being accepted as a complete lane. `0023_damm_source_pin_cutover.sql` advances only the source pin to canonical DAMM PR #12 merge `68e1994b5facfaaf0ddc49ba3bec108d9bde2c55`, which adds durable pre-transport spend reservation, replayable paid outcomes, terminal paid-failure propagation, semantic downstream gates, bounded artifact handling, and production-byte-bound simulations. `0024_damm_source_pin_cutover.sql` advances only the source pin to canonical DAMM PR #13 merge `76ca33d97f0809a6be7477447786953317aa41b5`, which restores completion delivery after reclaiming an already-complete checkpoint, adds one bounded semantic repair for invalid Stage 3, Stage 5, and Stage 7 outputs, fails closed on corrupted semantic-repair state, and refreshes tariff evidence. Its production dependency closure is 38 tracked files with aggregate SHA-256 `b867d6960ac6e0f446e89f9c341b6283fdb3ddfe4326070049bf4a5c097e134c`. The renderer and remaining methodology identity stay unchanged. Only after all six gates pass may the Render worker and artifact gateway deploy; neither service runs migrations.
 7. **An automated success is still a Draft.** The completed eight-stage package must say `Draft · pre-review`. Automated derivation, vendor challenge, and machine QC must not create G1 or G2 decisions. A release remains an `Approved Draft release` while DAMM is unratified.
 
 ### Existing-production source-pin upgrade order
 
 A reviewed Git merge is inert only while all provider automation remains frozen:
 Netlify builds and Deploy Previews are disabled, both Render services have
-automatic deploys disabled, and Blueprint Auto Sync is `No`. Under that exact
-freeze, merge the reviewed release first so the deployment can bind one immutable
-DAR commit. Then, before any migration or provider build:
+automatic deploys disabled, and the provisioning Blueprint is disconnected.
+Under that exact freeze, merge the reviewed release first so the deployment can
+bind one immutable DAR commit. Then, before any migration or provider build:
 
 1. fetch `main` and require the local commit, tracking ref, and direct GitHub
    branch lookup to equal the recorded deployment commit;
@@ -43,13 +43,16 @@ DAR commit. Then, before any migration or provider build:
    `Suspended`;
 4. repeat the zero-active-workflow, migration-ledger, current-pin, and preserved-
    terminal-run queries; and
-5. create the non-expiring root-production snapshot before applying `0023`.
+5. create the non-expiring root-production snapshot before applying `0024`.
 
-After `0023` verifies, deploy the artifact gateway first, then the still-
-suspended worker using the shortest-expiry repository-scoped build credential,
-and Netlify last. Revoke the build credential as soon as the worker build reaches
-a terminal state. A source merge must never be treated as permission to migrate,
-deploy, or launch a paid workflow.
+After `0024` verifies, keep the already-disconnected Blueprint disconnected; do
+not reconnect it or create a replacement. Open the two existing Render services
+directly and deploy the artifact gateway first, then the still-suspended worker
+using the shortest-expiry repository-scoped build credential, and Netlify last.
+Revoke the build credential as soon as the worker build reaches a terminal state.
+The Blueprint creation procedure in Section 11 is for a new environment only.
+A source merge must never be treated as permission to migrate, deploy, or launch
+a paid workflow.
 
 Relevant platform documentation:
 
@@ -65,6 +68,7 @@ Relevant platform documentation:
 - [Neon: pooled connection strings](https://neon.com/docs/connect/connection-pooling)
 - [Neon: snapshots are created from root branches](https://neon.com/docs/changelog/2025-10-17)
 - [Render: create a Blueprint](https://render.com/docs/infrastructure-as-code)
+- [Render: disconnect a Blueprint without deleting managed resources](https://api-docs.render.com/reference/disconnect-blueprint)
 - [Render: Blueprint fields and `sync: false` secrets](https://render.com/docs/blueprint-spec)
 - [Render: environment variables](https://render.com/docs/configure-environment-variables)
 - [Render: regions](https://render.com/docs/regions)
@@ -109,6 +113,7 @@ The wizard writes an ignored, mode-`0600` operator file. Never commit it. In the
 | `MIGRATION_0021_VERIFIED`                                                                                           | exact Neon ledger/function/current source-pin checks                                                                                  | local deployment record                                                                                                    | integrity evidence; fixed `true` only after verification                                                                   |
 | `MIGRATION_0022_VERIFIED`                                                                                           | exact Neon ledger/function/current source-pin checks                                                                                  | local deployment record                                                                                                    | integrity evidence; fixed `true` only after verification                                                                   |
 | `MIGRATION_0023_VERIFIED`                                                                                           | exact Neon ledger/function/current source-pin checks                                                                                  | local deployment record                                                                                                    | integrity evidence; fixed `true` only after verification                                                                   |
+| `MIGRATION_0024_VERIFIED`                                                                                           | exact Neon ledger/function/current source-pin checks                                                                                  | local deployment record                                                                                                    | integrity evidence; fixed `true` only after verification                                                                   |
 | `DAR_KEY_SECRET`                                                                                                    | generated locally, 48 random bytes encoded as base64                                                                                  | Netlify Production/Builds and Functions                                                                                    | secret; keep stable or stored BYOK values become unreadable                                                                |
 | `BETTER_AUTH_SECRET`                                                                                                | generated locally, 48 random bytes encoded as base64                                                                                  | Netlify Production/Builds and Functions                                                                                    | secret; keep stable or sessions are invalidated                                                                            |
 | `BETTER_AUTH_URL`                                                                                                   | fixed Netlify production URL                                                                                                          | Netlify Production/Builds and Functions                                                                                    | public configuration; full `https://` URL, no trailing slash                                                               |
@@ -146,8 +151,7 @@ The wizard writes an ignored, mode-`0600` operator file. Never commit it. In the
 | `NETLIFY_ENVIRONMENT_VERIFIED`                                                                                      | exact Production context/scope review                                                                                                 | local deployment record                                                                                                    | integrity evidence; fixed `true` only after review                                                                         |
 | `NETLIFY_BASELINE_DEPLOY_ID`, `NETLIFY_BASELINE_DEPLOY_SHA`                                                         | final deploy-history row before the frozen manual release                                                                             | local deployment record                                                                                                    | confidential operational ID and integrity evidence                                                                         |
 | `NETLIFY_DEPLOY_ID`, `NETLIFY_DEPLOY_SHA`                                                                           | successful production deploy details                                                                                                  | local deployment record and commit comparison                                                                              | confidential operational ID and integrity evidence                                                                         |
-| `RENDER_BLUEPRINT_ID`                                                                                               | Render Blueprint Settings/URL                                                                                                         | local record                                                                                                               | public identifier                                                                                                          |
-| `RENDER_BLUEPRINT_AUTO_SYNC`                                                                                        | verified Blueprint Settings                                                                                                           | local deployment record                                                                                                    | public configuration; fixed `disabled`                                                                                     |
+| `RENDER_BLUEPRINT_STATE`                                                                                            | post-verification Blueprint disconnect and independent service re-read                                                                | local deployment record                                                                                                    | public configuration; fixed `disconnected`                                                                                 |
 | `RENDER_WORKER_SERVICE_ID`                                                                                          | Render worker Settings/URL                                                                                                            | local record                                                                                                               | public identifier                                                                                                          |
 | `RENDER_ARTIFACT_SERVICE_ID`                                                                                        | Render gateway Settings/URL                                                                                                           | local record                                                                                                               | public identifier                                                                                                          |
 | `RENDER_WORKER_DEPLOY_ID`, `RENDER_WORKER_DEPLOY_SHA`                                                               | successful worker deploy details                                                                                                      | local deployment record and commit comparison                                                                              | confidential operational ID and integrity evidence                                                                         |
@@ -186,14 +190,14 @@ cutover, so the snapshot and worker suspension must precede it.
 ### 1. Merge and local preflight
 
 1. For a new environment, merge the deployment-readiness pull request to `main`.
-   For an existing deployment whose Netlify builds and Deploy Previews, Render
-   service auto-deploys, and Blueprint Auto Sync are all disabled, follow the
+   For an existing deployment whose Netlify builds and Deploy Previews and Render
+   service auto-deploys are disabled, with its Blueprint disconnected, follow the
    **Existing-production source-pin upgrade order** above and merge under that
    inert freeze. If any automatic publication cannot be disabled first, complete
    the fallback pre-merge gate above before merging.
 2. In the repository run `git fetch origin main`, check out `main`, and fast-forward it.
 3. Require a clean worktree and `HEAD == origin/main`.
-4. Confirm the merged tree contains `netlify.toml`, `render.yaml`, both `Dockerfile.worker` and `Dockerfile.artifact-gateway`, the worker entrypoint/preflight files, `deploy/artifact-gateway/package.json` and its lockfile, `scripts/artifact-gateway.ts`, immutable historical migrations `0013_damm_methodology_pin_cutover.sql` and `0014`–`0018` DAMM source-pin cutovers, current migrations `0019_progressive_stage_artifacts.sql` and `0020`–`0023` DAMM source-pin cutovers, and this runbook.
+4. Confirm the merged tree contains `netlify.toml`, `render.yaml`, both `Dockerfile.worker` and `Dockerfile.artifact-gateway`, the worker entrypoint/preflight files, `deploy/artifact-gateway/package.json` and its lockfile, `scripts/artifact-gateway.ts`, immutable historical migrations `0013_damm_methodology_pin_cutover.sql` and `0014`–`0018` DAMM source-pin cutovers, current migrations `0019_progressive_stage_artifacts.sql` and `0020`–`0024` DAMM source-pin cutovers, and this runbook.
 5. Run `npm test`, `npm run typecheck`, `npm run lint`, `npm run build:dev`, and `npm run verify:netlify`. The last command exercises the committed Netlify adapter wrapper and PWA route/output contract without using the production build command.
 6. Inspect the production build command. It must not silently run migrations against a preview database. This runbook applies migrations explicitly with `DATABASE_URL_DIRECT`.
 
@@ -215,13 +219,17 @@ Stop if the operator cannot view billing/usage, cannot rotate a key, or does not
 
 ### 3. Capture worker vendor secrets
 
-Create or retrieve all six worker keys. The canonical workflow currently uses Exa, Jina, Perplexity, Anthropic, and OpenAI; Gemini is also required by the full live-vendor preflight and preserves the configured fallback surface. These are operator-provisioned platform credentials so the product can honor “country is the only required launch input.”
+Create or retrieve all six worker keys. The canonical workflow currently uses Exa, Jina, Perplexity, Anthropic, and OpenAI; Gemini remains required by the full dependency/environment preflight and the retained administrative surface, but the canonical canary is frozen to `anthropic/claude-opus-5` and must not fall back to the Free-tier Gemini credential. These are operator-provisioned platform credentials so the product can honor “country is the only required launch input.”
 
 The Render Blueprint declares the keys with `sync: false`. Render prompts for such values only on initial Blueprint creation. If one is missed, add it later at **Service > Environment > Environment Variables > + Add Environment Variable**, then select **Save, rebuild, and deploy**.
 
 Never bake a key into the Docker image, `render.yaml`, an image build argument, or `/opt/damm/.env`. The entrypoint creates a blank mode-`0600` upstream `.env` only because the pinned DAMM loader requires the file to exist; the actual values remain process environment variables.
 
-The worker installs production dependencies only. `pptxgenjs` remains available to repository development tooling but is classified as dev-only because the application has no production import of it; excluding its unused transitive graph from the worker image is deliberate deployment hardening, not a product-feature change.
+The worker installs production dependencies only. The retired `pptxgenjs`
+development dependency is absent from both the application and release graph;
+presentation export belongs to the pinned DAMM package. Keeping the unused
+JavaScript presentation/image parser out of every install is deliberate
+deployment hardening, not a product-feature change.
 
 ### 4. Create the Neon Ohio project
 
@@ -268,11 +276,11 @@ order by r.created_at;
 
 Require zero rows. The migration itself refuses stale or missing-pin active workflows, but the staging cutover is deliberately stricter: do not change schema while any workflow is active.
 
-Then go to **Backup & Restore**, enable **Enhanced view** if shown, make sure the root `production` branch is selected, and click **Create snapshot**. Name it with UTC date/time and the first eight characters of the merged deploy commit, for example `pre-0023-YYYYMMDD-HHMM-<DEPLOY_GIT_SHA[:8]>`. Capture the snapshot name. Snapshots are only offered on root branches and plan limits apply.
+Then go to **Backup & Restore**, enable **Enhanced view** if shown, make sure the root `production` branch is selected, and click **Create snapshot**. Name it with UTC date/time and the first eight characters of the merged deploy commit, for example `pre-0024-YYYYMMDD-HHMM-<DEPLOY_GIT_SHA[:8]>`. Capture the snapshot name. Snapshots are only offered on root branches and plan limits apply.
 
 Stop if there is an active workflow, snapshot creation fails, the snapshot limit is exhausted, or the snapshot is for another branch.
 
-### 7. Apply and verify migration 0023 after 0019 through 0022
+### 7. Apply and verify migration 0024 after 0019 through 0023
 
 Only after the snapshot, run from the clean merged checkout:
 
@@ -280,7 +288,7 @@ Only after the snapshot, run from the clean merged checkout:
 DATABASE_URL="$DATABASE_URL" MIGRATION_DATABASE_URL="$DATABASE_URL_DIRECT" npm run db:migrate
 ```
 
-The migrator applies sorted SQL files one at a time, each in its own transaction, and records the filename in `_migrations`. A failure rolls back that file. Migrations `0013`–`0018` remain immutable historical evidence. Migration `0019` creates append-only Stage 1–7 publication and artifact tables, seals each declared artifact set at commit, and performs no historical backfill. Migration `0020` then cuts new/active workflow identity to DAMM PR #8 merge `e866e7a1fffd5edb14f53da5e038f69b2ec29af2` with renderer digest `95dcef014086f6c01f58678db426fb48d87546b8b6a4315c530801b1ff74c5be`. Its Stage 6 length repair is divided into independently checkpointed bounded chunks; the model remains unratified. Migration `0021` advances only the source pin to DAMM PR #9 merge `f7dfbbb647e0a45d996e94f62d49f2218d518c94`, whose Stage 6 and Stage 8 workbooks carry frozen semantic metadata and normalized ZIP-member timestamps so identical simulations and packages stay byte-reproducible across host clocks. Migration `0022` advances only the source pin to DAMM PR #10 merge `ff5aecbfec5c2694a61f282c27db74ea8b99b28c`. It provides one bounded recovery pass for completed-but-empty Stage 4 scans, distinguishes technical failures from evidence abstentions, reuses durable paid results after a crash, and blocks completion while relevant upstream scan failures remain unresolved. Migration `0023` advances only the source pin to DAMM PR #12 merge `68e1994b5facfaaf0ddc49ba3bec108d9bde2c55`. It adds durable pre-transport spend reservations and result journals, terminal propagation for ambiguous and over-bound paid outcomes, strengthened semantic stage gates, bounded package handling, and source-bound deterministic simulations. The renderer, model, workflow, engine, and ratification fields remain unchanged. If migration 0020, 0021, 0022, or 0023 reports:
+The migrator applies sorted SQL files one at a time, each in its own transaction, and records the filename in `_migrations`. A failure rolls back that file. Migrations `0013`–`0018` remain immutable historical evidence. Migration `0019` creates append-only Stage 1–7 publication and artifact tables, seals each declared artifact set at commit, and performs no historical backfill. Migration `0020` then cuts new/active workflow identity to DAMM PR #8 merge `e866e7a1fffd5edb14f53da5e038f69b2ec29af2` with renderer digest `95dcef014086f6c01f58678db426fb48d87546b8b6a4315c530801b1ff74c5be`. Its Stage 6 length repair is divided into independently checkpointed bounded chunks; the model remains unratified. Migration `0021` advances only the source pin to DAMM PR #9 merge `f7dfbbb647e0a45d996e94f62d49f2218d518c94`, whose Stage 6 and Stage 8 workbooks carry frozen semantic metadata and normalized ZIP-member timestamps so identical simulations and packages stay byte-reproducible across host clocks. Migration `0022` advances only the source pin to DAMM PR #10 merge `ff5aecbfec5c2694a61f282c27db74ea8b99b28c`. It provides one bounded recovery pass for completed-but-empty Stage 4 scans, distinguishes technical failures from evidence abstentions, reuses durable paid results after a crash, and blocks completion while relevant upstream scan failures remain unresolved. Migration `0023` advances only the source pin to DAMM PR #12 merge `68e1994b5facfaaf0ddc49ba3bec108d9bde2c55`. It adds durable pre-transport spend reservations and result journals, terminal propagation for ambiguous and over-bound paid outcomes, strengthened semantic stage gates, bounded package handling, and source-bound deterministic simulations. Migration `0024` advances only the source pin to DAMM PR #13 merge `76ca33d97f0809a6be7477447786953317aa41b5`. It re-emits completion after verifying a reclaimed completed checkpoint, performs at most one distinct semantic repair for invalid Stage 3, Stage 5, and Stage 7 output, fails closed on corrupted repair state, and refreshes the verified provider-tariff metadata. Its 38-file production code identity is `b867d6960ac6e0f446e89f9c341b6283fdb3ddfe4326070049bf4a5c097e134c`. The renderer, model, workflow, engine, and ratification fields remain unchanged. If migration 0020, 0021, 0022, 0023, or 0024 reports:
 
 > Cannot install the current DAMM source pin while stale or missing-pin workflows are active; allow them to finish and retry the deployment.
 
@@ -296,12 +304,13 @@ where name in (
   '0020_damm_source_pin_cutover.sql',
   '0021_damm_source_pin_cutover.sql',
   '0022_damm_source_pin_cutover.sql',
-  '0023_damm_source_pin_cutover.sql'
+  '0023_damm_source_pin_cutover.sql',
+  '0024_damm_source_pin_cutover.sql'
 )
 order by name;
 ```
 
-Require exactly five rows, one for each filename in that order. Verify that the
+Require exactly six rows, one for each filename in that order. Verify that the
 progressive schema and its insert/completeness guards exist:
 
 ```sql
@@ -326,7 +335,7 @@ retains the unratified identity, exact DAMM merge, and renderer digest:
 
 ```sql
 select pg_get_functiondef('require_active_workflow_methodology()'::regprocedure)
-  like '%68e1994b5facfaaf0ddc49ba3bec108d9bde2c55%' as pinned_commit,
+  like '%76ca33d97f0809a6be7477447786953317aa41b5%' as pinned_commit,
        pg_get_functiondef('require_active_workflow_methodology()'::regprocedure)
   like '%95dcef014086f6c01f58678db426fb48d87546b8b6a4315c530801b1ff74c5be%'
     as renderer_digest,
@@ -336,8 +345,8 @@ select pg_get_functiondef('require_active_workflow_methodology()'::regprocedure)
 
 Require all three values to be `true`. Keep the pre-migration snapshot through the entire smoke test.
 
-Also require the whole migration ledger to contain exactly 23 rows through
-`0023`, repeat the active-workflow query and require zero rows, and prove the two
+Also require the whole migration ledger to contain exactly 24 rows through
+`0024`, repeat the active-workflow query and require zero rows, and prove the two
 preserved failures are byte-for-byte historical state rather than collateral
 cutover victims:
 
@@ -362,7 +371,7 @@ where r.id in (
 order by r.id;
 ```
 
-Require `23` and `0023_damm_source_pin_cutover.sql`. Require both runs to remain
+Require `24` and `0024_damm_source_pin_cutover.sql`. Require both runs to remain
 `failed`, unclaimed, and without a final artifact set or final artifacts. The
 first must remain 3/8 at `$28.1829` with three stage publications and 18 stage
 artifacts; the second must remain 5/8 at `$29.64701` with zero stage
@@ -422,9 +431,12 @@ Then change `VITE_GROK_AUTH_ENABLED=true`, capture the app client ID and secret,
 
 If no per-app broker client is available, keep `VITE_GROK_AUTH_ENABLED=false`. The merged application must remove the Google/X controls while retaining email/password sign-in. Seeing Google or X buttons in that mode, or setting the flag to `true` without all three `GROK_AUTH_*` values, is a hard stop.
 
-### 11. Create both Render Ohio services from the Blueprint
+### 11. Create both Render Ohio services from the Blueprint (new environments only)
 
-Do this only after migrations `0019` through `0023` are verified.
+Do this only for a new environment and only after migrations `0019` through
+`0024` are verified. For an existing environment whose Blueprint is already
+disconnected, do not use this section: keep it disconnected and open/deploy the
+two existing services directly as specified in the source-pin upgrade order.
 
 Dashboard path: **Render Dashboard > New > Blueprint > Connect** the exact
 `World-Bank-Digital/dar-studio-v2` repository.
@@ -445,7 +457,7 @@ Dashboard path: **Render Dashboard > New > Blueprint > Connect** the exact
 14. Reconfirm zero active workflows. If the query is nonzero, keep the worker suspended, immediately revoke the loaded PAT, and stop. Refresh origin/main again immediately before resume, require both local tracking and direct remote identities to remain `DEPLOY_GIT_SHA`, and confirm Render's displayed latest commit to build is that exact SHA. If any pre-resume source check fails or the target drifts, keep the worker suspended and immediately revoke the loaded PAT.
 15. Resume the suspended worker; do not start an overlapping manual deploy. Its build must use BuildKit secret ID `damm_git_netrc`; the mount is absent from image layers. It initializes a credential-free seed and shallow-fetches only the pinned commit, with no tags or older reachable history.
 16. Wait for that credentialed deploy to reach a terminal state—**Live**, **Failed**, or **Canceled**—then immediately delete/revoke its fine-grained PAT in GitHub, regardless of the outcome and before investigating a failure. The worker never needs GitHub at runtime. Leave only the revoked, inert value in Render's saved Secret File. If the deploy failed, was canceled, or used the wrong commit, diagnose it with the token revoked. For every retry, revalidate `origin/main` against `DEPLOY_GIT_SHA`, suspend the worker again before creating a fresh short-expiry token with the same narrow scope, repeat the post-approval pre-load check, replace and re-read the Secret File, reconfirm zero active workflows, repeat the immediate pre-resume source/Render target checks, resume only after exact persistence and identity are proved, and revoke that new token as soon as the attempt settles. Continue only after a deploy is **Live** on the recorded `DEPLOY_GIT_SHA` and its PAT is revoked.
-17. Capture the Blueprint ID, worker service ID, gateway service ID, and the gateway's public `https://<name>.onrender.com` origin.
+17. Capture the worker service ID, gateway service ID, and the gateway's public `https://<name>.onrender.com` origin. Do not retain the temporary Blueprint ID or Sync Hook URL in the release ledger.
 
 Render prompts for `sync: false` values only on initial creation. If a value is missed, use **Service > Environment > Environment Variables > + Add Environment Variable**, then **Save, rebuild, and deploy**. The `damm_git_netrc` file is a separate worker-only build credential and must use **Secret Files**, not Environment Variables. Stop before clicking Deploy Blueprint if either service's branch, region, type, plan, disk, instance count, commit, or secret list differs. Render cannot change a service's region in place.
 
@@ -453,14 +465,14 @@ Render prompts for `sync: false` values only on initial creation. If a value is 
 
 For `dar-studio-worker`, open **Logs**. Require `[worker-checkout] installed DAMM <commit>` (or `reusing`) followed by `[worker-preflight] ready ...` and the existing `[worker] ...`, `[worker] pipeline ...`, `[worker] interpreter ...`, and `[worker] watching the run queue` lines. It must prove:
 
-- the DAMM checkout is exactly commit `68e1994b5facfaaf0ddc49ba3bec108d9bde2c55`;
+- the DAMM checkout is exactly commit `76ca33d97f0809a6be7477447786953317aa41b5`;
 - `gauntlet/loop-1/render_v17.py` has SHA-256 `95dcef014086f6c01f58678db426fb48d87546b8b6a4315c530801b1ff74c5be`;
 - its tracked tree is clean and prohibited untracked/ignored executable source is absent;
 - the checkout lives under `/var/data/checkouts/<pinned-commit>`;
 - Node is exactly `22.22.3`, Python is exactly `3.12.13`, and the interpreter is
   `/opt/damm-venv/bin/python`;
-- preflight reports exactly `migrations=23`, after the SQL verification above
-  proved one ledger row through `0023` and no unexpected row;
+- preflight reports exactly `migrations=24`, after the SQL verification above
+  proved one ledger row through `0024` and no unexpected row;
 - Pandoc and LibreOffice/`soffice` are present for DOCX/PDF generation;
 - all six required vendor variable names are nonempty and the pinned SDKs import without printing values (the full workflow smoke later proves live vendor authorization);
 - the upstream root `.env` exists as a blank mode-`0600` compatibility file; and
@@ -469,6 +481,26 @@ For `dar-studio-worker`, open **Logs**. Require `[worker-checkout] installed DAM
 Capture the worker deploy ID and commit, and require that commit to equal `DEPLOY_GIT_SHA`. Before runtime verification began, the credentialed deploy attempt must already have settled and its one-attempt PAT must already be revoked. A live PAT during these checks is a hard stop.
 
 For `dar-studio-artifacts`, open `https://<gateway>.onrender.com/healthz`. Require status `200`, body `{"status":"ok"}`, and `Cache-Control: no-store`. Request fixed `/v1/artifacts` without the exact allowed Origin and header capability; require a non-disclosing `404` and `Not found.`. Its logs must show `[artifact-gateway] listening on 0.0.0.0:<PORT>` without a secret or database URL. Capture its deploy ID and require its commit to equal `DEPLOY_GIT_SHA`.
+
+Only after both services are stable and their exact deploy IDs and commits are
+recorded, inspect the Blueprint list. If the Blueprint is already absent, do
+not reconnect it. If it remains connected, open its **Settings** page and
+choose **Disconnect Blueprint**. The confirmation must state: “Resources will no longer sync
+automatically from your Blueprint file. This will not delete the file itself.
+This will not delete the managed resources. You can always connect your file
+later from the Blueprint page.” Render's API documentation independently states
+that disconnection stops automatic resource syncing and does not delete managed
+services or other resources. Stop if the confirmation differs or presents any
+deploy, deletion, or billing action.
+
+After confirming, require the Blueprint to be absent and its Sync Hook to be
+unavailable. Do not request the old Sync Hook URL with any HTTP method: a probe
+could itself trigger a sync. Independently re-read both service pages and require
+that the worker and gateway remain **Live** on the unchanged deploy IDs and
+commits, Auto-Deploy and PR Previews remain Off, and the worker disk remains
+attached at `/var/data` with its recorded size. Remove stale
+`RENDER_BLUEPRINT_ID` and `RENDER_BLUEPRINT_AUTO_SYNC` rows from the local
+ledger, then record only `RENDER_BLUEPRINT_STATE=disconnected`.
 
 Any `[worker-checkout] failed:`, `[worker-preflight] failed:`, `[worker-entrypoint] failed:`, gateway startup/database failure, checkout drift, wrong commit, absent renderer, invalid health response, or repeated crash/restart is a hard stop. Do not launch a workflow to diagnose a failed preflight.
 
@@ -617,7 +649,7 @@ For the single intended deploy, require:
 - deployed `server` Function metadata reports Node.js 22.x and streamed
   Functions-v2 invocation;
 - the migration output is `up to date` against the already verified exact
-  23-row ledger through `0023`; it must not be the first process to apply `0023`;
+  24-row ledger through `0024`; it must not be the first process to apply `0024`;
 - no migration is attempted during a preview build;
 - `/` and `/methodology` load over HTTPS;
 - `/login` offers email/password, and social buttons match the chosen auth mode;
@@ -630,11 +662,12 @@ Do not re-enable previews on this staging project merely to prove isolation. Use
 ### Deployment-only closeout and stop boundary
 
 When a paid canary is not separately authorized, stop here. Record the exact DAR
-commit on Netlify, the gateway, and the worker; exact DAMM `68e1994b...`; worker
-`node=22.22.3 python=3.12.13 migrations=23`; Basic-protection anonymous denial
+commit on Netlify, the gateway, and the worker; exact DAMM `76ca33d9...`; worker
+`node=22.22.3 python=3.12.13 migrations=24`; Basic-protection anonymous denial
 and fresh authorized reachability; stopped Netlify builds with Deploy Previews
-disabled; disabled Render service auto-deploys and Blueprint Auto Sync `No`;
-zero active workflows; the `0023` guard; and the unchanged two failed-run rows.
+disabled; disabled Render service auto-deploys; disconnected Blueprint with no
+Sync Hook; unchanged Render service deploy IDs and worker disk;
+zero active workflows; the `0024` guard; and the unchanged two failed-run rows.
 Stages 15 and 16 are an optional, separately authorized acceptance extension.
 Do not create identities or a country workspace merely to finish deployment.
 
@@ -658,14 +691,15 @@ This stage is outside deployment and consumes vendor budget. Stop after deployme
   control verified as acceptably bounded for the canary and provider-side spend
   limits recorded where available;
 - exact reviewed DAR on Netlify, gateway, and worker; exact DAMM
-  `68e1994b5facfaaf0ddc49ba3bec108d9bde2c55`; 37-file identity
-  `9eb81998a65a15be6a92be2524cec82a8b5550756c5d910df3b5ca901001489c`;
+  `76ca33d97f0809a6be7477447786953317aa41b5`; 38-file identity
+  `b867d6960ac6e0f446e89f9c341b6283fdb3ddfe4326070049bf4a5c097e134c`;
   and the expected model/renderer hashes;
 - one Live worker instance, one possible claimant, a confirmed lease margin,
-  migration `0023`, zero active workflows, no unresolved spend reservation, and
+  migration `0024`, zero active workflows, no unresolved spend reservation, and
   both failed runs unchanged; and
 - stopped Netlify builds after the exact deploy, Deploy Previews disabled,
-  Render automatic deploys disabled, Blueprint Auto Sync `No`, private anonymous
+  Render automatic deploys disabled, Blueprint disconnected with no Sync Hook,
+  private anonymous
   denial, and authorized reachability.
 
 Any failed or uncertain precondition is **NO-GO**. Sign in as the owner only

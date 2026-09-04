@@ -1,72 +1,84 @@
-import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { getSettings, saveSettings } from "@/lib/damm-v17/actions";
 import { useCurrentUser } from "@/lib/auth/use-current-user";
-
-type Session = {
-  role: string;
-  actorName: string;
-  setRole: (role: string) => void;
-  setActorName: (name: string) => void;
-};
-
-const Ctx = createContext<Session | null>(null);
+import { SessionContext, type Session } from "@/lib/session-context";
+import {
+  actorNameSettingsPatch,
+  createOrderedMutationQueue,
+  defaultSessionState,
+  mergeHydratedSessionState,
+  roleSettingsPatch,
+  visibleSessionState,
+  type SessionIdentity,
+} from "@/lib/session-state";
+import type { UserSettingsMutation } from "@/lib/damm-v17/settings-store";
 
 export function SessionProvider({ children }: { children: ReactNode }) {
   const user = useCurrentUser();
-  const [role, setRoleState] = useState("TTL");
-  const [actorName, setActorNameState] = useState("");
+  const userId = user?.id ?? null;
+  const userDisplayName = user?.displayName ?? null;
+  const identity: SessionIdentity = userId ? { id: userId, displayName: userDisplayName } : null;
+  const [loadedSession, setLoadedSession] = useState(() => defaultSessionState(identity));
+  const hydrationRevision = useRef(0);
+  const fieldRevisions = useRef({ role: 0, actorName: 0 });
+  const settingsWrites = useRef<ReturnType<
+    typeof createOrderedMutationQueue<UserSettingsMutation>
+  > | null>(null);
+  settingsWrites.current ??= createOrderedMutationQueue((data: UserSettingsMutation) =>
+    saveSettings({ data }),
+  );
+  const { role, actorName } = visibleSessionState(loadedSession, identity);
 
   useEffect(() => {
-    if (!user) return;
+    const effectIdentity = userId ? { id: userId, displayName: userDisplayName } : null;
+    const fallback = defaultSessionState(effectIdentity);
+    const revision = ++hydrationRevision.current;
+    const startedFieldRevisions = { ...fieldRevisions.current };
+
+    setLoadedSession((current) => (current.userId === fallback.userId ? current : fallback));
+    if (!effectIdentity) return;
+
     getSettings()
       .then((s) => {
-        if (s.role) setRoleState(s.role);
-        if (s.actorName) setActorNameState(s.actorName);
-        else if (user.displayName) setActorNameState(user.displayName);
+        if (hydrationRevision.current !== revision) return;
+        setLoadedSession((current) =>
+          mergeHydratedSessionState(effectIdentity, s, current, {
+            role: fieldRevisions.current.role !== startedFieldRevisions.role,
+            actorName: fieldRevisions.current.actorName !== startedFieldRevisions.actorName,
+          }),
+        );
       })
       .catch(() => {
-        if (user.displayName) setActorNameState(user.displayName);
+        if (hydrationRevision.current !== revision) return;
+        setLoadedSession((current) => (current.userId === effectIdentity.id ? current : fallback));
       });
-  }, [user?.id]);
+
+    return () => {
+      if (hydrationRevision.current === revision) hydrationRevision.current += 1;
+    };
+  }, [userId, userDisplayName]);
 
   const value = useMemo<Session>(
     () => ({
       role,
-      actorName: actorName || user?.displayName || "Unnamed",
+      actorName: actorName || userDisplayName || "Unnamed",
       setRole: (r) => {
-        setRoleState(r);
-        saveSettings({ data: { role: r, actorName: actorName || user?.displayName || "" } }).catch(() => undefined);
+        fieldRevisions.current.role += 1;
+        setLoadedSession({ userId, role: r, actorName });
+        if (userId) {
+          settingsWrites.current?.enqueue(roleSettingsPatch(userId, r)).catch(() => undefined);
+        }
       },
       setActorName: (n) => {
-        setActorNameState(n);
-        saveSettings({ data: { role, actorName: n } }).catch(() => undefined);
+        fieldRevisions.current.actorName += 1;
+        setLoadedSession({ userId, role, actorName: n });
+        if (userId) {
+          settingsWrites.current?.enqueue(actorNameSettingsPatch(userId, n)).catch(() => undefined);
+        }
       },
     }),
-    [role, actorName, user?.displayName],
+    [role, actorName, userId, userDisplayName],
   );
 
-  return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
+  return <SessionContext.Provider value={value}>{children}</SessionContext.Provider>;
 }
-
-export function useSessionRole() {
-  const ctx = useContext(Ctx);
-  if (!ctx) throw new Error("SessionProvider missing");
-  return ctx;
-}
-
-/**
- * Acting roles are part of the engagement chassis, not the model: who may act
- * is an app concern, while the model only records who did.
- */
-export const ACTING_ROLES = [
-  "TTL",
-  "Assessment lead",
-  "Evidence panel",
-  "Digital authority",
-  "Statistics office",
-  "Private-sector panel",
-  "Farmer representative",
-  "Independent challenger",
-  "Steering committee",
-  "Model steward",
-];

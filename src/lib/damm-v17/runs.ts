@@ -161,6 +161,23 @@ export function defaultVendorFor(pass: RunPass): string | null {
 }
 
 /**
+ * Resolve the vendor frozen at launch.
+ *
+ * A canonical workflow is a versioned product operation, not an administrative legacy
+ * pass. Its vendor is therefore part of the shipped workflow contract: callers cannot
+ * switch it to a different account or model family by reaching the retained admin action.
+ */
+export function vendorForLaunch(pass: RunPass, requested?: string | null): string | null {
+  if (pass === "workflow") return defaultVendorFor("workflow");
+  return requested ?? defaultVendorFor(pass);
+}
+
+/** Null is retained only for compatible resumes whose coordinator resolves the same default. */
+export function isCanonicalWorkflowVendor(vendor: string | null): boolean {
+  return vendor === null || vendor === defaultVendorFor("workflow");
+}
+
+/**
  * Whether a pass calls a vendor at all.
  *
  * The diagnostic renders an assessment that has already been paid for. Its allocation is

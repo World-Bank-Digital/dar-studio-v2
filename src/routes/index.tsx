@@ -15,7 +15,7 @@ import {
   type Economy,
 } from "@/lib/damm-v17/actions";
 import { model, disclaimer, pillarIds, useCaseIds } from "@/lib/damm-v17/model";
-import { useSessionRole } from "@/lib/session";
+import { useSessionRole } from "@/lib/session-context";
 import { Plus, Trash2 } from "lucide-react";
 
 export const Route = createFileRoute("/")({ component: Home });

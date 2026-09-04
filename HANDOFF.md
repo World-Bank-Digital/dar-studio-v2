@@ -3,6 +3,195 @@
 _Updated 2026-09-04. Read this document and [LEARNINGS.md](LEARNINGS.md) before
 changing retrieval, scoring, drafting, or export behavior._
 
+## Final actual-country readiness candidate — 2026-09-04
+
+This is the authoritative unreleased successor to the deployed state recorded
+below. Production must continue to be read from the next section until this
+candidate is reviewed, merged, migrated, and deployed.
+
+- Canonical DAMM `main` is
+  `76ca33d97f0809a6be7477447786953317aa41b5` (PR #13). Its exact 38-file
+  production dependency closure has aggregate SHA-256
+  `b867d6960ac6e0f446e89f9c341b6283fdb3ddfe4326070049bf4a5c097e134c`.
+  The application manifest, deployment checks, simulation adapter, and new
+  `0024_damm_source_pin_cutover.sql` all bind that identity. Migration 0024 is
+  byte-pinned at
+  `a4abf1cf597fa36e722b0af1aa942d14c018507c006ab75fbc4e39d80f431769`.
+- Completed-checkpoint reclaim now re-emits a verified completion event with
+  authoritative finite spend. Stages 3, 5, and 7 each have one distinct,
+  durable, bounded semantic-repair opportunity and stop before later spend when
+  it is exhausted. Stage 7 rejects stale response-cache identities before any
+  later chapter call. The coordinator, stage artifacts, and final package remain
+  hash-bound and fail closed.
+- Every normal or retained administrative workflow launch is forced to the
+  canonical `anthropic/claude-opus-5` vendor/model pair. Persistence and the
+  worker independently reject a stale noncanonical vendor before spawning the
+  pipeline; historical null rows continue to resolve the same default.
+- Migration 0024 blocks while an active workflow still has the preceding pin,
+  preserves terminal rows byte-for-byte, rejects stale launches after cutover,
+  and admits only the new source. The preceding deployed `68e1994...` source and
+  unchanged renderer pair are explicitly recognized as historical so its
+  completed packages remain audit-readable without reopening approval activity.
+- The DAR adapter now hashes the shared `semantic_repair.py` module. All seven
+  secret-free eight-stage simulations—happy minimal/typical/dense, Nigeria
+  Stage 6 overlength minimal/typical/dense, and Nigeria through-package
+  typical—complete with eight stages and `$0.00` external spend.
+- The exact lockfile removes unused presentation tooling, pins `toml@4.2.0`,
+  and uses `sharp@0.35.4`. An exact OSV scan found zero advisories across 1,592
+  lockfile packages and 439 production packages; the npm audit endpoint timed
+  out, so no npm-registry audit result is claimed. Native IPX image transformation
+  remains proven.
+- Acting role, actor name, provider choice, and search mode are now bound to the
+  authenticated user ID. Settings writes are field-scoped atomic upserts,
+  ordered per client surface, and rejected if the authenticated identity no
+  longer matches the initiating user. Account changes remount the settings
+  surface and expose only identity-specific defaults while hydration completes;
+  late reads or writes cannot overwrite a newer account or local edit. Passkey
+  refresh and Fast Refresh boundaries are warning-free.
+- Local validation is green: DAMM research tests 308/308, model parity 470/470,
+  workflow contract 7/7, Loop 1 machine 17/17 and survey 16/16; DAR 596/596,
+  focused workflow/worker/database 159/159, TypeScript, warning-free lint,
+  development and Netlify builds, shell syntax, formatting, and all seven
+  simulations.
+- Provider identifiers and tariffs were revalidated on 2026-09-04 from official
+  first-party documentation and recorded in
+  `docs/PAID-CANARY-PROVIDER-AUDIT-2026-09-04.md`. No numeric tariff drift was
+  found. The mutable Anthropic Haiku alias and credential-specific Gemini/Jina
+  limitations remain explicit uncertainty, not silent fallback authority.
+- The remaining zero-spend release sequence is: review and merge the exact DAR
+  candidate; keep Netlify builds/previews and Render service auto-deploys off;
+  keep the Blueprint disconnected; suspend the worker; prove zero active
+  workflows; snapshot Neon; apply and verify migration 0024 as row 24; deploy
+  the exact merged DAR commit to worker, gateway, and Netlify; then repeat all
+  identity, access, automation, and immutable-failure reads. Do not launch a
+  country workflow during that sequence.
+
+The candidate materially reduces known systemic failure paths, but no software
+review can guarantee a hiccup-free live provider run. The only remaining
+end-to-end evidence gap is one separately authorized, named-country paid canary,
+strictly below the application ceiling of `$500` and governed by the monitoring
+and abort conditions in the provider audit and deployment guide.
+
+## Production deployment closeout — 2026-09-04
+
+This is the authoritative deployed state. It supersedes the older statements
+below that production remains on DAR `4112a27...` and DAMM `ff5aecb...`. The
+older validation, incident, tariff, and immutable-failure evidence remains part
+of the audit history.
+
+### Exact deployed identities and release evidence
+
+- DAR local `main`, `origin/main`, and direct GitHub `main` are exact
+  `62780d4bcc8d84f365d8e12f23c47efa9dc40d3b`. DAMM direct GitHub `main` and
+  the active application/database pin are exact
+  `68e1994b5facfaaf0ddc49ba3bec108d9bde2c55`; the deterministic 37-file
+  production-code identity remains
+  `9eb81998a65a15be6a92be2524cec82a8b5550756c5d910df3b5ca901001489c`.
+- Before migration, the non-expiring root-production Neon snapshot
+  `pre-0023-20260903-1926-62780d4b` was created. Migration
+  `0023_damm_source_pin_cutover.sql` was then applied exactly once. The final
+  repeatable-read, read-only audit at `2026-09-04T08:38Z` found exactly 23
+  migrations through `0023`, the expected DAMM/renderer pair, and zero active
+  workflows.
+- Render artifact-gateway deploy `dep-dacskqv10e5c738t4mrg` is Live on exact
+  DAR `62780d4...`. `/healthz` returns `200 {"status":"ok"}` with
+  `Cache-Control: no-store`; missing and attacker-origin artifact probes return
+  the same private, non-disclosing 404 without an allow-origin header.
+- Render worker deploy `dep-dad7te67bikc73a2cr2g` was triggered once by
+  **Resume** and is Live on exact DAR `62780d4...`. Startup installed the exact
+  DAMM `68e1994...` disk checkout and reported
+  `node=22.22.3 python=3.12.13 migrations=23` before watching the run queue.
+  Successful preflight also proves the clean single-commit checkout, renderer
+  identity, seven required nonempty runtime secrets, pinned Python imports,
+  blank mode-0600 upstream `.env`, and working Pandoc/LibreOffice conversions.
+- The worker build used a one-day, DAMM-only, Contents-read fine-grained token.
+  It was loaded only while the worker was suspended, re-read byte-for-byte,
+  then revoked immediately after the one deployment became terminal. Its local
+  automation variables were cleared and the revoked `damm_git_netrc` secret
+  file was removed from Render with **Save only**; no second deploy occurred.
+- Netlify deploy `6a9a81f1164fafc97fa6a49b` is the sole deploy after the
+  frozen baseline and is Published in Production with title
+  `DAR Studio release 62780d4bcc8d84f365d8e12f23c47efa9dc40d3b`.
+  Netlify records `deploy_source=cli`, `build_id=null`, and `commit_ref=null`, as
+  expected for the reviewed manual `--no-build` upload. Exactness comes from
+  the clean detached worktree, the two-source Git recheck, and the build-bound
+  `COMMIT_REF`/`EXPECTED_DEPLOY_GIT_SHA` preflight.
+- The one-shot Linux/amd64 release emitted all acceptance markers:
+  `[deploy-preflight] Netlify deployment environment is complete.`,
+  `[migrate] up to date.`, a 78-file configured-secret scan with no finding,
+  and successful Node 22 streamed-Function/Linux-x64 PDF extraction. Netlify's
+  deployed Function metadata independently reports `nodejs22.x`, streamed
+  invocation, the `/*` route, and Ohio (`us-east-2`/`cmh`). The temporary
+  worktree and commit-labelled Docker volume were both removed.
+- That clean pinned install reported 14 high-severity findings in the full
+  dependency tree. The lockfile is byte-identical to the validated source, and
+  a fresh targeted registry query identified only the known `image-size` and
+  `sharp` advisories propagated through `dev:true` PPTX/Netlify tooling. The
+  latest successful production-only audit, on 2026-09-03, was zero. Repeated
+  fresh complete `npm audit --omit=dev` requests timed out at npm's audit
+  endpoint, so a current production-zero result is not reasserted here and the
+  unexplained 14-versus-9 count delta must be reconciled when that endpoint is
+  responsive. This is registry-corpus uncertainty, not source or bundle drift.
+- The first local wrapper invocation exposed a macOS Bash 3.2 portability
+  defect in the temporary wrapper only: `source <(…)` returned without running
+  the hash-verified body. A direct deploy-history and local-resource read proved
+  zero provider attempt and zero temporary state. The wrapper was corrected to
+  evaluate only the immutable, hash-verified Git object in memory; that body
+  then executed exactly once and created the single deploy above.
+
+### Access, freeze, and preserved-state closeout
+
+- Fresh anonymous requests to production `/`, `/methodology`, `/login`, and the
+  unique deploy URL return 401. The approved Keychain-held Basic-protection
+  credential establishes one form session; the same routes then return 200
+  HTML. The login page exposes email/password only, with no Google/X control.
+  A protected anonymous Better Auth session read returns `200 null`, JSON, and
+  `Cache-Control: no-store`; no identity was created.
+- Netlify still reports `stop_builds=true`, `skip_prs=true`, production branch
+  `main`, allowed branches `[main]`, and no pull-request deploys. Production
+  secrets remain absent from deploy-preview context. Both Render services have
+  Auto-Deploy and PR Previews Off. After both exact deploys were verified, the
+  provisioning Blueprint was deliberately disconnected. Render's confirmation
+  said the file and managed resources would not be deleted and could be
+  reconnected later. The Blueprint and Sync Hook are now unavailable; no sync
+  or deploy ran. A fresh re-read found both services still Live on the unchanged
+  deploy IDs and the 10 GB worker disk still attached at `/var/data`.
+- The final read-only transaction found both Nigeria failures unchanged,
+  terminal, unclaimed, and without a final artifact set. Run `7e301235...`
+  remains 3/8 and `$28.18290`, with three immutable stage publications, 18
+  stage artifacts, and zero final artifacts. Run `e96a93fd...` remains 5/8 and
+  `$29.64701`, with zero publications, stage artifacts, or final artifacts.
+  Neither run was retried, resumed, reused, cancelled, topped up, or mutated.
+
+### Boundary for an actual-country test
+
+- **Deployment readiness is GO; no paid canary has been launched.** The final
+  build is ready for human acceptance testing behind the private access gate.
+  No country workspace, test identity, credential, or paid workflow was created
+  during this closeout.
+- A paid actual-country run still requires three distinct registered human
+  identities, a separately authorized named country, and same-day first-party
+  tariff/model revalidation for the selected runtime. The exact masked Render
+  Jina key is now mapped to the dashboard key ending `ApRXpp`, its standard
+  1-billion-token/$50 package and `$0.05/MTok`rate, and its unchanged
+824,787,632-token balance. Auto Recharge was disabled and independently
+verified false after reload, with no top-up, purchase, or provider call. The
+application still preauthorizes strictly less than`$500` for one workflow.
+- At launch and after Stages 1–7, record sole claimant/lease margin, immutable
+  checkpoint/publication identities, settled cost plus unresolved reservation,
+  and cumulative ceilings `$225`, `$262.50`, `$312.50`, `$350`, `$400`, `$425`,
+  then strictly below `$500`. Stage 8 must add no provider cost. Preserve and
+  stop—without retry, top-up, or repair—on any identity, tariff, funding,
+  claimant, lease, usage, checkpoint, semantic, artifact, publication, or final
+  acknowledgement ambiguity.
+- The uncommitted release-ledger patch corrects the operator wizard's progress
+  total to 19 and makes a deliberately disconnected Blueprint—not a retained
+  Blueprint ID with Auto Sync `No`—the terminal safe state. It removes stale
+  Blueprint ID/auto-sync rows, records only
+  `RENDER_BLUEPRINT_STATE=disconnected`, and requires post-disconnect service,
+  deploy, automation, and disk re-verification. It has not been committed,
+  pushed, or deployed; production remains the exact identity recorded above.
+
 ## Paid-canary hardening audit — 2026-09-03
 
 This is the authoritative paid-canary readiness state. It supersedes only older
@@ -87,10 +276,13 @@ remain authoritative.
   binary and required PDF.js worker, then extracted a generated PDF successfully.
   The archive was 27,350,440 compressed bytes and 71,334,431 uncompressed bytes
   across 3,403 files, below Netlify's 250 MB uncompressed limit; its native
-  binary requires no newer than GLIBC 2.16. Production-dependency audit is zero.
-  The full development tree retains nine high-severity audit findings in the
-  Netlify/image/PPTX toolchain with no nonbreaking production fix; none are in
-  the production dependency graph.
+  binary requires no newer than GLIBC 2.16. The latest successful
+  production-dependency audit was zero. At this validation point the full
+  development tree had nine high-severity audit findings in the
+  Netlify/image/PPTX toolchain with no nonbreaking production fix; all identified
+  findings were outside the production dependency graph. The deployment
+  closeout above records the later 14-count install summary and the bounded
+  registry-audit uncertainty.
 - DAMM: an isolated clean checkout of exact merge `68e1994...` passed
   research-pipeline discovery `287/287` with no skips; model parity `470/470`;
   workflow contract `7/7`; loop-1 unit suite `6/6`; and custom
@@ -904,13 +1096,18 @@ preventing technical failures from satisfying a completed evidence lane.
 Append-only migration `0023` advances only the source commit to canonical DAMM
 PR #12 merge `68e1994b5facfaaf0ddc49ba3bec108d9bde2c55`, adding durable paid-request
 reservation/replay, terminal paid-failure propagation, stronger semantic gates,
-bounded archive handling, and the 37-file simulation identity. Apply `0019`
-through `0023` in filename order. Require zero active workflows and suspend the
-preceding-pin worker before the database cutover. Keep it suspended until every pre-resume
-identity, persisted-secret, and zero-active gate passes; then permit exactly one
-credentialed build of the bound commit and revoke its credential as soon as the
-attempt settles. A migration or deployment must never terminate, claim, or
-relaunch an in-flight workflow.
+bounded archive handling, and the 37-file simulation identity. Append-only
+migration `0024` advances only the source commit to canonical DAMM PR #13 merge
+`76ca33d97f0809a6be7477447786953317aa41b5`, adding completed-checkpoint
+accounting validation, bounded semantic repair at Stages 3, 5, and 7, fail-closed
+Stage 7 cache integrity, refreshed provider tariffs, and the 38-file simulation
+identity. Apply `0019` through `0024` in filename order and require exactly 24
+migration-ledger rows through `0024`. Require zero active workflows and suspend
+the preceding-pin worker before the database cutover. Keep it suspended until
+every pre-resume identity, persisted-secret, and zero-active gate passes; then
+permit exactly one credentialed build of the bound commit and revoke its
+credential as soon as the attempt settles. A migration or deployment must never
+terminate, claim, or relaunch an in-flight workflow.
 The deferred database invariant also rejects stale launches, newly inserted
 stale terminal rows, and transitions that would turn a failed/cancelled stale
 run into a completed workflow.
