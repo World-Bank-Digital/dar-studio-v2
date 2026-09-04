@@ -3,15 +3,65 @@
 _Updated 2026-09-05. Read this document and [LEARNINGS.md](LEARNINGS.md) before
 changing retrieval, scoring, drafting, or export behavior._
 
-## Stored-key model-catalogue release candidate — 2026-09-05
+## 0025 DAMM source-pin release candidate — 2026-09-05
 
-This is the authoritative current development record. It supplements, without
-changing, the deployed actual-country readiness state below.
+This is the authoritative current development record. It preserves the earlier
+release and incident evidence below without representing this unreviewed
+candidate as deployed.
 
-- The candidate branch `feat/stored-key-model-catalogue` starts from DAR
-  `992114b932354a11c7595ce44b40f276503c1a7b`, which remains exact on local
-  `main`, `origin/main`, direct GitHub `main`, Netlify, and both Render services.
-  Canonical DAMM GitHub `main` remains
+- DAR GitHub `main` is `dcb803aadc831a6944e35b477bb7276d51621245`, the merge
+  of PR #23 (stored-key model-catalogue management). DAMM GitHub `main` is
+  `d81d267133eed52b5fdcc599bfecf8d72496f292`, the merge of PR #14. This
+  candidate starts from that merged DAR tree and adds the append-only
+  `0025_damm_source_pin_cutover.sql` release boundary.
+- Migration `0025` advances only the canonical source pin from
+  `76ca33d97f0809a6be7477447786953317aa41b5` to `d81d...`. It preserves the
+  model, schema, workflow, engine, renderer, tariff artifact, and ratification
+  inputs, and changes the 38-file production closure to
+  `118908785e9d061c387dde163507f39288b00176c6897ee6f7d8943311860f34` because
+  an unknown pricing or reasoning vendor now fails before price/ledger setup,
+  credential access, model discovery, or transport.
+- The predecessor source/renderer pair (`76ca33d...` and
+  `95dcef014086f6c01f58678db426fb48d87546b8b6a4315c530801b1ff74c5be`) must
+  remain recognized as historical-only package identity. Completed packages
+  remain audit-readable, while new or active work must use the current pin.
+- The exact source attestation must anonymously shallow-fetch and verify the
+  immutable manifest pin `d81d...` in a credential-disabled, isolated Git
+  environment. DAMM `main` is a moving diagnostic ref; it may advance and must
+  not be required to equal the immutable pin.
+- No deployment, migration, provider operation, country workspace, paid
+  workflow, credential creation, or Nigeria-run mutation is part of this
+  candidate. Production remains on its separately recorded DAR
+  `992114b932354a11c7595ce44b40f276503c1a7b` deployment with the `76ca33d...`
+  application/database pin and 24 applied migrations until the reviewed 0025
+  release sequence is explicitly executed.
+- Before any future deployment, require the full local suite, all seven
+  zero-spend simulations against a clean `d81d...` DAMM checkout, a fresh
+  read-only zero-active-workflow/terminal-failure audit, a non-expiring
+  `pre-0025-...` snapshot, exactly 25 migration rows after cutover, and
+  independent deployed identity/access/automation re-reads. These gates do
+  not authorize a paid canary.
+- Candidate validation is green: DAR `npm test` 625/625, typecheck, ESLint,
+  the Netlify adapter/output verification, the 21-case deployment-wizard
+  suite, and the migration/package regressions all pass. A clean detached DAMM
+  `d81d...` checkout passed all seven credential-empty zero-spend simulations:
+  three happy 8/8 packages, one Nigeria 8/8 through-package result, and three
+  bounded Nigeria Stage 6 repair fixtures. All used the `118908...` closure
+  with zero network, database, capability, or subprocess operations. Its local
+  Python was 3.14.6, so the
+  documented Render Python 3.12.13 preflight remains a deployment gate.
+
+## Stored-key model-catalogue release record — 2026-09-05
+
+This preserved pre-merge validation record is superseded for current release
+identity by the 0025 candidate above. It supplements, without changing, the
+deployed actual-country readiness state below.
+
+- At that pre-merge validation point, candidate branch
+  `feat/stored-key-model-catalogue` started from DAR
+  `992114b932354a11c7595ce44b40f276503c1a7b`, which then remained exact on
+  local `main`, `origin/main`, direct GitHub `main`, Netlify, and both Render
+  services. Canonical DAMM GitHub `main` then remained
   `76ca33d97f0809a6be7477447786953317aa41b5`. No deployment, migration,
   workspace, paid provider operation, or Nigeria-run mutation is part of this
   candidate.
@@ -58,9 +108,9 @@ changing, the deployed actual-country readiness state below.
   pass: the three happy profiles and through-package profile produce valid
   package ZIPs, the three Stage 6 overlength profiles prove bounded recovery,
   and every profile records `$0.00` spend plus zero network, database,
-  subprocess, and capability activity. This branch is not yet merged,
-  application-pinned, migrated, or deployed; the current fixed canonical vendor
-  was never exposed to the defect.
+  subprocess, and capability activity. At that point the branch was not yet
+  merged, application-pinned, migrated, or deployed; the current fixed
+  canonical vendor was never exposed to the defect.
 
 The 2026-09-05 official-document recheck found no provider tariff or exact-ID
 drift for the fixed canary profile. Jina's `$0.05`/million returned-token value
@@ -1183,15 +1233,23 @@ migration `0024` advances only the source commit to canonical DAMM PR #13 merge
 `76ca33d97f0809a6be7477447786953317aa41b5`, adding completed-checkpoint
 accounting validation, bounded semantic repair at Stages 3, 5, and 7, fail-closed
 Stage 7 cache integrity, refreshed provider tariffs, and the 38-file simulation
-identity. Apply `0019` through `0024` in filename order and require exactly 24
-migration-ledger rows through `0024`. Require zero active workflows and suspend
+identity. Append-only migration `0025` advances only the source commit to
+canonical DAMM PR #14 merge `d81d267133eed52b5fdcc599bfecf8d72496f292`,
+rejecting an unknown pricing or reasoning vendor before price/ledger setup,
+credential access, model discovery, or transport. The model, schema, workflow,
+engine, renderer, tariff artifact, and ratification identity remain unchanged;
+the 38-file closure is
+`118908785e9d061c387dde163507f39288b00176c6897ee6f7d8943311860f34`. Apply
+`0019` through `0025` in filename order and require exactly 25
+migration-ledger rows through `0025`. Require zero active workflows and suspend
 the preceding-pin worker before the database cutover. Keep it suspended until
 every pre-resume identity, anonymous-source, and zero-active gate passes; then
 permit one credential-free build at a time of the bound commit, with no
 overlapping manual or automated deploy. A terminal failure or cancellation must
 be investigated while the worker remains suspended; repeat every source and
 zero-active gate before authorizing a retry. The public DAMM fetch must run with
-configured and interactive credential paths disabled. A
+configured and interactive credential paths disabled and attest the exact
+manifest pin rather than requiring a moving DAMM branch head to equal it. A
 migration or deployment must never terminate, claim, or relaunch an in-flight
 workflow.
 The deferred database invariant also rejects stale launches, newly inserted

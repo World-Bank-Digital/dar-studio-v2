@@ -31,6 +31,25 @@ inference entitlement, quota, funds, or service health. Accordingly, the
 selector is explicit, single-attempt, fixed-endpoint, redirect-rejecting,
 response-bounded, and isolated from canonical workflow inference identity.
 
+## 0025 source-pin continuity
+
+This audit remains an evidence record for the `prices.json` bytes reviewed at
+`76ca33d97f0809a6be7477447786953317aa41b5`; it does not retroactively change
+that audit date or its source observations. The current source-pin release
+candidate advances only to DAMM PR #14 merge
+`d81d267133eed52b5fdcc599bfecf8d72496f292`. Its `prices.json`, model, schema,
+workflow, engine, renderer, and ratification inputs are byte-identical to the
+audited predecessor. The only production-code change is fail-closed rejection
+of an unknown pricing or reasoning vendor before price/ledger setup, credential
+access, model discovery, or transport. Its reviewed 38-file closure is
+`118908785e9d061c387dde163507f39288b00176c6897ee6f7d8943311860f34`.
+
+Accordingly, this audit's tariff/model verdict remains applicable to the
+candidate without claiming a new provider interaction. A paid canary still
+requires same-day revalidation of the selected runtime, successful deployment
+of the exact reviewed DAR/DAMM identities, and migration `0025`; none of those
+requirements authorizes a workspace or paid workflow.
+
 ## Scope and method
 
 Every numeric tariff and every model identifier in `prices.json` was compared with current, provider-owned documentation. Authenticated account observations are recorded separately from public tariff facts below. No provider inference, search, retrieval, or test request was made, and this audit incurred no provider spend.
@@ -167,7 +186,7 @@ For the controlled canary:
 ## Controlled-canary decision contract
 
 The code and zero-spend evidence support a **conditional GO for one canary only
-after** the exact reviewed DAR/DAMM identities and migration 0024 are deployed
+after** the exact reviewed DAR/DAMM identities and migration 0025 are deployed
 and independently reverified. This is not authorization to create a workspace or
 start a paid run.
 

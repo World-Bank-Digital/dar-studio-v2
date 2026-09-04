@@ -197,7 +197,7 @@ if [[ "$ENV_FILE" == ".env" ]]; then
 fi
 umask 077
 
-DAMM_SOURCE_COMMIT="76ca33d97f0809a6be7477447786953317aa41b5"
+DAMM_SOURCE_COMMIT="d81d267133eed52b5fdcc599bfecf8d72496f292"
 DAMM_PUBLIC_REPOSITORY="https://github.com/World-Bank-Digital/DAMM"
 DAMM_RENDERER_SHA256="95dcef014086f6c01f58678db426fb48d87546b8b6a4315c530801b1ff74c5be"
 NETLIFY_RELEASE_IMAGE="node:22.22.3-bookworm@sha256:46e94f8cf91baab69a2deb3153e74eeffd73c20c7cc1d8432f5b96469eaa0322"
@@ -244,10 +244,10 @@ validate_same_neon_database() {
     node scripts/validate-neon-deployment-urls.mjs pair
 }
 
-read_anonymous_damm_main() {
+attest_anonymous_damm_pin() {
   (
     set -eu
-    local audit_root audit_home audit_repo remote_sha
+    local audit_root audit_home audit_repo
     audit_root=$(mktemp -d)
     trap 'rm -rf -- "$audit_root"' EXIT HUP INT TERM
     audit_home="$audit_root/home"
@@ -258,9 +258,6 @@ read_anonymous_damm_main() {
     export GIT_CONFIG_COUNT=0
     export GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_NOSYSTEM=1
     export GIT_TERMINAL_PROMPT=0 GIT_ASKPASS=/bin/false
-    remote_sha=$(git -c credential.helper= ls-remote "$DAMM_PUBLIC_REPOSITORY" refs/heads/main |
-      awk 'NR == 1 { print $1 }')
-    [[ "$remote_sha" == "$DAMM_SOURCE_COMMIT" ]]
     git -C "$audit_repo" init --quiet
     git -C "$audit_repo" remote add origin "$DAMM_PUBLIC_REPOSITORY"
     git -C "$audit_repo" -c credential.helper= fetch --quiet --depth=1 --no-tags origin "$DAMM_SOURCE_COMMIT"
@@ -272,14 +269,13 @@ read_anonymous_damm_main() {
     [[ -z "$(git -C "$audit_repo" tag --list)" ]]
     [[ -z "$(git -C "$audit_repo" status --porcelain=v1 --untracked-files=all)" ]]
     git -C "$audit_repo" fsck --strict --no-dangling >/dev/null
-    printf '%s' "$remote_sha"
   )
 }
 
 verify_bound_release_sources() {
   (
     set -eu
-    local local_sha tracking_sha remote_sha damm_sha
+    local local_sha tracking_sha remote_sha
     git fetch --quiet origin main
     local_sha=$(git rev-parse HEAD)
     tracking_sha=$(git rev-parse origin/main)
@@ -287,8 +283,7 @@ verify_bound_release_sources() {
     [[ "$local_sha" == "$DEPLOY_GIT_SHA" ]]
     [[ "$tracking_sha" == "$DEPLOY_GIT_SHA" ]]
     [[ "$remote_sha" == "$DEPLOY_GIT_SHA" ]]
-    damm_sha=$(read_anonymous_damm_main)
-    [[ "$damm_sha" == "$DAMM_SOURCE_COMMIT" ]]
+    attest_anonymous_damm_pin
   )
 }
 
@@ -372,6 +367,7 @@ required_files=(
   migrations/0022_damm_source_pin_cutover.sql
   migrations/0023_damm_source_pin_cutover.sql
   migrations/0024_damm_source_pin_cutover.sql
+  migrations/0025_damm_source_pin_cutover.sql
   docs/DEPLOYMENT-NETLIFY-NEON-RENDER-OHIO.md
 )
 for required_file in "${required_files[@]}"; do
@@ -383,10 +379,8 @@ grep -Fq "\"repository\": \"$DAMM_PUBLIC_REPOSITORY\"" src/data/damm_model_manif
   stop "The app manifest does not pin the canonical public DAMM repository."
 grep -Fq "\"sha256\": \"$DAMM_RENDERER_SHA256\"" src/data/damm_model_manifest.json ||
   stop "The app manifest does not pin the authorized DAMM renderer digest."
-ANONYMOUS_DAMM_MAIN_SHA=$(read_anonymous_damm_main) ||
-  stop "The canonical public DAMM commit is not anonymously fetchable without a credential."
-[[ "$ANONYMOUS_DAMM_MAIN_SHA" == "$DAMM_SOURCE_COMMIT" ]] ||
-  stop "The canonical public DAMM main branch moved away from the pinned source commit."
+attest_anonymous_damm_pin ||
+  stop "The manifest-pinned public DAMM commit is not anonymously fetchable without a credential."
 grep -q "name: dar-studio-artifacts" render.yaml || stop "render.yaml does not declare the artifact gateway."
 grep -q "healthCheckPath: /healthz" render.yaml || stop "render.yaml does not declare the artifact gateway health check."
 [[ "$(grep -c "region: ohio" render.yaml)" -eq 2 ]] || stop "render.yaml does not pin both Render services to Ohio."
@@ -549,13 +543,13 @@ say "If it is non-null, run the active-workflow query in docs/DEPLOYMENT-NETLIFY
 confirm_or_stop "Did the active-workflow query return zero rows?" \
   "Do not migrate while any workflow is queued, running, or otherwise nonterminal."
 step "Open Backup & Restore, enable Enhanced view if shown, select the root production branch, and click Create snapshot."
-step "Name it with UTC time and the deploy commit, for example pre-0024-YYYYMMDD-HHMM-${DEPLOY_GIT_SHA:0:8}."
+step "Name it with UTC time and the deploy commit, for example pre-0025-YYYYMMDD-HHMM-${DEPLOY_GIT_SHA:0:8}."
 ask NEON_SNAPSHOT_NAME "Exact pre-migration snapshot name:"
 require_value NEON_SNAPSHOT_NAME "$NEON_SNAPSHOT_NAME"
 write_env NEON_SNAPSHOT_NAME "$NEON_SNAPSHOT_NAME"
 confirm_or_stop "Is that snapshot complete and visibly tied to the root production branch?" \
   "A recoverable snapshot is required before migration."
-warn "Existing deployment only: suspend the preceding-pin Render worker before applying 0024. A reviewed merge is inert only while Netlify builds and Deploy Previews are disabled, Render service auto-deploys are off, and any Blueprint is disconnected. Leave the worker suspended until the exact repinned image is Live; queued arrivals must remain unclaimed and unspent meanwhile."
+warn "Existing deployment only: suspend the preceding-pin Render worker before applying 0025. A reviewed merge is inert only while Netlify builds and Deploy Previews are disabled, Render service auto-deploys are off, and any Blueprint is disconnected. Leave the worker suspended until the exact repinned image is Live; queued arrivals must remain unclaimed and unspent meanwhile."
 confirm_or_stop "Is there no preceding-pin worker because this is a new environment, or is the existing worker visibly suspended?" \
   "Do not migrate while a preceding-pin worker can claim newly pinned runs."
 step "For an existing site, freshly re-read Netlify Project configuration > Build & deploy after the worker suspension gate and require builds stopped and Deploy Previews disabled. For a new environment, require that no Netlify site exists yet."
@@ -569,17 +563,17 @@ confirm_or_stop "Is the provisioning Blueprint still disconnected or absent?" \
   "Do not migrate while a Blueprint can synchronize the repository into managed services."
 
 # ── 7 ─────────────────────────────────────────────────────────────────────
-stage "Apply and verify migration 0024 after 0019 through 0023"
-warn "This preserves the sealed progressive Stage 1-7 schema and prior source cutovers before repinning the worker to verified completed-checkpoint accounting, bounded semantic repair at Stages 3, 5, and 7, fail-closed cache integrity, and refreshed tariffs. The direct URL is used, and the migrator takes its Postgres advisory lock."
+stage "Apply and verify migration 0025 after 0019 through 0024"
+warn "This preserves the sealed progressive Stage 1-7 schema and prior source cutovers before repinning the worker to the reviewed DAMM revision that rejects an unknown vendor before it can create a zero-cost estimate, mutate the ledger, resolve a credential, or reach paid transport. The direct URL is used, and the migrator takes its Postgres advisory lock."
 confirm_or_stop "Run the idempotent migration set against this Neon staging database now?" \
   "Migration was not authorized. No worker may be deployed yet."
 DATABASE_URL="$DATABASE_URL" MIGRATION_DATABASE_URL="$DATABASE_URL_DIRECT" npm run db:migrate ||
   stop "Migration failed. Keep the snapshot, read the exact error, and do not deploy the worker."
 open_url "https://console.neon.tech/app/projects/$NEON_PROJECT_ID"
-step "In SQL Editor, query _migrations for 0019_progressive_stage_artifacts.sql and 0020 through 0024 DAMM source-pin cutovers. Require exactly one row for each, in that order."
+step "In SQL Editor, query _migrations for 0019_progressive_stage_artifacts.sql and 0020 through 0025 DAMM source-pin cutovers. Require exactly one row for each, in that order."
 step "Require both progressive-publication tables and their sealing triggers, then run the function checks in the guide. Require pinned_commit=true, renderer_digest=true, and remains_unratified=true."
-step "Require exactly 24 total migration rows through 0024, repeat the zero-active-workflow query, and run the guide's preserved-failure query. Require both failed run IDs, stage counts, spend, publication/artifact counts, null final set, and null claim to remain unchanged."
-confirm_or_stop "Did every 0019 through 0024 migration verification query return the exact expected result?" \
+step "Require exactly 25 total migration rows through 0025, repeat the zero-active-workflow query, and run the guide's preserved-failure query. Require both failed run IDs, stage counts, spend, publication/artifact counts, null final set, and null claim to remain unchanged."
+confirm_or_stop "Did every 0019 through 0025 migration verification query return the exact expected result?" \
   "A worker cannot start on an unverified schema or methodology pin."
 write_env MIGRATION_0019_VERIFIED "true"
 write_env MIGRATION_0020_VERIFIED "true"
@@ -587,6 +581,7 @@ write_env MIGRATION_0021_VERIFIED "true"
 write_env MIGRATION_0022_VERIFIED "true"
 write_env MIGRATION_0023_VERIFIED "true"
 write_env MIGRATION_0024_VERIFIED "true"
+write_env MIGRATION_0025_VERIFIED "true"
 
 # ── 8 ─────────────────────────────────────────────────────────────────────
 stage "Import or verify the main branch in Netlify, then freeze builds"
@@ -721,7 +716,7 @@ chmod 600 "$ENV_FILE"
 # ── 11 ────────────────────────────────────────────────────────────────────
 stage "Render Ohio Blueprint: worker and artifact gateway"
 open_url "https://dashboard.render.com/"
-say "Migrations 0019 through 0024 must already be verified. Render does not run database migrations."
+say "Migrations 0019 through 0025 must already be verified. Render does not run database migrations."
 step "Review dar-studio-worker: worker/docker, region ohio, plan 1c-2g, auto deploy off, one instance, and no max shutdown delay field."
 step "Review disk dar-studio-worker-data at /var/data, 10 GB. Render forbids a custom max shutdown delay on a disk-backed service, so its documented 30-second default applies; checkpoints and the claim lease provide automatic recovery."
 step "Review dar-studio-artifacts: web/docker, region ohio, plan 1c-2g, auto deploy off, one instance, health /healthz, max shutdown delay 300 seconds, no disk."
@@ -800,7 +795,7 @@ stage "Render worker and artifact gateway verification"
 open_url "https://dashboard.render.com/worker/$RENDER_WORKER_SERVICE_ID"
 step "Open worker Logs. Require [worker-checkout] installed/reusing, [worker-preflight] ready, and [worker] host/pipeline/interpreter/watching queue lines."
 step "Require DAMM commit $DAMM_SOURCE_COMMIT, clean source, /var/data/checkouts/$DAMM_SOURCE_COMMIT, and /opt/damm-venv/bin/python."
-step "Require renderer SHA-256 $DAMM_RENDERER_SHA256, node=22.22.3, python=3.12.13, migrations=24 through 0024, Pandoc, LibreOffice/soffice, six nonempty vendor variables with pinned SDK imports, blank mode-0600 upstream .env, and queue watching."
+step "Require renderer SHA-256 $DAMM_RENDERER_SHA256, node=22.22.3, python=3.12.13, migrations=25 through 0025, Pandoc, LibreOffice/soffice, six nonempty vendor variables with pinned SDK imports, blank mode-0600 upstream .env, and queue watching."
 warn "Any worker-checkout, worker-preflight, or worker-entrypoint failed line, checkout drift, missing renderer/vendor, or crash loop is a hard stop."
 ask RENDER_WORKER_DEPLOY_ID "Successful Render worker deploy ID:"
 require_value RENDER_WORKER_DEPLOY_ID "$RENDER_WORKER_DEPLOY_ID"
@@ -1145,7 +1140,7 @@ cleanup_netlify_release ||
 trap - EXIT HUP INT TERM
 (( NETLIFY_DEPLOY_STATUS == 0 )) ||
   stop "The exact manual Netlify production deploy failed. Builds remain stopped; inspect the failed manual attempt before any retry."
-step "Require [deploy-preflight] success with Netlify CONTEXT=production, BRANCH=main, and COMMIT_REF exactly equal to EXPECTED_DEPLOY_GIT_SHA=$DEPLOY_GIT_SHA before Vite or migration starts. Require the migration advisory lock and an up-to-date exact 24-row ledger through 0024. Netlify must not be the first process to apply 0024."
+step "Require [deploy-preflight] success with Netlify CONTEXT=production, BRANCH=main, and COMMIT_REF exactly equal to EXPECTED_DEPLOY_GIT_SHA=$DEPLOY_GIT_SHA before Vite or migration starts. Require the migration advisory lock and an up-to-date exact 25-row ledger through 0025. Netlify must not be the first process to apply 0025."
 step "Require the Netlify adapter output, not .vercel output. Open /, /methodology, and /login over HTTPS."
 step "Require the deployed server Function metadata to show Node.js 22.x and streamed invocation; any Node 24.x runtime is a hard stop."
 step "Confirm email auth works and Google/X visibility exactly matches VITE_GROK_AUTH_ENABLED."
@@ -1164,7 +1159,7 @@ confirm_or_stop "Did the build freeze remain closed and did exactly one intended
   "Account for any extra deploy before closing the release."
 
 stage "Deployment-only closeout boundary"
-step "Record exact DAR on Netlify/gateway/worker, DAMM $DAMM_SOURCE_COMMIT, node=22.22.3, python=3.12.13, migrations=24 through 0024, private anonymous denial plus authorized access, every automation freeze, zero active workflows, and the unchanged preserved failures."
+step "Record exact DAR on Netlify/gateway/worker, DAMM $DAMM_SOURCE_COMMIT, node=22.22.3, python=3.12.13, migrations=25 through 0025, private anonymous denial plus authorized access, every automation freeze, zero active workflows, and the unchanged preserved failures."
 warn "Stop here unless post-deployment identity setup and the separately authorized paid canary are explicitly in scope. Deployment completion does not authorize either."
 if ! confirm "Are the post-deployment human test identities and one separately authorized named-country paid canary explicitly in scope now?"; then
   DEPLOYMENT_DEPLOYED_AT_UTC=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
@@ -1212,7 +1207,7 @@ warn "This stage is outside deployment and consumes vendor budget. Stop here unl
 confirm_or_stop "Is one complete eight-stage staging workflow for a specifically named country separately authorized now?" \
   "Do not launch without explicit vendor-spend authority."
 step "Reverify every selected provider model ID and tariff against first-party documentation today. Map the exact Render Jina key to its package/rate; verify its account funding control is acceptably bounded for the canary and record provider-side spend limits where available."
-step "Require exact DAR on Netlify/gateway/worker, DAMM $DAMM_SOURCE_COMMIT, 38-file identity b867d6960ac6e0f446e89f9c341b6283fdb3ddfe4326070049bf4a5c097e134c, expected model/renderer hashes, migrations=24 through 0024, and no unresolved spend reservation."
+step "Require exact DAR on Netlify/gateway/worker, DAMM $DAMM_SOURCE_COMMIT, 38-file identity 118908785e9d061c387dde163507f39288b00176c6897ee6f7d8943311860f34, expected model/renderer hashes, migrations=25 through 0025, and no unresolved spend reservation."
 step "Require exactly one Live worker instance and possible claimant with confirmed lease margin; zero active workflows; both preserved failures unchanged; stopped Netlify builds after the exact deploy; Deploy Previews off; Render automatic deploys off; Blueprint disconnected with no Sync Hook; private anonymous denial; and authorized reachability."
 confirm_or_stop "Are every same-day tariff, account-funding, identity, singleton, lease, zero-active, preserved-failure, and automation-freeze prelaunch gate recorded and green?" \
   "A missing or uncertain paid-canary precondition is NO-GO. Do not create a country workspace."

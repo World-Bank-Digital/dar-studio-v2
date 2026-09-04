@@ -1781,3 +1781,29 @@ suite.
 **Meta-lesson:** fail-closed pricing begins at the outermost identity. Validating
 only models inside recognized families still leaves an unknown family looking
 free until a later layer notices it cannot dispatch.
+
+### L68 — An immutable source pin is not a moving branch assertion
+
+**Incident:** after DAMM PR #14 advanced the public `main` branch, the release
+wizard still required `refs/heads/main` to equal the application manifest's
+exact source commit. That conflated an immutable reviewed pin with a moving
+development ref and made a valid source-pin release undeployable once upstream
+had advanced, even when the exact pinned object was still anonymously available
+and verifiable.
+**Root cause:** source provenance was expressed as a branch-head equality check
+instead of an attestation of the actual immutable object that the manifest and
+database guard require. A branch lookup is useful diagnostic evidence, but it
+cannot be the acceptance condition for a deliberately historic, content-addressed
+release pin.
+**Fix:** in a credential-disabled isolated Git environment, shallow-fetch the
+exact manifest commit, require a one-commit/no-tag clean checkout and object
+integrity, and compare the checked-out object with the pin. Record the remote
+`main` head for diagnostics only; it may advance and must not be compared with
+the pin. The 0025 cutover retains the predecessor source/renderer pair as
+historical-only package identity while admitting only the new pin for active
+work.
+**Pinned by:** the deployment-wizard exact-pin regression, the 0025
+source-cutover regression, and the historical-package readability regression.
+**Meta-lesson:** attest the immutable artifact that will execute. A moving ref
+can provide context, but using it as the identity proof quietly turns ordinary
+upstream progress into a release failure.

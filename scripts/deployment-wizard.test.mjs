@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { readFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { test } from "node:test";
 import { fileURLToPath } from "node:url";
@@ -136,6 +137,7 @@ test("the deployment wizard verifies progressive storage and the prior cutover b
   assert.match(wizard, /migrations\/0022_damm_source_pin_cutover\.sql/);
   assert.match(wizard, /migrations\/0023_damm_source_pin_cutover\.sql/);
   assert.match(wizard, /migrations\/0024_damm_source_pin_cutover\.sql/);
+  assert.match(wizard, /migrations\/0025_damm_source_pin_cutover\.sql/);
   assert.ok(
     wizard.indexOf("migrations/0019_progressive_stage_artifacts.sql") <
       wizard.indexOf("migrations/0020_damm_source_pin_cutover.sql"),
@@ -156,20 +158,26 @@ test("the deployment wizard verifies progressive storage and the prior cutover b
     wizard.indexOf("migrations/0023_damm_source_pin_cutover.sql") <
       wizard.indexOf("migrations/0024_damm_source_pin_cutover.sql"),
   );
+  assert.ok(
+    wizard.indexOf("migrations/0024_damm_source_pin_cutover.sql") <
+      wizard.indexOf("migrations/0025_damm_source_pin_cutover.sql"),
+  );
   assert.match(wizard, /MIGRATION_0019_VERIFIED/);
   assert.match(wizard, /MIGRATION_0020_VERIFIED/);
   assert.match(wizard, /MIGRATION_0021_VERIFIED/);
   assert.match(wizard, /MIGRATION_0022_VERIFIED/);
   assert.match(wizard, /MIGRATION_0023_VERIFIED/);
   assert.match(wizard, /MIGRATION_0024_VERIFIED/);
+  assert.match(wizard, /MIGRATION_0025_VERIFIED/);
   assert.match(wizard, /0019_progressive_stage_artifacts\.sql/);
   assert.match(wizard, /0020_damm_source_pin_cutover\.sql/);
   assert.match(wizard, /0021_damm_source_pin_cutover\.sql/);
   assert.match(wizard, /0022_damm_source_pin_cutover\.sql/);
   assert.match(wizard, /0023_damm_source_pin_cutover\.sql/);
   assert.match(wizard, /0024_damm_source_pin_cutover\.sql/);
-  assert.match(wizard, /pre-0024-YYYYMMDD-HHMM/);
-  assert.match(wizard, /suspend the preceding-pin Render worker before applying 0024/);
+  assert.match(wizard, /0025_damm_source_pin_cutover\.sql/);
+  assert.match(wizard, /pre-0025-YYYYMMDD-HHMM/);
+  assert.match(wizard, /suspend the preceding-pin Render worker before applying 0025/);
   assert.match(
     wizard,
     /reviewed merge is inert only while Netlify builds and Deploy Previews are disabled, Render service auto-deploys are off, and any Blueprint is disconnected/,
@@ -179,9 +187,10 @@ test("the deployment wizard verifies progressive storage and the prior cutover b
   assert.match(wizard, /or does no Netlify site exist yet/);
   assert.match(wizard, /Do both existing Render services still have automatic deploys off/);
   assert.match(wizard, /Is the provisioning Blueprint still disconnected or absent/);
-  assert.match(wizard, /76ca33d97f0809a6be7477447786953317aa41b5/);
+  assert.match(wizard, /d81d267133eed52b5fdcc599bfecf8d72496f292/);
   assert.match(wizard, /95dcef014086f6c01f58678db426fb48d87546b8b6a4315c530801b1ff74c5be/);
   assert.doesNotMatch(wizard, /68e1994b5facfaaf0ddc49ba3bec108d9bde2c55/);
+  assert.doesNotMatch(wizard, /76ca33d97f0809a6be7477447786953317aa41b5/);
   assert.doesNotMatch(wizard, /ff5aecbfec5c2694a61f282c27db74ea8b99b28c/);
   assert.doesNotMatch(wizard, /f7dfbbb647e0a45d996e94f62d49f2218d518c94/);
   assert.doesNotMatch(wizard, /e866e7a1fffd5edb14f53da5e038f69b2ec29af2/);
@@ -211,7 +220,7 @@ test("the deployment wizard keeps paid canary execution behind separate named au
   assert.match(wizard, /Map the exact Render Jina key to its package\/rate/);
   assert.match(
     wizard,
-    /38-file identity b867d6960ac6e0f446e89f9c341b6283fdb3ddfe4326070049bf4a5c097e134c/,
+    /38-file identity 118908785e9d061c387dde163507f39288b00176c6897ee6f7d8943311860f34/,
   );
   assert.match(wizard, /exactly one Live worker instance and possible claimant/);
   assert.match(
@@ -499,11 +508,61 @@ printf 'fell-through\\n'
 test("the deployment wizard requires exact post-cutover runtime and database evidence", () => {
   const wizard = readFileSync(join(root, "scripts/deploy/netlify-neon-render-ohio.sh"), "utf8");
 
-  assert.match(wizard, /exactly 24 total migration rows through 0024/);
+  assert.match(wizard, /exactly 25 total migration rows through 0025/);
   assert.match(wizard, /preserved-failure query/);
-  assert.match(wizard, /node=22\.22\.3, python=3\.12\.13, migrations=24 through 0024/);
-  assert.match(wizard, /up-to-date exact 24-row ledger through 0024/);
-  assert.match(wizard, /Netlify must not be the first process to apply 0024/);
+  assert.match(wizard, /node=22\.22\.3, python=3\.12\.13, migrations=25 through 0025/);
+  assert.match(wizard, /up-to-date exact 25-row ledger through 0025/);
+  assert.match(wizard, /Netlify must not be the first process to apply 0025/);
+});
+
+test("the anonymous DAMM pin attestation accepts an immutable ancestor after main advances", () => {
+  const wizard = readFileSync(join(root, "scripts/deploy/netlify-neon-render-ohio.sh"), "utf8");
+  const attestation = wizard.match(/^attest_anonymous_damm_pin\(\) \{[\s\S]*?^\}/m)?.[0];
+  assert.ok(attestation, "the isolated anonymous DAMM pin attestation must be defined");
+
+  const fixtureRoot = mkdtempSync(join(tmpdir(), "dar-damm-pin-attestation-"));
+  const remote = join(fixtureRoot, "origin.git");
+  const worktree = join(fixtureRoot, "worktree");
+  const git = (args, options = {}) => {
+    const result = spawnSync("git", args, {
+      encoding: "utf8",
+      ...options,
+    });
+    assert.equal(result.status, 0, result.stderr || result.stdout);
+    return result.stdout.trim();
+  };
+
+  try {
+    git(["init", "--bare", "--quiet", remote]);
+    git(["clone", "--quiet", remote, worktree]);
+    git(["-C", worktree, "config", "user.name", "DAR release test"]);
+    git(["-C", worktree, "config", "user.email", "release-test@example.invalid"]);
+    git(["-C", worktree, "commit", "--quiet", "--allow-empty", "-m", "approved pin"]);
+    const pinnedCommit = git(["-C", worktree, "rev-parse", "HEAD"]);
+    git(["-C", worktree, "push", "--quiet", "origin", "HEAD:main"]);
+    git(["-C", worktree, "commit", "--quiet", "--allow-empty", "-m", "main advanced"]);
+    const currentMainCommit = git(["-C", worktree, "rev-parse", "HEAD"]);
+    git(["-C", worktree, "push", "--quiet", "origin", "HEAD:main"]);
+    assert.notEqual(currentMainCommit, pinnedCommit, "the fixture must advance main past the pin");
+
+    const result = spawnSync(
+      "bash",
+      ["-c", `set -euo pipefail\n${attestation}\nattest_anonymous_damm_pin`],
+      {
+        cwd: fixtureRoot,
+        encoding: "utf8",
+        env: {
+          ...process.env,
+          DAMM_PUBLIC_REPOSITORY: remote,
+          DAMM_SOURCE_COMMIT: pinnedCommit,
+        },
+      },
+    );
+    assert.equal(result.status, 0, result.stderr || result.stdout);
+    assert.equal(result.stdout, "");
+  } finally {
+    rmSync(fixtureRoot, { recursive: true, force: true });
+  }
 });
 
 test("the deployment wizard deploys the public DAMM source without a build credential", () => {
@@ -527,9 +586,8 @@ test("the deployment wizard deploys the public DAMM source without a build crede
   assert.equal(declaredRepository, manifest.source.repository);
   assert.match(wizard, /app manifest does not pin the canonical public DAMM repository/i);
   assert.match(wizard, /https:\/\/github\.com\/World-Bank-Digital\/DAMM/);
-  assert.match(wizard, /refs\/heads\/main/);
-  const anonymousProbe = wizard.match(/^read_anonymous_damm_main\(\) \{[\s\S]*?^\}/m)?.[0];
-  assert.ok(anonymousProbe, "the isolated anonymous DAMM probe must be defined");
+  const anonymousProbe = wizard.match(/^attest_anonymous_damm_pin\(\) \{[\s\S]*?^\}/m)?.[0];
+  assert.ok(anonymousProbe, "the isolated anonymous DAMM pin attestation must be defined");
   assert.match(anonymousProbe, /mktemp -d/);
   assert.match(anonymousProbe, /install -d -m 0700/);
   assert.match(anonymousProbe, /unset GIT_CONFIG_PARAMETERS GIT_CONFIG_COUNT/);
@@ -539,11 +597,15 @@ test("the deployment wizard deploys the public DAMM source without a build crede
   assert.match(anonymousProbe, /GIT_TERMINAL_PROMPT=0/);
   assert.match(anonymousProbe, /GIT_ASKPASS=\/bin\/false/);
   assert.match(anonymousProbe, /credential\.helper=/);
-  assert.match(anonymousProbe, /ls-remote "\$DAMM_PUBLIC_REPOSITORY" refs\/heads\/main/);
   assert.match(anonymousProbe, /trap[^\n]*rm -rf -- "\$audit_root"/);
-  assert.ok((wizard.match(/read_anonymous_damm_main/g) ?? []).length >= 3);
+  assert.ok((wizard.match(/attest_anonymous_damm_pin/g) ?? []).length >= 3);
   assert.ok((wizard.match(/== "\$DAMM_SOURCE_COMMIT"/g) ?? []).length >= 2);
-  assert.match(wizard, /fetch --depth=1 --no-tags origin/);
+  assert.match(anonymousProbe, /fetch --quiet --depth=1 --no-tags origin "\$DAMM_SOURCE_COMMIT"/);
+  assert.doesNotMatch(anonymousProbe, /ls-remote|refs\/heads\/main/);
+  assert.doesNotMatch(
+    wizard,
+    /canonical public DAMM main branch moved away from the pinned source commit/,
+  );
   assert.match(wizard, /Refresh origin\/main again immediately before resume/);
   assert.match(wizard, /Render's displayed latest commit to build/);
   assert.ok((wizard.match(/git fetch --quiet origin main/g) ?? []).length >= 2);
