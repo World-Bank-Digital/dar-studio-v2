@@ -9,13 +9,14 @@
  * summary for list views. Nothing derivable is ever entered, and no entry is
  * ever silently rewritten.
  *
- * The chassis half (settings, personal and team API keys) is carried over
- * from the previous layer unchanged in behavior: BYOK encryption, save-time
- * verification, and admin-managed team keys all work as before.
+ * The chassis half retains BYOK encryption, save-time verification, and
+ * admin-managed team keys. Stored model credentials also expose an explicit,
+ * bounded catalogue refresh and exact-model selection path; this remains
+ * separate from the release-pinned canonical workflow.
  */
 import { createServerFn } from "@tanstack/react-start";
 import { authMiddleware } from "@/lib/auth/middleware";
-import { getSql } from "@/lib/db";
+import { getSql, type Sql } from "@/lib/db";
 import { uid } from "@/lib/utils";
 
 import { model } from "./model.ts";
@@ -53,6 +54,12 @@ import {
   validateSettingsPatch,
   type UserSettingsMutation,
 } from "./settings-store.ts";
+import {
+  refreshStoredModelCatalogue,
+  selectStoredModel,
+  validateModelCredentialRequest,
+  validateModelSelectionRequest,
+} from "./model-key-store.ts";
 
 export type { Economy };
 
@@ -100,8 +107,9 @@ export async function writeAudit(
   actorName: string,
   action: string,
   detail: string,
+  database?: Sql,
 ) {
-  const sql = await getSql();
+  const sql = database ?? (await getSql());
   await sql`insert into audit (id, user_id, country_id, role, actor_name, action, detail)
     values (${uid()}, ${userId}, ${countryId}, ${role}, ${actorName}, ${action}, ${detail})`;
 }
@@ -449,10 +457,13 @@ export const listAudit = createServerFn({ method: "GET" })
 
 /* ---------- settings and BYOK keys (chassis, carried over) ---------- */
 
-async function isTeamAdmin(userId: string): Promise<boolean> {
+async function isTeamAdmin(
+  userId: string,
+  database?: Awaited<ReturnType<typeof getSql>>,
+): Promise<boolean> {
   const emails = teamAdminEmails();
   if (!emails.length) return false;
-  const sql = await getSql();
+  const sql = database ?? (await getSql());
   const rows = await sql<{ email: string }>`select email from "user" where id = ${userId}`;
   return Boolean(rows[0] && emails.includes(rows[0].email.toLowerCase()));
 }
@@ -538,6 +549,58 @@ export const listProviders = createServerFn({ method: "GET" }).handler(async () 
   });
   return { models, search };
 });
+
+/** Refresh a stored credential's provider catalogue without returning key material. */
+export const refreshApiKeyModels = createServerFn({ method: "POST" })
+  .middleware([authMiddleware])
+  .validator(validateModelCredentialRequest)
+  .handler(async ({ context, data }) => {
+    const sql = await getSql();
+    const canManageTeam =
+      data.credential.scope === "team" && (await isTeamAdmin(context.userId, sql));
+    return refreshStoredModelCatalogue(sql, context.userId, data, canManageTeam);
+  });
+
+/** Re-read the live catalogue and atomically select one exact stored-key model. */
+export const updateApiKeyModel = createServerFn({ method: "POST" })
+  .middleware([authMiddleware])
+  .validator(validateModelSelectionRequest)
+  .handler(async ({ context, data }) => {
+    const sql = await getSql();
+    const canManageTeam =
+      data.credential.scope === "team" && (await isTeamAdmin(context.userId, sql));
+    return selectStoredModel(
+      sql,
+      context.userId,
+      data,
+      canManageTeam,
+      undefined,
+      data.credential.scope === "team"
+        ? async (transaction, result) => {
+            if (!(await isTeamAdmin(context.userId, transaction))) {
+              throw new Error("TEAM_MODEL_ADMIN_ACCESS_CHANGED");
+            }
+            await writeAudit(
+              context.userId,
+              null,
+              "Admin",
+              "team-keys",
+              "team_key_model_selected",
+              `Model for ${result.provider} team key changed to ${result.selectedModel}.`,
+              transaction,
+            );
+          }
+        : undefined,
+    ).catch((error: unknown) => {
+      if (error instanceof Error && error.message === "TEAM_MODEL_ADMIN_ACCESS_CHANGED") {
+        return {
+          ok: false as const,
+          error: "Administrator access changed during verification; reload settings and try again.",
+        };
+      }
+      throw error;
+    });
+  });
 
 export const saveApiKey = createServerFn({ method: "POST" })
   .middleware([authMiddleware])

@@ -10,11 +10,13 @@ import {
   deleteApiKey,
   getSettings,
   listProviders,
+  refreshApiKeyModels,
   saveApiKey,
   saveSettings,
   testApiKey,
   saveTeamKey,
   deleteTeamKey,
+  updateApiKeyModel,
 } from "@/lib/damm-v17/actions";
 import { ACTING_ROLES, useSessionRole } from "@/lib/session-context";
 import { createOrderedMutationQueue } from "@/lib/session-state";
@@ -166,6 +168,13 @@ function SettingsInner({ userId }: { userId: string }) {
           prose containing a figure the evidence base does not hold is rejected and discarded.
           Without a key the deterministic assembler still drafts.
         </p>
+        <p className="mt-2 text-sm text-muted">
+          After storing a key, use <strong>Refresh models</strong> to make an explicit credentialed
+          metadata request, read that key&apos;s current provider catalogue, and select an exact
+          listed model without entering the secret again. Refreshing neither invokes inference nor
+          changes the selected model. Catalogue presence does not prove inference entitlement or
+          quota. The autonomous country workflow remains pinned to its reviewed release model.
+        </p>
         {platformXai ? (
           <p className="mt-2 text-sm">A platform xAI key is available in this environment.</p>
         ) : null}
@@ -251,6 +260,7 @@ function SettingsInner({ userId }: { userId: string }) {
         </Button>
 
         <KeyList
+          userId={userId}
           keys={modelKeys}
           labelFor={(id) => modelProviders.find((p) => p.id === id)?.label ?? id}
           onChange={refresh}
@@ -336,6 +346,7 @@ function SettingsInner({ userId }: { userId: string }) {
         </Button>
 
         <KeyList
+          userId={userId}
           keys={searchKeys}
           labelFor={(id) => searchProviders.find((p) => p.id === id)?.label ?? id}
           onChange={refresh}
@@ -344,6 +355,7 @@ function SettingsInner({ userId }: { userId: string }) {
       </Card>
 
       <TeamKeysCard
+        userId={userId}
         isAdmin={isAdmin}
         teamKeys={teamKeys}
         modelProviders={modelProviders}
@@ -374,6 +386,7 @@ type TeamKey = {
  * ever shown — the key material stays on the server.
  */
 function TeamKeysCard({
+  userId,
   isAdmin,
   teamKeys,
   modelProviders,
@@ -381,6 +394,7 @@ function TeamKeysCard({
   onChange,
   setMsg,
 }: {
+  userId: string;
   isAdmin: boolean;
   teamKeys: TeamKey[];
   modelProviders: ProviderOption[];
@@ -420,17 +434,28 @@ function TeamKeysCard({
                 {k.kind === "search" ? "web search" : k.model_name} · …{k.last4}
               </span>
               {isAdmin ? (
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={async () => {
-                    const res = await deleteTeamKey({ data: { id: k.id } });
-                    setMsg(res.ok ? "Team key removed." : res.error);
-                    await onChange();
-                  }}
-                >
-                  Remove
-                </Button>
+                <span className="flex flex-wrap gap-2">
+                  {k.kind !== "search" ? (
+                    <StoredModelPicker
+                      userId={userId}
+                      credential={{ scope: "team", id: k.id }}
+                      currentModel={k.model_name}
+                      onChange={onChange}
+                      setMsg={setMsg}
+                    />
+                  ) : null}
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={async () => {
+                      const res = await deleteTeamKey({ data: { id: k.id } });
+                      setMsg(res.ok ? "Team key removed." : res.error);
+                      await onChange();
+                    }}
+                  >
+                    Remove
+                  </Button>
+                </span>
               ) : null}
             </li>
           ))}
@@ -465,7 +490,16 @@ function TeamKeysCard({
             <select
               className="h-11 rounded-sm border border-border bg-surface px-3 text-sm"
               value={provider}
-              onChange={(e) => setProvider(e.target.value)}
+              onChange={(e) => {
+                const nextProvider = e.target.value;
+                setProvider(nextProvider);
+                if (kind === "llm") {
+                  setModelName(
+                    modelProviders.find((candidate) => candidate.id === nextProvider)
+                      ?.defaultModel ?? "",
+                  );
+                }
+              }}
             >
               {options.map((p) => (
                 <option key={p.id} value={p.id}>
@@ -589,11 +623,13 @@ function PasskeysCard({ setMsg }: { setMsg: (m: string | null) => void }) {
 }
 
 function KeyList({
+  userId,
   keys,
   labelFor,
   onChange,
   setMsg,
 }: {
+  userId: string;
   keys: StoredKey[];
   labelFor: (providerId: string) => string;
   onChange: () => void;
@@ -618,6 +654,15 @@ function KeyList({
                 : ""}
           </span>
           <span className="flex gap-2">
+            {k.kind !== "search" ? (
+              <StoredModelPicker
+                userId={userId}
+                credential={{ scope: "personal", id: k.id }}
+                currentModel={k.model_name}
+                onChange={onChange}
+                setMsg={setMsg}
+              />
+            ) : null}
             <Button
               size="sm"
               variant="outline"
@@ -644,5 +689,116 @@ function KeyList({
         </li>
       ))}
     </ul>
+  );
+}
+
+function StoredModelPicker({
+  userId,
+  credential,
+  currentModel,
+  onChange,
+  setMsg,
+}: {
+  userId: string;
+  credential: { scope: "personal" | "team"; id: string };
+  currentModel: string;
+  onChange: () => Promise<void> | void;
+  setMsg: (message: string | null) => void;
+}) {
+  const [models, setModels] = useState<string[] | null>(null);
+  const [selected, setSelected] = useState(currentModel);
+  const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    setModels(null);
+    setSelected(currentModel);
+  }, [credential.id, credential.scope, currentModel]);
+
+  async function refreshModels() {
+    setBusy(true);
+    setModels(null);
+    setMsg("Refreshing the provider model catalogue…");
+    try {
+      const result = await refreshApiKeyModels({
+        data: { expectedUserId: userId, credential },
+      });
+      if (!result.ok) {
+        setMsg(result.error);
+        return;
+      }
+      setModels(result.models);
+      setSelected(
+        result.models.includes(result.selectedModel)
+          ? result.selectedModel
+          : (result.models[0] ?? ""),
+      );
+      const scopeNote = result.complete
+        ? ""
+        : result.truncated
+          ? " Showing the first 500 valid entries; only a displayed model can be verified."
+          : " The provider reported another page; only a displayed model can be verified.";
+      setMsg(
+        `Found ${result.models.length} provider-listed ${result.provider} drafting candidate${result.models.length === 1 ? "" : "s"}.${scopeNote} No inference request was made.`,
+      );
+    } catch {
+      setModels(null);
+      setMsg("The provider model catalogue could not be refreshed. Check the key and try again.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  if (!models) {
+    return (
+      <Button size="sm" variant="outline" disabled={busy} onClick={refreshModels}>
+        {busy ? "Refreshing…" : "Refresh models"}
+      </Button>
+    );
+  }
+
+  return (
+    <span className="flex flex-wrap gap-2">
+      <select
+        aria-label="Available model"
+        className="h-9 max-w-64 rounded-sm border border-border bg-surface px-2 text-xs"
+        value={selected}
+        onChange={(event) => setSelected(event.target.value)}
+      >
+        {models.map((modelId) => (
+          <option key={modelId} value={modelId}>
+            {modelId}
+          </option>
+        ))}
+      </select>
+      <Button
+        size="sm"
+        variant="outline"
+        disabled={busy || !selected || selected === currentModel}
+        onClick={async () => {
+          setBusy(true);
+          setMsg("Verifying the selected model against the current provider catalogue…");
+          try {
+            const result = await updateApiKeyModel({
+              data: { expectedUserId: userId, credential, model: selected },
+            });
+            if (!result.ok) {
+              setMsg(result.error);
+              return;
+            }
+            setMsg(`Selected ${result.selectedModel} for the ${result.provider} key.`);
+            await onChange();
+          } catch {
+            setMsg("The selected model could not be saved. Refresh the catalogue and try again.");
+          } finally {
+            setBusy(false);
+          }
+        }}
+      >
+        {busy ? "Verifying…" : "Use model"}
+      </Button>
+      <Button size="sm" variant="ghost" disabled={busy} onClick={refreshModels}>
+        Refresh again
+      </Button>
+    </span>
   );
 }

@@ -326,7 +326,11 @@ normal Draft DAR generation** by `dar-canonical-v1`. In particular:
 - legacy run APIs are admin-only and must not be presented as the standard
   launch path;
 - BYOK/provider settings are operational administration, not required launch
-  inputs and not active-run choices;
+  inputs and not active-run choices. An owner (or team-key administrator) can
+  explicitly refresh a stored key's bounded provider catalogue and select an
+  exact listed drafting model without re-entering or exposing the secret. The
+  server revalidates catalogue membership immediately before the atomic update;
+  this does not alter the canonical workflow's release-pinned inference model;
 - `qa:delivery`, old numbered ladder steps, and manual gate-clearing describe
   the superseded pipeline and are not proof of canonical workflow conformance;
   and
