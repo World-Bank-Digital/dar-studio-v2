@@ -22,3 +22,16 @@ export function completedWorkflowStageCount(
     Math.max(status === "done" ? stageCount : 0, eventRowsDone, durableOrdinal),
   );
 }
+
+export function workflowStageLabel(status: string, completed: number, ordinal: number): string {
+  if (ordinal <= completed) return "Complete";
+  if (status === "failed" || status === "cancelled") {
+    if (ordinal > completed + 1) return "Not run";
+    return status === "failed" ? "Stopped before completion" : "Cancelled before completion";
+  }
+  if (ordinal === completed + 1) {
+    if (status === "running") return "Running autonomously";
+    if (status === "queued") return "Queued";
+  }
+  return "Pending";
+}

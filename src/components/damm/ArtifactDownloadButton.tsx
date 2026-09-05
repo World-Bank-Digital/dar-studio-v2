@@ -9,16 +9,19 @@ export function ArtifactDownloadButton({
   children,
   className,
   disabled,
+  onBusyChange,
   ...buttonProps
 }: {
   href: string;
   children: ReactNode;
+  onBusyChange?: (busy: boolean) => void;
 } & Omit<ButtonHTMLAttributes<HTMLButtonElement>, "type">) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   async function download(): Promise<void> {
     setBusy(true);
+    onBusyChange?.(true);
     setError(null);
     try {
       const artifact = await fetchWorkflowArtifact(href, {
@@ -33,11 +36,12 @@ export function ArtifactDownloadButton({
       document.body.append(anchor);
       anchor.click();
       anchor.remove();
-      window.setTimeout(() => URL.revokeObjectURL(objectUrl), 0);
-    } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "The artifact could not be downloaded.");
+      window.setTimeout(() => URL.revokeObjectURL(objectUrl), 60_000);
+    } catch {
+      setError("The artifact could not be downloaded. Please try again later.");
     } finally {
       setBusy(false);
+      onBusyChange?.(false);
     }
   }
 
@@ -48,9 +52,10 @@ export function ArtifactDownloadButton({
         type="button"
         className={cn(className, busy && "cursor-wait")}
         disabled={disabled || busy}
+        aria-busy={busy}
         onClick={() => void download()}
       >
-        {children}
+        {busy ? "Downloading…" : children}
       </button>
       <span className="sr-only" aria-live="polite">
         {busy ? "Downloading artifact" : (error ?? "")}

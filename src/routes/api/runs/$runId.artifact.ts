@@ -39,6 +39,9 @@ export const Route = createFileRoute("/api/runs/$runId/artifact")({
         const search = new URL(request.url).searchParams;
         const key = search.get("key") ?? "";
         const stageArtifactId = search.get("stageArtifact") ?? "";
+        // Historical raw logs may contain provider diagnostics. Keep their bytes immutable
+        // and expose only the sanitized event view through the application.
+        if (key === "events") return new Response("Not found.", { status: 404 });
         if (key && stageArtifactId) {
           return new Response("Choose one artifact identity.", { status: 400 });
         }
@@ -75,7 +78,8 @@ export const Route = createFileRoute("/api/runs/$runId/artifact")({
               stageArtifactId,
               session.user.id,
             );
-            if (!stored) return new Response("Completed-stage artifact not found.", { status: 404 });
+            if (!stored)
+              return new Response("Completed-stage artifact not found.", { status: 404 });
             const safeFilename = stored.filename.replace(/[^A-Za-z0-9._-]/g, "_");
             try {
               const grant = artifactDeliveryGrant({
@@ -111,9 +115,12 @@ export const Route = createFileRoute("/api/runs/$runId/artifact")({
               session.user.id,
             );
             if (!download) {
-              return new Response("The stored completed-stage artifact failed its integrity check.", {
-                status: 409,
-              });
+              return new Response(
+                "The stored completed-stage artifact failed its integrity check.",
+                {
+                  status: 409,
+                },
+              );
             }
             const body = new ArrayBuffer(download.content.byteLength);
             new Uint8Array(body).set(download.content);

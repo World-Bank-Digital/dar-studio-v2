@@ -305,6 +305,7 @@ export interface WorkflowDocumentState extends DocumentSlot {
   artifactSetId: string | null;
   bundleSha256: string | null;
   producedAt: string | null;
+  byteSize?: number;
   href: string | null;
   missingBecause: string | null;
 }

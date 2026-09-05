@@ -25,16 +25,18 @@ describe("the post-completion human-control surface", () => {
   });
 
   it("uses bearer-aware fetch downloads on every Draft artifact surface", async () => {
-    const [runs, documents, identity, button] = await Promise.all([
+    const [runs, documents, identity, button, group] = await Promise.all([
       source("../../components/damm/RunsTab.tsx"),
       source("../../components/damm/DocumentsTab.tsx"),
       source("../../components/damm/ApprovalPackageIdentity.tsx"),
       source("../../components/damm/ArtifactDownloadButton.tsx"),
+      source("../../components/damm/DownloadGroup.tsx"),
     ]);
     for (const surface of [runs, documents, identity]) {
-      assert.match(surface, /ArtifactDownloadButton/);
+      assert.match(surface, /ArtifactDownloadButton|DownloadGroup/);
       assert.doesNotMatch(surface, /<a[^>]+href=.*artifact/);
     }
+    assert.match(group, /ArtifactDownloadButton/);
     assert.match(button, /getBearerToken\(\)/);
     assert.match(button, /fetchWorkflowArtifact/);
     assert.doesNotMatch(button, /token.*href|href.*token/i);

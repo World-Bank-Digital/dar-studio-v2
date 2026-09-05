@@ -892,14 +892,18 @@ export async function getPublishedWorkflowArtifact(
   return { ...metadata, content };
 }
 
-export async function listPublishedWorkflowArtifactKeys(
+export async function listPublishedWorkflowArtifactDownloads(
   runId: string,
   userId: string,
   database?: Sql,
-): Promise<string[]> {
+): Promise<{ key: string; byteSize: number }[]> {
   const sql = database ?? (await getSql());
-  const rows = await sql<{ artifact_key: string; content_verified_at: Date | null }>`
-    select artifact.artifact_key, artifact.content_verified_at
+  const rows = await sql<{
+    artifact_key: string;
+    byte_size: number;
+    content_verified_at: Date | null;
+  }>`
+    select artifact.artifact_key, artifact.byte_size, artifact.content_verified_at
     from runs
     left join workflow_run_methodology methodology on methodology.run_id = runs.id
     join workflow_run_artifacts artifact
@@ -930,16 +934,26 @@ export async function listPublishedWorkflowArtifactKeys(
         )
       )
     order by artifact.artifact_key`;
-  const verified: string[] = [];
+  const verified: { key: string; byteSize: number }[] = [];
   for (const row of rows) {
     if (
       row.content_verified_at ||
       (await getPublishedWorkflowArtifact(runId, row.artifact_key, userId, sql))
     ) {
-      verified.push(row.artifact_key);
+      verified.push({ key: row.artifact_key, byteSize: Number(row.byte_size) });
     }
   }
   return verified;
+}
+
+export async function listPublishedWorkflowArtifactKeys(
+  runId: string,
+  userId: string,
+  database?: Sql,
+): Promise<string[]> {
+  return (await listPublishedWorkflowArtifactDownloads(runId, userId, database)).map(
+    (item) => item.key,
+  );
 }
 
 export type WorkflowReviewOutcome = "reviewed" | "revisions_required";
