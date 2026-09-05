@@ -49,7 +49,7 @@ describe("model file contract", () => {
       status: model.status,
       ratified: model.ratified,
       sourceRepository: "https://github.com/World-Bank-Digital/DAMM",
-      sourceCommit: "7d623f035a645baa3a8b45200ff4ea3cd7dd0bdb",
+      sourceCommit: "3cd0c599ff137a09a1892b498f0eecfca5f43785",
       sourceModelPath: "model/DAMM-v1.7-model.json",
       sourceSchemaPath: "model/DAMM-v1.7-model.schema.json",
       modelSha256: DAMM_MODEL_SHA256,
