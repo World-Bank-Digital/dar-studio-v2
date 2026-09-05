@@ -27,7 +27,7 @@ describe("DAMM build-time methodology integrity", () => {
       modelId: "DAMM",
       version: "1.7",
       revision: 2,
-      sourceCommit: "7d623f035a645baa3a8b45200ff4ea3cd7dd0bdb",
+      sourceCommit: "3cd0c599ff137a09a1892b498f0eecfca5f43785",
     });
   });
 
