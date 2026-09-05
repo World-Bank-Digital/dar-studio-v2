@@ -27,7 +27,7 @@ describe("DAMM build-time methodology integrity", () => {
       modelId: "DAMM",
       version: "1.7",
       revision: 2,
-      sourceCommit: "d708dbd0129cfb7f37dcf003875c439367b7c97d",
+      sourceCommit: "7d623f035a645baa3a8b45200ff4ea3cd7dd0bdb",
     });
   });
 
@@ -150,6 +150,17 @@ describe("DAMM build-time methodology integrity", () => {
       "daf784ba8fb92ce72a0bcddb6b8bbded5b0e502b240d6952a450730e7518bdea",
     );
     assert.match(migration.toString("utf8"), /d708dbd0129cfb7f37dcf003875c439367b7c97d/);
+  });
+
+  it("pins the reviewed workflow reliability source cutover migration 0027", async () => {
+    const migration = await readFile(join(ROOT, "migrations/0027_damm_source_pin_cutover.sql"));
+    assert.equal(
+      createHash("sha256").update(migration).digest("hex"),
+      "fe1accda77ef1c90faaff3792add752d22f7a4800a1ee7c3d6a8d090992c9037",
+    );
+    const text = migration.toString("utf8");
+    assert.match(text, /7d623f035a645baa3a8b45200ff4ea3cd7dd0bdb/);
+    assert.doesNotMatch(text, /d708dbd0129cfb7f37dcf003875c439367b7c97d/);
   });
 
   it("rejects threshold bytes that drift without a canonical export", async () => {
