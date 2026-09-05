@@ -133,6 +133,8 @@ const PRE_0023_DAMM_RENDERER_SHA256 =
   "95dcef014086f6c01f58678db426fb48d87546b8b6a4315c530801b1ff74c5be";
 const PRE_0024_DAMM_SOURCE_COMMIT = "68e1994b5facfaaf0ddc49ba3bec108d9bde2c55";
 const PRE_0024_DAMM_RENDERER_SHA256 = PRE_0023_DAMM_RENDERER_SHA256;
+const PRE_0027_DAMM_SOURCE_COMMIT = "d708dbd0129cfb7f37dcf003875c439367b7c97d";
+const PRE_0027_DAMM_RENDERER_SHA256 = PRE_0023_DAMM_RENDERER_SHA256;
 const PRE_0026_DAMM_SOURCE_COMMIT = "d81d267133eed52b5fdcc599bfecf8d72496f292";
 const PRE_0026_DAMM_RENDERER_SHA256 = PRE_0023_DAMM_RENDERER_SHA256;
 const PRE_0025_DAMM_SOURCE_COMMIT = "76ca33d97f0809a6be7477447786953317aa41b5";
@@ -166,7 +168,8 @@ function canonicalJson(value: unknown): string {
 }
 
 function historicalRendererSha256(sourceCommit: string): string {
-  return sourceCommit === PRE_0026_DAMM_SOURCE_COMMIT ||
+  return sourceCommit === PRE_0027_DAMM_SOURCE_COMMIT ||
+    sourceCommit === PRE_0026_DAMM_SOURCE_COMMIT ||
     sourceCommit === PRE_0025_DAMM_SOURCE_COMMIT ||
     sourceCommit === PRE_0023_DAMM_SOURCE_COMMIT ||
     sourceCommit === PRE_0022_DAMM_SOURCE_COMMIT ||
@@ -763,11 +766,11 @@ describe("post-completion human approval store", () => {
       assert.match(historicalReview.lockedReason ?? "", /historical|no longer current/i);
 
       // The fixture exercises 0024 directly, which temporarily restores its 76ca
-      // launch guard. Reinstall the later 0026 guard before materializing the
-      // present manifest's d81d workflow below.
+      // launch guard. Reinstall the current 0027 guard before materializing
+      // a workflow using the current manifest below.
       await fx.pg.exec(
         await readFile(
-          new URL("../../../migrations/0026_damm_source_pin_cutover.sql", import.meta.url),
+          new URL("../../../migrations/0027_damm_source_pin_cutover.sql", import.meta.url),
           "utf8",
         ),
       );
@@ -848,7 +851,7 @@ describe("post-completion human approval store", () => {
       const historicalPackageId = fx.approvalPackage.id;
       await fx.pg.exec(
         await readFile(
-          new URL("../../../migrations/0026_damm_source_pin_cutover.sql", import.meta.url),
+          new URL("../../../migrations/0027_damm_source_pin_cutover.sql", import.meta.url),
           "utf8",
         ),
       );
@@ -908,7 +911,72 @@ describe("post-completion human approval store", () => {
       );
 
       const historicalPackageId = fx.approvalPackage.id;
+      await fx.pg.exec(
+        await readFile(
+          new URL("../../../migrations/0027_damm_source_pin_cutover.sql", import.meta.url),
+          "utf8",
+        ),
+      );
       const currentFx = await publishAdditionalWorkflow(fx, "historical-0026-current");
+      const latest = unwrap(
+        await getOwnerApprovalState(currentFx.countryId, USERS.owner.id, currentFx.sql),
+      );
+      assert.deepEqual(
+        latest.packageHistory.map((item) => [item.packageId, item.currentMethodology]),
+        [
+          [currentFx.approvalPackage.id, true],
+          [historicalPackageId, false],
+        ],
+      );
+    } finally {
+      await fx.pg.close();
+    }
+  });
+
+  it("keeps the 0026 source-pin package immutable and audit-readable after the 0027 cutover", async () => {
+    let fx = await fixture("historical-0027-complete");
+    try {
+      fx = await makePackageHistorical(
+        fx,
+        PRE_0027_DAMM_SOURCE_COMMIT,
+        PRE_0027_DAMM_RENDERER_SHA256,
+      );
+      const beforeCutover = await approvalAuditSnapshot(fx);
+      await fx.pg.exec(
+        await readFile(
+          new URL("../../../migrations/0027_damm_source_pin_cutover.sql", import.meta.url),
+          "utf8",
+        ),
+      );
+      assert.deepEqual(
+        await approvalAuditSnapshot(fx),
+        beforeCutover,
+        "the 0027 cutover must not rewrite a completed preceding-pin package or its artifacts",
+      );
+
+      const reopened = unwrap(await ensureApprovalPackage(fx.countryId, USERS.owner.id, fx.sql));
+      assert.equal(reopened.id, fx.approvalPackage.id);
+      const historical = unwrap(await getOwnerApprovalState(fx.countryId, USERS.owner.id, fx.sql));
+      assert.equal(historical.package.methodology.sourceCommit, PRE_0027_DAMM_SOURCE_COMMIT);
+      assert.equal(historical.package.methodology.rendererSha256, PRE_0027_DAMM_RENDERER_SHA256);
+      assert.equal(historical.packageHistory[0].currentMethodology, false);
+      assertMethodologyRefusal(
+        await assignApprovalReviewer(
+          {
+            packageId: fx.approvalPackage.id,
+            expectedTargetIdentitySha256: fx.approvalPackage.targetIdentitySha256,
+            expectedBundleSha256: fx.approvalPackage.bundleSha256,
+            gate: "g1",
+            reviewerEmail: USERS.assessor.email,
+            declaredRole: "assessor",
+            ownerUserId: USERS.owner.id,
+          },
+          fx.sql,
+        ),
+      );
+
+      const historicalPackageId = fx.approvalPackage.id;
+      const currentFx = await publishAdditionalWorkflow(fx, "historical-0027-current");
       const latest = unwrap(
         await getOwnerApprovalState(currentFx.countryId, USERS.owner.id, currentFx.sql),
       );
