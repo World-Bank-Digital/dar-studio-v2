@@ -105,6 +105,8 @@ function requireIdentity(input: {
   targetIdentitySha256: unknown;
   bundleSha256: unknown;
 }): ArtifactDeliveryIdentity {
+  if (input.key === "events")
+    throw new ArtifactDeliveryTokenError("Raw workflow events are not downloadable.");
   const artifact = {
     runId: requireIdentityText(input.runId, "Run ID"),
     artifactSetId: requireIdentityText(input.artifactSetId, "Artifact-set ID"),

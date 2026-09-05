@@ -22,9 +22,7 @@ import {
   isRunnable,
   producesEvidence,
   canTransition,
-  progressOf,
   runPassName,
-  stoppedSummary,
   type Run,
   type RunPass,
   type RunStatus,
@@ -37,10 +35,7 @@ import {
   type WorkflowDocumentState,
 } from "./worker-artifacts.ts";
 import { DAR_WORKFLOW, canonicalWorkflowLaunchRequest } from "./workflow.ts";
-import {
-  listCompletedStageArtifacts,
-  type CompletedStageArtifactMetadata,
-} from "./completed-stage-artifacts.server.ts";
+import { listCompletedStageArtifacts } from "./completed-stage-artifacts.server.ts";
 import { decodeWorkflowUploadBase64, extractWorkflowUploadText } from "./workflow-upload.ts";
 import { model } from "./model.ts";
 import {
@@ -52,7 +47,7 @@ import {
   getRun,
   latestCompletedResearch,
   latestWorkflowReviewTarget,
-  listPublishedWorkflowArtifactKeys,
+  listPublishedWorkflowArtifactDownloads,
   listEvents,
   listRuns,
   listWorkflowReviews,
@@ -72,26 +67,17 @@ const PASSES: readonly RunPass[] = [
   "diagnostic",
 ];
 
-/** What a surface needs to draw a run without deriving anything itself. */
-export interface RunView extends Run {
-  progress: ReturnType<typeof progressOf>;
-  summary: string;
-  completedStageArtifacts: CompletedStageArtifactMetadata[];
-}
-
-function view(run: Run, completedStageArtifacts: CompletedStageArtifactMetadata[] = []): RunView {
-  return {
-    ...run,
-    progress: progressOf(run),
-    summary: stoppedSummary(run),
-    completedStageArtifacts,
-  };
-}
+import { publicRunView, publicRunEvent } from "./run-view.ts";
+export type RunView = ReturnType<typeof publicRunView>;
 
 async function ownerView(run: Run): Promise<RunView> {
   const artifacts =
     run.pass === "workflow" ? await listCompletedStageArtifacts(run.id, run.userId) : [];
-  return view(run, artifacts);
+  const packaged =
+    run.pass === "workflow" && run.status === "done"
+      ? await listPublishedWorkflowArtifactDownloads(run.id, run.userId)
+      : [];
+  return publicRunView(run, artifacts, packaged);
 }
 
 /** A run the caller owns, or a reason not to touch it. Never one they do not own. */
@@ -475,7 +461,11 @@ export const getRunDetail = createServerFn({ method: "GET" })
       context.userId,
       data.sinceEventId ?? 0,
     );
-    return { ok: true as const, run: await ownerView(owned.run), events };
+    return {
+      ok: true as const,
+      run: await ownerView(owned.run),
+      events: events.map(publicRunEvent),
+    };
   });
 
 /** Pause or cancel. Both are refusals to continue; only one of them is reversible. */
@@ -658,9 +648,10 @@ export const countryDocuments = createServerFn({ method: "GET" })
           completedAt: target.completedAt.toISOString(),
         }
       : null;
-    const verifiedKeys = selected
-      ? new Set(await listPublishedWorkflowArtifactKeys(selected.runId, context.userId))
-      : new Set<string>();
+    const published = selected
+      ? await listPublishedWorkflowArtifactDownloads(selected.runId, context.userId)
+      : [];
+    const verifiedKeys = new Set(published.map((item) => item.key));
     const documentSet = documentsForExactWorkflowPackage(
       selected,
       verifiedKeys,
@@ -669,6 +660,11 @@ export const countryDocuments = createServerFn({ method: "GET" })
 
     return {
       ...documentSet,
+      downloads: published,
+      documents: documentSet.documents.map((document) => ({
+        ...document,
+        byteSize: published.find((item) => item.key === document.artifactKey)?.byteSize,
+      })),
       status:
         "Pre-review Draft. Human controls apply once, after Stage 8, to this exact " +
         "immutable package — never to a mixture of files from different runs and never " +

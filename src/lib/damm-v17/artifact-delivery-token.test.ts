@@ -177,3 +177,20 @@ describe("short-lived artifact delivery tokens", () => {
     );
   });
 });
+
+it("refuses raw workflow event downloads including previously signed capabilities", () => {
+  assert.throws(
+    () => issueArtifactDeliveryToken({ ...identity, key: "events" }, secret),
+    /not downloadable/,
+  );
+  const payload = { ...identity, key: "events", v: 2, exp: 1787875260 };
+  assert.throws(
+    () =>
+      verifyArtifactDeliveryToken(
+        signedPayload(JSON.stringify(payload)),
+        secret,
+        new Date("2026-08-28T00:00:30Z"),
+      ),
+    /not downloadable/,
+  );
+});

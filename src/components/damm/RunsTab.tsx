@@ -1,10 +1,10 @@
+import { stoppedSummary } from "@/lib/damm-v17/runs";
 /** One product launch for the complete, autonomous canonical DAR workflow. */
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   AlertTriangle,
   Check,
   Circle,
-  Download,
   FileUp,
   Loader2,
   Play,
@@ -13,7 +13,6 @@ import {
   Trash2,
 } from "lucide-react";
 
-import { ArtifactDownloadButton } from "@/components/damm/ArtifactDownloadButton";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import {
@@ -28,8 +27,13 @@ import {
   type WorkflowUploadView,
 } from "@/lib/damm-v17/run-actions";
 import type { RunStatus } from "@/lib/damm-v17/runs";
-import { completedWorkflowStageCount } from "@/lib/damm-v17/completed-stage-progress";
+import {
+  completedWorkflowStageCount,
+  workflowStageLabel,
+} from "@/lib/damm-v17/completed-stage-progress";
 import { artifactsFor } from "@/lib/damm-v17/worker-artifacts";
+import { stageDownloads, finalDownloads, downloadFormat } from "@/lib/damm-v17/download-catalog";
+import { DownloadGroup } from "@/components/damm/DownloadGroup";
 import { DAR_WORKFLOW } from "@/lib/damm-v17/workflow";
 import { cn } from "@/lib/utils";
 
@@ -153,8 +157,8 @@ function UploadCategory({
       });
       if (!result.ok) setError(result.error);
       else await onChange();
-    } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "The document could not be uploaded.");
+    } catch {
+      setError("The document could not be uploaded.");
     } finally {
       setBusy(false);
       onBusyChange(false);
@@ -169,6 +173,8 @@ function UploadCategory({
       const result = await deleteWorkflowUpload({ data: { countryId, uploadId } });
       if (!result.ok) setError(result.error);
       else await onChange();
+    } catch {
+      setError("The document could not be removed. Please refresh and try again.");
     } finally {
       setBusy(false);
       onBusyChange(false);
@@ -258,6 +264,8 @@ function WorkflowRun({ run, onChange }: { run: RunView; onChange: () => Promise<
       const result = await stopRun({ data: { runId: run.id, to: "cancelled" } });
       if (!result.ok) setError(result.error);
       else await onChange();
+    } catch {
+      setError("The workflow could not be cancelled. Please refresh to check its status.");
     } finally {
       setBusy(false);
     }
@@ -269,8 +277,7 @@ function WorkflowRun({ run, onChange }: { run: RunView; onChange: () => Promise<
         <div>
           <h2 className="text-sm font-semibold">Canonical Draft DAR workflow</h2>
           <p className="mt-1 text-xs text-subtle">
-            {run.outBasename} · launched{" "}
-            {run.startedAt ? new Date(run.startedAt).toLocaleString() : "and queued"}
+            Launched {run.startedAt ? new Date(run.startedAt).toLocaleString() : "and queued"}
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
@@ -286,9 +293,14 @@ function WorkflowRun({ run, onChange }: { run: RunView; onChange: () => Promise<
         {DAR_WORKFLOW.stages.map((stage) => {
           const done = completed >= stage.ordinal;
           const current = active && completed + 1 === stage.ordinal;
-          const stageArtifacts = (run.completedStageArtifacts ?? []).filter(
-            (artifact) => artifact.stageId === stage.id,
+          const downloads = stageDownloads(
+            run.id,
+            stage.id,
+            run.completedStageArtifacts ?? [],
+            run.packagedArtifacts ?? [],
           );
+          const packageDownloads =
+            stage.ordinal === 8 ? finalDownloads(run.id, run.packagedArtifacts ?? []) : [];
           return (
             <li key={stage.id} className="flex gap-2 rounded-sm border border-ink/10 p-2">
               {done ? (
@@ -303,23 +315,48 @@ function WorkflowRun({ run, onChange }: { run: RunView; onChange: () => Promise<
                   {stage.ordinal}. {stage.title}
                 </p>
                 <p className="mt-0.5 text-xs text-muted">
-                  {done ? "Complete" : current ? "Running autonomously" : "Pending"}
+                  {workflowStageLabel(run.status, completed, stage.ordinal)}
                 </p>
-                {stageArtifacts.length ? (
+                {downloads.primary.length || packageDownloads.length ? (
+                  <div className="mt-2 space-y-2">
+                    <p className="text-xs text-subtle">
+                      {run.status === "done"
+                        ? "Packaged Draft · pre-review"
+                        : "Working papers · available now"}
+                    </p>
+                    {[...downloads.primary, ...packageDownloads].map((group) => (
+                      <DownloadGroup key={group.id} group={group} />
+                    ))}
+                  </div>
+                ) : done ? (
+                  <p className="mt-2 text-xs text-subtle">
+                    Downloads are not available for this stage.
+                  </p>
+                ) : (
+                  <p className="mt-2 text-xs text-subtle">
+                    Downloads become available when this stage completes.
+                  </p>
+                )}
+                {downloads.supporting.length ? (
                   <details className="mt-2">
                     <summary className="cursor-pointer text-xs font-medium text-forest">
-                      Download {stageArtifacts.length} verified stage output
-                      {stageArtifacts.length === 1 ? "" : "s"}
+                      Supporting data and sources ({downloads.supporting.length})
                     </summary>
-                    <div className="mt-2 flex flex-wrap gap-1.5">
-                      {stageArtifacts.map((artifact) => (
-                        <ArtifactDownloadButton
-                          key={artifact.artifactId}
-                          href={`/api/runs/${run.id}/artifact?stageArtifact=${encodeURIComponent(artifact.artifactId)}`}
-                          className="inline-flex min-h-8 items-center gap-1 rounded-sm border border-border-strong px-2 text-xs font-medium hover:bg-moss"
-                        >
-                          <Download className="size-3" /> {completedStageArtifactLabel(artifact)}
-                        </ArtifactDownloadButton>
+                    <div className="mt-2 space-y-2">
+                      {downloads.supporting.map((group) => (
+                        <DownloadGroup key={group.id} group={group} />
+                      ))}
+                    </div>
+                  </details>
+                ) : null}
+                {downloads.technical.length ? (
+                  <details className="mt-2">
+                    <summary className="cursor-pointer text-xs text-muted">
+                      Provenance files
+                    </summary>
+                    <div className="mt-2 space-y-2">
+                      {downloads.technical.map((group) => (
+                        <DownloadGroup key={group.id} group={group} />
                       ))}
                     </div>
                   </details>
@@ -349,8 +386,9 @@ function WorkflowRun({ run, onChange }: { run: RunView; onChange: () => Promise<
       >
         {run.status === "done"
           ? "The autonomous workflow is complete. Its immutable Draft DAR package is verified and downloadable; execution success is not G1, G2, G3, approval, Final status, or publication readiness. Post-completion human controls are now available."
-          : run.summary}
+          : stoppedSummary({ ...run, rowsDone: completed })}
       </p>
+      <p className="mt-1 text-xs text-subtle">Run reference: {run.id}</p>
       <div className="mt-3 flex flex-wrap gap-2">
         {active ? (
           <Button size="sm" variant="outline" disabled={busy} onClick={() => void cancel()}>
@@ -359,19 +397,43 @@ function WorkflowRun({ run, onChange }: { run: RunView; onChange: () => Promise<
         ) : null}
         {run.status === "done" ? (
           <details className="w-full">
-            <summary className="cursor-pointer text-xs font-medium text-forest">
-              Download verified reports, data, inventories, provenance, and complete ZIP
+            <summary className="cursor-pointer text-xs text-muted">
+              Package provenance and methodology
             </summary>
-            <div className="mt-2 flex flex-wrap gap-2">
-              {artifactsFor("workflow").map((artifact) => (
-                <ArtifactDownloadButton
-                  key={artifact.key}
-                  href={`/api/runs/${run.id}/artifact?key=${encodeURIComponent(artifact.key)}`}
-                  className="inline-flex min-h-9 items-center gap-1.5 rounded-sm border border-border-strong px-3 text-xs font-medium hover:bg-moss"
-                >
-                  <Download className="size-3.5" /> {artifact.label}
-                </ArtifactDownloadButton>
-              ))}
+            <div className="mt-2 grid gap-2 sm:grid-cols-2">
+              {artifactsFor("workflow")
+                .filter(
+                  (artifact) =>
+                    (artifact.key !== "events" &&
+                      artifact.key !== "bundle" &&
+                      artifact.workflowSource?.kind !== "package") ||
+                    (artifact.workflowSource?.kind === "package" &&
+                      artifact.workflowSource.selector.category === "workflow"),
+                )
+                .flatMap((artifact) => {
+                  const stored = (run.packagedArtifacts ?? []).find(
+                    (item) => item.key === artifact.key,
+                  );
+                  return stored
+                    ? [
+                        <DownloadGroup
+                          key={artifact.key}
+                          group={{
+                            id: artifact.key,
+                            title: artifact.label,
+                            options: [
+                              {
+                                id: artifact.key,
+                                href: `/api/runs/${run.id}/artifact?key=${encodeURIComponent(artifact.key)}`,
+                                format: downloadFormat(artifact.extension ?? ""),
+                                byteSize: stored.byteSize,
+                              },
+                            ],
+                          }}
+                        />,
+                      ]
+                    : [];
+                })}
             </div>
           </details>
         ) : null}
@@ -387,19 +449,6 @@ function WorkflowRun({ run, onChange }: { run: RunView; onChange: () => Promise<
       {showLog ? <EventLog runId={run.id} live={active} /> : null}
     </Card>
   );
-}
-
-function completedStageArtifactLabel(
-  artifact: RunView["completedStageArtifacts"][number],
-): string {
-  const format = artifact.filename.split(".").at(-1)?.toUpperCase() ?? "FILE";
-  if (artifact.key.endsWith("_report")) return `Report (${format})`;
-  if (artifact.key === "cost_benefit_workbook") return "Cost-benefit workbook";
-  if (artifact.key === "source_inventory") return `Source inventory (${format})`;
-  if (artifact.key === "stage_manifest") return "Stage manifest";
-  return artifact.key
-    .replaceAll("_", " ")
-    .replace(/^./, (character) => character.toUpperCase());
 }
 
 export function RunsTab({ countryId }: { countryId: string }) {
@@ -420,9 +469,7 @@ export function RunsTab({ countryId }: { countryId: string }) {
   }, [countryId]);
 
   useEffect(() => {
-    void refresh().catch((cause) =>
-      setError(cause instanceof Error ? cause.message : "Could not read the DAR workflow."),
-    );
+    void refresh().catch(() => setError("Could not read the DAR workflow."));
   }, [refresh]);
 
   const active = useMemo(() => (runs ?? []).find((run) => ACTIVE.includes(run.status)), [runs]);
@@ -464,8 +511,8 @@ export function RunsTab({ countryId }: { countryId: string }) {
       const result = await startDarWorkflow({ data: { countryId } });
       if (!result.ok) setError(result.error);
       else await refresh();
-    } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "The workflow could not be launched.");
+    } catch {
+      setError("The workflow could not be launched.");
     } finally {
       setLaunching(false);
     }

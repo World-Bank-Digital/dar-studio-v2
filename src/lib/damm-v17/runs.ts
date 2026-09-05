@@ -452,8 +452,11 @@ export function projectToFinish(
  * job with a decision attached, never as an error, and never as a completed one.
  */
 export function stoppedSummary(run: Run): string {
+  const unit = run.pass === "workflow" ? "stages" : "rows";
   const got =
-    run.rowsTotal != null ? `${run.rowsDone} of ${run.rowsTotal} rows` : `${run.rowsDone} rows`;
+    run.rowsTotal != null
+      ? `${run.rowsDone} of ${run.rowsTotal} ${unit}`
+      : `${run.rowsDone} ${unit}`;
   switch (run.status) {
     case "exhausted":
       if (run.pass === "workflow") {
@@ -463,7 +466,7 @@ export function stoppedSummary(run: Run): string {
         2,
       )} of $${passCap(run.pass, run.ceilingUsd).toFixed(2)}. The rows it did not reach are absent, not recorded as gaps. Add budget to continue.`;
     case "failed":
-      return `Failed after ${got}. ${run.stoppedReason ?? "No reason was recorded."}`;
+      return `Failed after ${got}. The run could not be completed and has stopped. Contact support with the run reference for investigation.`;
     case "paused":
       return `Paused after ${got}. It will continue from where it stopped.`;
     case "cancelled":
@@ -473,7 +476,7 @@ export function stoppedSummary(run: Run): string {
       // vendor down for all of them is a clean success only on its face.
       return (
         `Finished ${got} for $${run.spentUsd.toFixed(2)}.` +
-        (run.stoppedReason ? ` ${run.stoppedReason}` : "")
+        (run.stoppedReason ? " Additional execution details are available to support." : "")
       );
     default:
       return `${got} so far.`;

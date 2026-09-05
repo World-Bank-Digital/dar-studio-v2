@@ -85,8 +85,12 @@ function deliveryGrant(response: Response): Promise<ArtifactDeliveryGrant | null
 
 async function artifactFromResponse(response: Response): Promise<WorkflowArtifactDownload> {
   if (!response.ok) {
-    const detail = (await response.text()).trim();
-    throw new Error(detail || `Artifact download failed (${response.status}).`);
+    // Error bodies can contain proxy diagnostics, private URLs or credentials.
+    throw new Error(
+      response.status === 404
+        ? "The artifact is unavailable or you no longer have access."
+        : "The artifact could not be downloaded. Please try again later.",
+    );
   }
   return {
     blob: await response.blob(),

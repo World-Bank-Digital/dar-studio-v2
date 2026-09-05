@@ -109,7 +109,24 @@ describe("authenticated workflow artifact downloads", () => {
         bearerToken: null,
         fetcher: async () => new Response("Not found.", { status: 404 }),
       }),
-      /Not found/,
+      /unavailable or you no longer have access/,
     );
   });
+});
+
+it("does not expose a failed download's raw server diagnostics", async () => {
+  await assert.rejects(
+    fetchWorkflowArtifact("/api/runs/sim/artifact?key=zip", {
+      bearerToken: null,
+      baseOrigin: "https://app.test",
+      fetcher: async () =>
+        new Response("SYNTHETIC_PRIVATE_VALUE https://provider.test/?key=private /var/data", {
+          status: 502,
+        }),
+    }),
+    (error) =>
+      error instanceof Error &&
+      !error.message.includes("SYNTHETIC_PRIVATE_VALUE") &&
+      !error.message.includes("provider.test"),
+  );
 });

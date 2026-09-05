@@ -204,6 +204,21 @@ or transport. The model, schema, workflow, engine, renderer, tariff artifact,
 and ratification fields remain unchanged; the 38-file production dependency
 closure is
 `118908785e9d061c387dde163507f39288b00176c6897ee6f7d8943311860f34`.
+Migration `0026` advances the source to reviewed DAMM PR #15 merge
+`d708dbd0129cfb7f37dcf003875c439367b7c97d`. It adds conservative Jina
+source fallback and malformed-response accounting, durable no-replay outcomes,
+and safe workflow diagnostics. The 38-file closure is
+`d090036226c4291f954c9df09d46ce22c943c204bfff71bbf4b8da599ab2af73`.
+The prior d81d source/renderer pair stays historical and audit-readable.
+Apply `0026` after `0025`, with a fresh zero-active audit and recovery snapshot;
+require 26 migration rows and all three protected Nigeria failures unchanged.
+
+Downloads now prioritize reports by stage, retain working papers after later
+failures, and group the available formats from the same immutable package.
+Stage 6 keeps the Excel appraisal visible; Stage 8 exposes the complete ZIP and
+final reports. Raw workflow event archives are not downloadable; the app shows
+only safe event summaries, without changing historical stored records.
+
 Deploy `0019` before `0020`, then `0021`, `0022`, `0023`, `0024`, and `0025`. Allow an in-flight
 workflow to finish under the prior release, then retry the deployment; no run
 is failed or relaunched. A deferred database invariant prevents a still-running
