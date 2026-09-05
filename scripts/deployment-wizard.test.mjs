@@ -199,7 +199,7 @@ test("the deployment wizard verifies progressive storage and the prior cutover b
   assert.match(wizard, /or does no Netlify site exist yet/);
   assert.match(wizard, /Do both existing Render services still have automatic deploys off/);
   assert.match(wizard, /Is the provisioning Blueprint still disconnected or absent/);
-  assert.match(wizard, /397f78b400b24b0e60b0d0be880113935d1d90c7/);
+  assert.match(wizard, /7d623f035a645baa3a8b45200ff4ea3cd7dd0bdb/);
   assert.match(wizard, /95dcef014086f6c01f58678db426fb48d87546b8b6a4315c530801b1ff74c5be/);
   assert.doesNotMatch(wizard, /68e1994b5facfaaf0ddc49ba3bec108d9bde2c55/);
   assert.doesNotMatch(wizard, /76ca33d97f0809a6be7477447786953317aa41b5/);
