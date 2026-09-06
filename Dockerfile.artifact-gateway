@@ -19,11 +19,17 @@ COPY --chown=node:node src/lib/damm-v17/artifact-delivery-contract.ts ./src/lib/
 COPY --chown=node:node src/lib/damm-v17/artifact-delivery-token.ts ./src/lib/damm-v17/artifact-delivery-token.ts
 COPY --chown=node:node src/lib/damm-v17/artifact-limits.ts ./src/lib/damm-v17/artifact-limits.ts
 COPY --chown=node:node src/lib/damm-v17/workflow.ts ./src/lib/damm-v17/workflow.ts
+COPY --chown=node:node src/lib/damm-v17/runs.ts ./src/lib/damm-v17/runs.ts
+COPY --chown=node:node src/data/run_budget.json ./src/data/run_budget.json
+COPY --chown=node:node src/data/run_vendors.json ./src/data/run_vendors.json
 COPY --chown=node:node src/data/dar_workflow_v1.json ./src/data/dar_workflow_v1.json
 COPY --chown=node:node src/data/dar_workflow_v1.schema.json ./src/data/dar_workflow_v1.schema.json
 COPY --chown=node:node src/data/dar_workflow_manifest.json ./src/data/dar_workflow_manifest.json
 
 USER node
+# Resolve the complete runtime graph before an image can be deployed. Importing the
+# entry point does not start its server or connect to the database.
+RUN node --experimental-strip-types --input-type=module -e "await import('./scripts/artifact-gateway.ts'); await import('pg');"
 EXPOSE 10000
 
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
