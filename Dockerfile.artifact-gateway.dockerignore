@@ -14,7 +14,10 @@
 !src/lib/damm-v17/artifact-delivery-token.ts
 !src/lib/damm-v17/artifact-limits.ts
 !src/lib/damm-v17/workflow.ts
+!src/lib/damm-v17/runs.ts
 !src/data/
+!src/data/run_budget.json
+!src/data/run_vendors.json
 !src/data/dar_workflow_v1.json
 !src/data/dar_workflow_v1.schema.json
 !src/data/dar_workflow_manifest.json

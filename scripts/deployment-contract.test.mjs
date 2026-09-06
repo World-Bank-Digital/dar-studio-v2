@@ -1,11 +1,45 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { copyFileSync, mkdirSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { spawnSync } from "node:child_process";
+import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { test } from "node:test";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
 const read = (path) => readFileSync(join(root, path), "utf8");
+
+test("the gateway package loads and serves health using only its Docker COPY inputs", () => {
+  const staged = mkdtempSync(join(tmpdir(), "dar-gateway-package-"));
+  try {
+    const allowed = new Set(read("Dockerfile.artifact-gateway.dockerignore").split("\n"));
+    for (const line of read("Dockerfile.artifact-gateway").split("\n")) {
+      if (!line.startsWith("COPY --chown=node:node ")) continue;
+      const fields = line.split(/\s+/).slice(2);
+      const destination = fields.pop();
+      for (const source of fields) {
+        assert.ok(allowed.has(`!${source}`), `${source} must be in the Docker context`);
+        const target = join(staged, destination.endsWith("/") ? destination + source.split("/").pop() : destination);
+        mkdirSync(dirname(target), { recursive: true });
+        copyFileSync(join(root, source), target);
+      }
+    }
+    const result = spawnSync(process.execPath, ["--experimental-strip-types", "--input-type=module", "-e", `
+      import assert from 'node:assert/strict';
+      import { createArtifactGatewayHandler } from './scripts/artifact-gateway.ts';
+      const handler = createArtifactGatewayHandler({
+        appOrigin: 'https://dar.example', secret: 'synthetic-package-test-secret-0000000000000000',
+        repository: { open() { throw new Error('Health must not open storage'); } },
+      });
+      const response = await handler(new Request('https://gateway.example/healthz'));
+      assert.equal(response.status, 200);
+      assert.deepEqual(await response.json(), { status: 'ok' });
+    `], { cwd: staged, env: {}, encoding: "utf8", timeout: 10_000 });
+    assert.equal(result.status, 0, result.stderr);
+  } finally {
+    rmSync(staged, { recursive: true, force: true });
+  }
+});
 
 test("the Netlify contract uses the official adapter and the repository build", () => {
   const pkg = JSON.parse(read("package.json"));
