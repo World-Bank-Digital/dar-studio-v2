@@ -187,6 +187,7 @@ const POST_0026_DAMM_SOURCE_COMMIT = "d708dbd0129cfb7f37dcf003875c439367b7c97d";
 const POST_0027_DAMM_SOURCE_COMMIT = "7d623f035a645baa3a8b45200ff4ea3cd7dd0bdb";
 const POST_0028_DAMM_SOURCE_COMMIT = "3cd0c599ff137a09a1892b498f0eecfca5f43785";
 const POST_0029_DAMM_SOURCE_COMMIT = "62fad75c92143999c5ed9ee832c4f671e7ea6963";
+const POST_0030_DAMM_SOURCE_COMMIT = "bbfd605a1469cc83dac6e5f2650341c50ef69130";
 
 async function insertWorkflowMethodology(
   sql: Sql,
@@ -2063,7 +2064,7 @@ describe("0028 DAMM source pin cutover", () => {
 
 describe("0029 DAMM source pin cutover", () => {
   it("blocks an active preceding pin, preserves it when terminal, and admits only the reviewed Exa document-ID correction", async () => {
-    assert.equal(DAMM_WORKFLOW_METHODOLOGY.sourceCommit, POST_0029_DAMM_SOURCE_COMMIT);
+    assert.notEqual(DAMM_WORKFLOW_METHODOLOGY.sourceCommit, POST_0029_DAMM_SOURCE_COMMIT);
     const { pg, sql } = await databaseThroughMigration("0028_damm_source_pin_cutover.sql");
     try {
       await sql.transaction(async (transaction) => {
@@ -2130,12 +2131,97 @@ describe("0029 DAMM source pin cutover", () => {
            values ('current-0029-launch', 'user-1', 'Egypt', 'EGY', 'workflow',
                    'queued', 500, 'EGY_current_0029_launch')`,
         );
-        await insertWorkflowMethodology(transaction, "current-0029-launch");
+        await insertWorkflowMethodology(transaction, "current-0029-launch", {
+          sourceCommit: POST_0029_DAMM_SOURCE_COMMIT,
+          rendererSha256: PRE_0023_DAMM_RENDERER_SHA256,
+        });
       });
-      assert.equal(await workflowRunUsesCanonicalMethodology("current-0029-launch", sql), true);
+      assert.equal(await workflowRunUsesCanonicalMethodology("current-0029-launch", sql), false);
       assert.equal(
         (await workflowMethodologySnapshot("current-0029-launch", sql))?.sourceCommit,
         POST_0029_DAMM_SOURCE_COMMIT,
+      );
+    } finally {
+      await pg.close();
+    }
+  });
+});
+
+describe("0030 DAMM source pin cutover", () => {
+  it("blocks an active preceding pin, preserves it when terminal, and admits only the reviewed Exa crawl-status correction", async () => {
+    assert.equal(DAMM_WORKFLOW_METHODOLOGY.sourceCommit, POST_0030_DAMM_SOURCE_COMMIT);
+    const { pg, sql } = await databaseThroughMigration("0029_damm_source_pin_cutover.sql");
+    try {
+      await sql.transaction(async (transaction) => {
+        await transaction.query(
+          `insert into runs
+            (id, user_id, country_name, iso3, pass, status, ceiling_usd, out_basename)
+           values ('pre-0030-active', 'user-1', 'Egypt', 'EGY', 'workflow',
+                   'queued', 500, 'EGY_pre_0030_active')`,
+        );
+        await insertWorkflowMethodology(transaction, "pre-0030-active", {
+          sourceCommit: POST_0029_DAMM_SOURCE_COMMIT,
+          rendererSha256: PRE_0023_DAMM_RENDERER_SHA256,
+        });
+      });
+
+      const migration = await readFile(
+        new URL("../../../migrations/0030_damm_source_pin_cutover.sql", import.meta.url),
+        "utf8",
+      );
+      await assert.rejects(pg.exec(migration), /current DAMM source pin/i);
+      assert.deepEqual(await workflowMethodologySnapshot("pre-0030-active", sql), {
+        ...DAMM_WORKFLOW_METHODOLOGY,
+        sourceCommit: POST_0029_DAMM_SOURCE_COMMIT,
+        rendererSha256: PRE_0023_DAMM_RENDERER_SHA256,
+      });
+
+      await sql.query(
+        `update runs set status = 'cancelled', finished_at = now(), updated_at = now()
+         where id = 'pre-0030-active'`,
+      );
+      await pg.exec(migration);
+      assert.deepEqual(
+        (
+          await sql.query<{ status: string; source_commit: string }>(
+            `select workflow_run.status, methodology.source_commit
+             from runs workflow_run
+             join workflow_run_methodology methodology on methodology.run_id = workflow_run.id
+             where workflow_run.id = 'pre-0030-active'`,
+          )
+        )[0],
+        { status: "cancelled", source_commit: POST_0029_DAMM_SOURCE_COMMIT },
+      );
+
+      await assert.rejects(
+        sql.transaction(async (transaction) => {
+          await transaction.query(
+            `insert into runs
+              (id, user_id, country_name, iso3, pass, status, ceiling_usd, out_basename)
+             values ('stale-0030-launch', 'user-1', 'Egypt', 'EGY', 'workflow',
+                     'queued', 500, 'EGY_stale_0030_launch')`,
+          );
+          await insertWorkflowMethodology(transaction, "stale-0030-launch", {
+            sourceCommit: POST_0029_DAMM_SOURCE_COMMIT,
+            rendererSha256: PRE_0023_DAMM_RENDERER_SHA256,
+          });
+        }),
+        /current DAMM methodology pin/i,
+      );
+
+      await sql.transaction(async (transaction) => {
+        await transaction.query(
+          `insert into runs
+            (id, user_id, country_name, iso3, pass, status, ceiling_usd, out_basename)
+           values ('current-0030-launch', 'user-1', 'Egypt', 'EGY', 'workflow',
+                   'queued', 500, 'EGY_current_0030_launch')`,
+        );
+        await insertWorkflowMethodology(transaction, "current-0030-launch");
+      });
+      assert.equal(await workflowRunUsesCanonicalMethodology("current-0030-launch", sql), true);
+      assert.equal(
+        (await workflowMethodologySnapshot("current-0030-launch", sql))?.sourceCommit,
+        POST_0030_DAMM_SOURCE_COMMIT,
       );
     } finally {
       await pg.close();
