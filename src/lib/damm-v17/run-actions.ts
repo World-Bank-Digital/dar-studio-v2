@@ -248,12 +248,10 @@ async function queueRun(userId: string, data: StartRunInput) {
  */
 export const startDarWorkflow = createServerFn({ method: "POST" })
   .middleware([authMiddleware])
-  // Return a new closed object: runtime callers cannot smuggle an unbounded ceiling in
-  // as an extra JSON property that TypeScript's compile-time shape would not remove.
+  // Only the country and a validated limit at or below the default ceiling survive.
+  // Raw ceiling/vendor overrides cannot reach the queue.
   .validator(canonicalWorkflowLaunchRequest)
-  .handler(({ context, data }) =>
-    queueRun(context.userId, { countryId: data.countryId, pass: "workflow" }),
-  );
+  .handler(({ context, data }) => queueRun(context.userId, { ...data, pass: "workflow" }));
 
 /**
  * Legacy/admin pass launcher retained for recovery while the product moves to the

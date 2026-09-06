@@ -9,6 +9,7 @@
 import workflowJson from "../../data/dar_workflow_v1.json" with { type: "json" };
 import workflowSchemaJson from "../../data/dar_workflow_v1.schema.json" with { type: "json" };
 import exportManifestJson from "../../data/dar_workflow_manifest.json" with { type: "json" };
+import { DEFAULT_CEILING_USD } from "./runs.ts";
 
 export const WORKFLOW_CONTRACT_FILENAME = "dar_workflow_v1.json";
 export const WORKFLOW_SCHEMA_FILENAME = "dar_workflow_v1.schema.json";
@@ -22,11 +23,32 @@ export const MAX_WORKFLOW_UPLOAD_CHARACTERS_TOTAL = 10_000_000;
 export const MAX_WORKFLOW_UPLOAD_SOURCE_BYTES_PER_DOCUMENT = 2 * 1024 * 1024;
 export const MAX_WORKFLOW_UPLOAD_SOURCE_BYTES_TOTAL = 10 * 1024 * 1024;
 
-/** Strip every client-supplied workflow launch option except the country identifier. */
-export function canonicalWorkflowLaunchRequest(input: { countryId: string }): {
+export function workflowBudgetLimitError(value: unknown): string | null {
+  return typeof value !== "number" ||
+    !Number.isFinite(value) ||
+    value <= 0 ||
+    value > DEFAULT_CEILING_USD ||
+    Math.round(value * 100) / 100 !== value
+    ? `Maximum spend must be between $0.01 and $${DEFAULT_CEILING_USD.toFixed(2)}, in whole cents.`
+    : null;
+}
+
+/** Keep the country and optional lower spending limit; discard other launch overrides. */
+export function canonicalWorkflowLaunchRequest(input: {
   countryId: string;
+  budgetLimitUsd?: number;
+}): {
+  countryId: string;
+  ceilingUsd?: number;
 } {
-  return { countryId: input.countryId };
+  if (input.budgetLimitUsd !== undefined) {
+    const error = workflowBudgetLimitError(input.budgetLimitUsd);
+    if (error) throw new Error(error);
+  }
+  return {
+    countryId: input.countryId,
+    ...(input.budgetLimitUsd === undefined ? {} : { ceilingUsd: input.budgetLimitUsd }),
+  };
 }
 
 /** Frozen, canonical UTF-8 extraction stored durably with the queued run. */
@@ -137,9 +159,7 @@ export const CANONICAL_STAGE_IDS = [
 
 export type DarWorkflowStageId = (typeof CANONICAL_STAGE_IDS)[number];
 
-export const CANONICAL_STAGE_BUDGET_ALLOCATIONS: Readonly<
-  Record<DarWorkflowStageId, number>
-> = {
+export const CANONICAL_STAGE_BUDGET_ALLOCATIONS: Readonly<Record<DarWorkflowStageId, number>> = {
   damm_diagnostic: 0.45,
   country_research: 0.075,
   ai_digital_agriculture: 0.1,

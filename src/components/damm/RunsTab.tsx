@@ -1,4 +1,4 @@
-import { stoppedSummary } from "@/lib/damm-v17/runs";
+import { DEFAULT_CEILING_USD, stoppedSummary } from "@/lib/damm-v17/runs";
 /** One product launch for the complete, autonomous canonical DAR workflow. */
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
@@ -34,7 +34,7 @@ import {
 import { artifactsFor } from "@/lib/damm-v17/worker-artifacts";
 import { stageDownloads, finalDownloads, downloadFormat } from "@/lib/damm-v17/download-catalog";
 import { DownloadGroup } from "@/components/damm/DownloadGroup";
-import { DAR_WORKFLOW } from "@/lib/damm-v17/workflow";
+import { DAR_WORKFLOW, workflowBudgetLimitError } from "@/lib/damm-v17/workflow";
 import { cn } from "@/lib/utils";
 
 const ACTIVE: RunStatus[] = ["queued", "running"];
@@ -455,6 +455,7 @@ export function RunsTab({ countryId }: { countryId: string }) {
   const [runs, setRuns] = useState<RunView[] | null>(null);
   const [uploads, setUploads] = useState<WorkflowUploadView[]>([]);
   const [launching, setLaunching] = useState(false);
+  const [maximumSpend, setMaximumSpend] = useState(DEFAULT_CEILING_USD.toFixed(2));
   const [busyCategories, setBusyCategories] = useState<Set<string>>(() => new Set());
   const [error, setError] = useState<string | null>(null);
 
@@ -473,6 +474,9 @@ export function RunsTab({ countryId }: { countryId: string }) {
   }, [refresh]);
 
   const active = useMemo(() => (runs ?? []).find((run) => ACTIVE.includes(run.status)), [runs]);
+  const budgetLimitUsd = Number(maximumSpend);
+  const budgetError = workflowBudgetLimitError(budgetLimitUsd);
+  const launchBlocked = runs === null || Boolean(active) || launching || busyCategories.size > 0;
   useEffect(() => {
     if (!active) return;
     const timer = setInterval(() => void refresh().catch(() => undefined), 3_000);
@@ -505,10 +509,11 @@ export function RunsTab({ countryId }: { countryId: string }) {
   }, []);
 
   async function launch() {
+    if (launchBlocked || budgetError) return;
     setLaunching(true);
     setError(null);
     try {
-      const result = await startDarWorkflow({ data: { countryId } });
+      const result = await startDarWorkflow({ data: { countryId, budgetLimitUsd } });
       if (!result.ok) setError(result.error);
       else await refresh();
     } catch {
@@ -532,7 +537,7 @@ export function RunsTab({ countryId }: { countryId: string }) {
             </p>
           </div>
           <Button
-            disabled={Boolean(active) || launching || hasLegacy || busyCategories.size > 0}
+            disabled={launchBlocked || hasLegacy || Boolean(budgetError)}
             onClick={() => void launch()}
           >
             {launching ? (
@@ -542,13 +547,40 @@ export function RunsTab({ countryId }: { countryId: string }) {
             ) : (
               <Play className="size-4" />
             )}
-            {active ? "Workflow active" : "Launch Draft DAR workflow"}
+            {active
+              ? "Workflow active"
+              : budgetError
+                ? "Launch Draft DAR workflow"
+                : `Launch Draft DAR · up to $${budgetLimitUsd.toFixed(2)}`}
           </Button>
         </div>
-        <p className="mt-3 text-xs text-subtle">
-          Country is the only required launch input. The default preauthorized ceiling applies
-          across the full workflow; protected stage allocations and bounded retries are automatic.
-          Exhaustion is terminal, never a request for a top-up.
+        <div className="mt-4 max-w-xs">
+          <label htmlFor="workflow-maximum-spend" className="text-xs font-medium">
+            Maximum spend (USD)
+          </label>
+          <input
+            id="workflow-maximum-spend"
+            type="number"
+            min="0.01"
+            max={DEFAULT_CEILING_USD}
+            step="0.01"
+            value={maximumSpend}
+            onChange={(event) => setMaximumSpend(event.target.value)}
+            disabled={launchBlocked}
+            aria-invalid={Boolean(budgetError)}
+            aria-describedby={budgetError ? "workflow-budget-error" : "workflow-budget-help"}
+            className="mt-1 w-full rounded-sm border border-ink/20 bg-white px-3 py-2 text-sm disabled:opacity-50"
+          />
+          {budgetError ? (
+            <p id="workflow-budget-error" role="alert" className="mt-1 text-xs text-red-700">
+              {budgetError}
+            </p>
+          ) : null}
+        </div>
+        <p id="workflow-budget-help" className="mt-3 text-xs text-subtle">
+          This limit covers all eight stages and retries. You pay only for usage incurred; a lower
+          limit may stop the workflow before completion. The limit freezes at launch and cannot be
+          topped up. Protected stage allocations and bounded retries are automatic.
         </p>
         {hasLegacy ? (
           <p className="mt-2 flex gap-2 rounded-sm bg-amber-500/10 p-2 text-xs text-amber-800">
