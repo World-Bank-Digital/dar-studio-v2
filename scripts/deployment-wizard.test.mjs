@@ -12,6 +12,18 @@ const passwordMarker = "NEVER-PRINT-THIS-PASSWORD";
 const pooled = `postgresql://role:${passwordMarker}@ep-dar-pooler.c-5.us-east-2.aws.neon.tech/neondb?sslmode=require&channel_binding=require`;
 const direct = `postgresql://role:${passwordMarker}@ep-dar.c-5.us-east-2.aws.neon.tech/neondb?sslmode=require&channel_binding=require`;
 
+test("paid-canary budget instructions survive strict shell expansion", () => {
+  const wizard = readFileSync(join(root, "scripts/deploy/netlify-neon-render-ohio.sh"), "utf8");
+  const step = wizard.split("\n").find((line) => line.startsWith('step "At launch and after every stage,'));
+  assert.ok(step);
+  const result = spawnSync("bash", ["-c", `set -euo pipefail\nstep() { printf '%s\\n' "$1"; }\n${step}`], {
+    encoding: "utf8",
+    env: { PATH: process.env.PATH },
+  });
+  assert.equal(result.status, 0, result.stderr);
+  assert.match(result.stdout, /\$225, \$262\.50, \$312\.50, \$350, \$400, \$425, then strictly below \$500/);
+});
+
 function validate(mode, input) {
   return spawnSync(process.execPath, [validator, mode], { input, encoding: "utf8" });
 }
@@ -141,9 +153,10 @@ test("the deployment wizard verifies progressive storage and the prior cutover b
   assert.match(wizard, /migrations\/0026_damm_source_pin_cutover\.sql/);
   assert.match(wizard, /migrations\/0027_damm_source_pin_cutover\.sql/);
   assert.match(wizard, /migrations\/0028_damm_source_pin_cutover\.sql/);
+  assert.match(wizard, /migrations\/0029_damm_source_pin_cutover\.sql/);
   assert.ok(
     wizard.indexOf("migrations/0027_damm_source_pin_cutover.sql") <
-      wizard.indexOf("migrations/0028_damm_source_pin_cutover.sql"),
+      wizard.indexOf("migrations/0029_damm_source_pin_cutover.sql"),
   );
   assert.ok(
     wizard.indexOf("migrations/0025_damm_source_pin_cutover.sql") <
@@ -151,7 +164,7 @@ test("the deployment wizard verifies progressive storage and the prior cutover b
   );
   assert.ok(
     wizard.indexOf("migrations/0026_damm_source_pin_cutover.sql") <
-      wizard.indexOf("migrations/0028_damm_source_pin_cutover.sql"),
+      wizard.indexOf("migrations/0029_damm_source_pin_cutover.sql"),
   );
   assert.ok(
     wizard.indexOf("migrations/0019_progressive_stage_artifacts.sql") <
@@ -187,6 +200,7 @@ test("the deployment wizard verifies progressive storage and the prior cutover b
   assert.match(wizard, /MIGRATION_0026_VERIFIED/);
   assert.match(wizard, /MIGRATION_0027_VERIFIED/);
   assert.match(wizard, /MIGRATION_0028_VERIFIED/);
+  assert.match(wizard, /MIGRATION_0029_VERIFIED/);
   assert.match(wizard, /0019_progressive_stage_artifacts\.sql/);
   assert.match(wizard, /0020_damm_source_pin_cutover\.sql/);
   assert.match(wizard, /0021_damm_source_pin_cutover\.sql/);
@@ -194,8 +208,10 @@ test("the deployment wizard verifies progressive storage and the prior cutover b
   assert.match(wizard, /0023_damm_source_pin_cutover\.sql/);
   assert.match(wizard, /0024_damm_source_pin_cutover\.sql/);
   assert.match(wizard, /0026_damm_source_pin_cutover\.sql/);
-  assert.match(wizard, /pre-0028-YYYYMMDD-HHMM/);
-  assert.match(wizard, /suspend the preceding-pin Render worker before applying 0028/);
+  assert.match(wizard, /pre-0029-YYYYMMDD-HHMM/);
+  assert.match(wizard, /all seven protected failed run IDs/);
+  assert.match(wizard, /b0c325f0/);
+  assert.match(wizard, /suspend the preceding-pin Render worker before applying 0029/);
   assert.match(
     wizard,
     /reviewed merge is inert only while Netlify builds and Deploy Previews are disabled, Render service auto-deploys are off, and any Blueprint is disconnected/,
@@ -205,7 +221,7 @@ test("the deployment wizard verifies progressive storage and the prior cutover b
   assert.match(wizard, /or does no Netlify site exist yet/);
   assert.match(wizard, /Do both existing Render services still have automatic deploys off/);
   assert.match(wizard, /Is the provisioning Blueprint still disconnected or absent/);
-  assert.match(wizard, /3cd0c599ff137a09a1892b498f0eecfca5f43785/);
+  assert.match(wizard, /62fad75c92143999c5ed9ee832c4f671e7ea6963/);
   assert.match(wizard, /95dcef014086f6c01f58678db426fb48d87546b8b6a4315c530801b1ff74c5be/);
   assert.doesNotMatch(wizard, /68e1994b5facfaaf0ddc49ba3bec108d9bde2c55/);
   assert.doesNotMatch(wizard, /76ca33d97f0809a6be7477447786953317aa41b5/);
@@ -238,13 +254,12 @@ test("the deployment wizard keeps paid canary execution behind separate named au
   assert.match(wizard, /Map the exact Render Jina key to its package\/rate/);
   assert.match(
     wizard,
-    /38-file identity f6d501249f0b448a8090406ac6829f2a55203582f791cbd1561ed3e24a313e13/,
+    /38-file identity dce8994d1e788b2487737e0235ec1e779853e5faa0c8f0b341cdb30137fc7b66/,
   );
   assert.match(wizard, /exactly one Live worker instance and possible claimant/);
-  assert.match(
-    wizard,
-    /cumulative spend against \$225, \$262\.50, \$312\.50, \$350, \$400, \$425, then strictly below \$500/,
-  );
+  const budgetGate = wizard.indexOf("Does the cumulative budget leave a full $500 for this fresh launch?");
+  assert.ok(budgetGate >= 0 && budgetGate < wizard.indexOf("ask SMOKE_COUNTRY_NAME"));
+  assert.match(wizard, /separately reviewed lower-ceiling launcher/);
   assert.match(wizard, /Abort without automatic retry\/top-up\/state repair/);
   assert.match(wizard, /Explicitly authorized canary country name/);
   assert.doesNotMatch(wizard, /create a new Nigeria country workspace/i);
@@ -526,15 +541,15 @@ printf 'fell-through\\n'
 test("the deployment wizard requires exact post-cutover runtime and database evidence", () => {
   const wizard = readFileSync(join(root, "scripts/deploy/netlify-neon-render-ohio.sh"), "utf8");
 
-  assert.match(wizard, /exactly 28 total migration rows through 0028/);
+  assert.match(wizard, /exactly 29 total migration rows through 0029/);
   assert.match(wizard, /preserved-failure query/);
   assert.match(
     wizard,
-    /all six protected failed run IDs \(7e301235, e96a93fd, b481ddea, fcc17f6c, 9e5e8a13, 615e7139\)/,
+    /all seven protected failed run IDs \(7e301235, e96a93fd, b481ddea, fcc17f6c, 9e5e8a13, 615e7139, b0c325f0\)/,
   );
-  assert.match(wizard, /node=22\.22\.3, python=3\.12\.13, migrations=28 through 0028/);
-  assert.match(wizard, /up-to-date exact 28-row ledger through 0028/);
-  assert.match(wizard, /Netlify must not be the first process to apply 0028/);
+  assert.match(wizard, /node=22\.22\.3, python=3\.12\.13, migrations=29 through 0029/);
+  assert.match(wizard, /up-to-date exact 29-row ledger through 0029/);
+  assert.match(wizard, /Netlify must not be the first process to apply 0029/);
 });
 
 test("the anonymous DAMM pin attestation accepts an immutable ancestor after main advances", () => {
