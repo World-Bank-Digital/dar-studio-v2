@@ -22,6 +22,35 @@ async function fileSha256(filename: string): Promise<string> {
 }
 
 describe("the exported canonical DAR workflow", () => {
+  it("preserves a lower maximum spend for the complete workflow", () => {
+    const request = canonicalWorkflowLaunchRequest({
+      countryId: "country-1",
+      budgetLimitUsd: 200,
+    } as { countryId: string });
+    assert.deepEqual(request, { countryId: "country-1", ceilingUsd: 200 });
+  });
+
+  it("rejects invalid or oversized spending limits instead of defaulting to $500", () => {
+    for (const budgetLimitUsd of [0, -1, 500.01, 1.001, NaN, Infinity, "200", null, true]) {
+      assert.throws(
+        () =>
+          canonicalWorkflowLaunchRequest({ countryId: "country-1", budgetLimitUsd } as {
+            countryId: string;
+          }),
+        /maximum spend/i,
+      );
+    }
+    assert.deepEqual(canonicalWorkflowLaunchRequest({ countryId: "country-1" }), {
+      countryId: "country-1",
+    });
+    for (const budgetLimitUsd of [0.01, 19.99, 200, 483.81, 500]) {
+      assert.equal(
+        canonicalWorkflowLaunchRequest({ countryId: "country-1", budgetLimitUsd }).ceilingUsd,
+        budgetLimitUsd,
+      );
+    }
+  });
+
   it("strips client attempts to choose the canonical ceiling or vendor", () => {
     const request = canonicalWorkflowLaunchRequest({
       countryId: "country-1",

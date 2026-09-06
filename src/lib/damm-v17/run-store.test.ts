@@ -25,7 +25,12 @@ import {
   workflowUploadSnapshot,
 } from "./run-store.ts";
 import { DAMM_WORKFLOW_METHODOLOGY, type WorkflowMethodologyIdentity } from "./methodology.ts";
-import { DAR_WORKFLOW, DAR_WORKFLOW_SHA256, MAX_WORKFLOW_UPLOAD_DOCUMENTS } from "./workflow.ts";
+import {
+  DAR_WORKFLOW,
+  DAR_WORKFLOW_SHA256,
+  MAX_WORKFLOW_UPLOAD_DOCUMENTS,
+  canonicalWorkflowLaunchRequest,
+} from "./workflow.ts";
 import { CLAIM_LEASE_MS, defaultVendorFor } from "./runs.ts";
 
 function sqlFor(pg: PGlite): Sql {
@@ -2907,6 +2912,31 @@ describe("post-completion Draft DAR review", () => {
       );
       assert.ok(await latestWorkflowReviewTarget("country-review", "user-1", sql));
       assert.equal((await listWorkflowReviews("country-review", "user-1", sql)).length, 1);
+    } finally {
+      await pg.close();
+    }
+  });
+});
+
+// Exercises the same validated request passed by the authenticated launch handler.
+describe("canonical workflow spending limit", () => {
+  it("persists a chosen $200 ceiling without changing the methodology or ownership", async () => {
+    const { pg, sql } = await migratedDatabase();
+    try {
+      await insertCountry(sql, "budget-country");
+      const request = canonicalWorkflowLaunchRequest({
+        countryId: "budget-country",
+        budgetLimitUsd: 200,
+      });
+      await createRun({ ...workflowRunInput("budget-run", "budget-country"), ...request }, sql);
+      const saved = await getRun("budget-run", "user-1", sql);
+      assert.equal(saved?.ceilingUsd, 200);
+      assert.equal(saved?.pass, "workflow");
+      assert.equal(await getRun("budget-run", "other-user", sql), null);
+      assert.deepEqual(
+        await workflowMethodologySnapshot("budget-run", sql),
+        DAMM_WORKFLOW_METHODOLOGY,
+      );
     } finally {
       await pg.close();
     }
