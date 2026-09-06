@@ -24,34 +24,34 @@ This topology is not ready merely because the web build and worker start. Do not
 3. **Deploy Previews must not share staging secrets, and production must build only the reviewed commit.** `DATABASE_URL`, authentication secrets, encryption keys, email credentials, and platform AI keys belong only to the production deploy context of this staging project. Disable Deploy Previews and branch deploys. The committed build preflight requires Netlify `CONTEXT=production`, `BRANCH=main`, and a full `COMMIT_REF` exactly equal to `EXPECTED_DEPLOY_GIT_SHA`, so a preview, branch build, or different commit fails even if secrets were scoped incorrectly. A preview that can read or write the staging database is a hard stop.
 4. **Deployed social sign-in must be honest.** The baked Grok preview OAuth client accepts only `*.grok-sandbox.com` callbacks. It is not a Netlify credential. Either register a per-app broker client with the two exact callbacks in this guide, or use a committed deployment mode that keeps email/password auth enabled while hiding Google and X. `VITE_AUTH_ENABLED=false` is not an email-only mode: with a hosted database it intentionally fails closed, and without that guard it would collapse users into the shared development identity.
 5. **Public self-sign-up exposes platform spend.** A registered user can create a country and launch the country-only autonomous workflow, which consumes the worker's platform vendor keys. Keep the staging Netlify project Private unless an application-level invitation/launch authorization and abuse controls have been implemented. Use one authorized Netlify member session to switch among the three application test identities, or invite each intended reviewer through Netlify on a plan that supports it.
-6. **Migration 0028 follows 0019 through 0027 before the repinned Render worker deploys.** Take a Neon recovery snapshot, prove there are no active workflows, run migrations with the direct Neon connection, and verify exactly one ledger row for each current migration. `0019_progressive_stage_artifacts.sql` installs transactionally sealed, owner-only Stage 1–7 publications without historical backfill; `0020`–`0024` retain the previously documented source-pin hardening. `0028_damm_source_pin_cutover.sql` advances only the current source pin to DAMM PR #17 merge `3cd0c599ff137a09a1892b498f0eecfca5f43785`, adding bounded Exa Contents retrieval for citation-only sources, exact source identity checks, conservative settlement and durable paid-request replay protection. The model, schema, workflow, engine, renderer and ratification fields remain unchanged; source pricing adds the bounded Exa Contents charge. Its 38-file production dependency closure is `f6d501249f0b448a8090406ac6829f2a55203582f791cbd1561ed3e24a313e13`. Only after all seven gates pass may the Render worker and artifact gateway deploy; neither service runs migrations.
+6. **Migration 0029 follows 0019 through 0028 before the repinned Render worker deploys.** Take a Neon recovery snapshot, prove there are no active workflows, run migrations with the direct Neon connection, and verify exactly one ledger row for each current migration. `0019_progressive_stage_artifacts.sql` installs transactionally sealed, owner-only Stage 1–7 publications without historical backfill; `0020`–`0024` retain the previously documented source-pin hardening. `0029_damm_source_pin_cutover.sql` advances only the current source pin to DAMM PR #18 merge `62fad75c92143999c5ed9ee832c4f671e7ea6963`, correcting Exa document-ID validation and retaining fixed private failure categories, with exact status/URL binding, conservative settlement and durable paid-request replay protection. The model, schema, workflow, engine, renderer and ratification fields remain unchanged; source pricing remains unchanged. Its 38-file production dependency closure is `dce8994d1e788b2487737e0235ec1e779853e5faa0c8f0b341cdb30137fc7b66`. Only after all seven gates pass may the Render worker and artifact gateway deploy; neither service runs migrations.
 7. **An automated success is still a Draft.** The completed eight-stage package must say `Draft · pre-review`. Automated derivation, vendor challenge, and machine QC must not create G1 or G2 decisions. A release remains an `Approved Draft release` while DAMM is unratified.
 
-### Current 0028 source-pin release invariant
+### Current 0029 source-pin release invariant
 
 The detailed `0024` descriptions below remain the immutable record of that
-earlier cutover. For the current reviewed release candidate, `0028` is the
+earlier cutover. For the current reviewed release candidate, `0029` is the
 operative source-pin cutover and supersedes any prior current-pin/count wording
-in this runbook. It advances the canonical source to DAMM PR #17 merge
-`3cd0c599ff137a09a1892b498f0eecfca5f43785` and preserves the model, schema,
-workflow, engine, renderer and ratification identity. The reviewed repair adds a
-bounded Exa Contents request for citation-only sources, exact response identity
-checks and durable conservative settlement. The source pricing file adds the
-$0.001 one-page Contents bound. URL-changing redirects stop conservatively. The
+in this runbook. It advances the canonical source to DAMM PR #18 merge
+`62fad75c92143999c5ed9ee832c4f671e7ea6963` and preserves the model, schema,
+workflow, engine, renderer and ratification identity. The reviewed repair accepts a nonempty Exa document ID independently while
+requiring the sole status ID and returned source URL to match the request. Fixed
+private failure categories survive restart. The source pricing file and $0.001
+one-page Contents bound remain unchanged. URL-changing redirects stop conservatively. The
 38-file production dependency closure is
-`f6d501249f0b448a8090406ac6829f2a55203582f791cbd1561ed3e24a313e13`.
+`dce8994d1e788b2487737e0235ec1e779853e5faa0c8f0b341cdb30137fc7b66`.
 
 Before that migration, require zero active workflows, an immutable
-root-production snapshot named `pre-0028-...`, and a clean merged DAR commit.
-After it, require exactly 28 migration-ledger rows through
-`0028_damm_source_pin_cutover.sql`, the exact `3cd0c59...` database guard, and
-all six protected Nigeria failures unchanged, including b481ddea (0/8, $13.35446735) and fcc17f6c (0/8, $14.8487319). Preserve `7d623f0...` with its
+root-production snapshot named `pre-0029-...`, and a clean merged DAR commit.
+After it, require exactly 29 migration-ledger rows through
+`0029_damm_source_pin_cutover.sql`, the exact `62fad75...` database guard, and
+all seven protected Nigeria failures unchanged, including b481ddea (0/8, $13.35446735) and fcc17f6c (0/8, $14.8487319). Preserve `3cd0c59...` with its
 unchanged renderer as historical-only package identity; it must remain
 audit-readable but must not be usable for a new or active workflow.
 
 The source attestation is to the exact immutable manifest pin, not to a moving
 branch head. In an empty credential-disabled Git environment, anonymously
-shallow-fetch and verify `3cd0c59...` itself (one reachable commit, no tags,
+shallow-fetch and verify `62fad75...` itself (one reachable commit, no tags,
 clean tracked/untracked tree, and object integrity). A read of DAMM `main` is
 diagnostic information only: it may have advanced and must not be required to
 equal the manifest pin. Failure to fetch or verify the exact pin is a hard stop.
@@ -72,9 +72,9 @@ bind one immutable DAR commit. Then, before any migration or provider build:
    `Suspended`;
 4. repeat the zero-active-workflow, migration-ledger, current-pin, and preserved-
    terminal-run queries; and
-5. create the non-expiring root-production snapshot before applying `0028`.
+5. create the non-expiring root-production snapshot before applying `0029`.
 
-After `0028` verifies, keep the already-disconnected Blueprint disconnected; do
+After `0029` verifies, keep the already-disconnected Blueprint disconnected; do
 not reconnect it or create a replacement. Open the two existing Render services
 directly and deploy the artifact gateway first, then the still-suspended worker
 from the canonical public DAMM source anonymously and without a GitHub
@@ -152,6 +152,7 @@ The wizard writes an ignored, mode-`0600` operator file. Never commit it. In the
 | `MIGRATION_0023_VERIFIED`                                                                                           | exact Neon ledger/function/current source-pin checks                                           | local deployment record                                                                            | integrity evidence; fixed `true` only after verification                                       |
 | `MIGRATION_0024_VERIFIED`                                                                                           | exact Neon ledger/function/current source-pin checks                                           | local deployment record                                                                            | integrity evidence; fixed `true` only after verification                                       |
 | `MIGRATION_0028_VERIFIED`                                                                                           | exact Neon ledger/function/current source-pin checks                                           | local deployment record                                                                            | integrity evidence; fixed `true` only after verification                                       |
+| `MIGRATION_0029_VERIFIED`                                                                                           | exact Neon ledger/function/current source-pin checks                                           | local deployment record                                                                            | integrity evidence; fixed `true` only after verification                                       |
 | `DAR_KEY_SECRET`                                                                                                    | generated locally, 48 random bytes encoded as base64                                           | Netlify Production/Builds and Functions                                                            | secret; keep stable or stored BYOK values become unreadable                                    |
 | `BETTER_AUTH_SECRET`                                                                                                | generated locally, 48 random bytes encoded as base64                                           | Netlify Production/Builds and Functions                                                            | secret; keep stable or sessions are invalidated                                                |
 | `BETTER_AUTH_URL`                                                                                                   | fixed Netlify production URL                                                                   | Netlify Production/Builds and Functions                                                            | public configuration; full `https://` URL, no trailing slash                                   |
@@ -234,7 +235,7 @@ cutover, so the snapshot and worker suspension must precede it.
    the fallback pre-merge gate above before merging.
 2. In the repository run `git fetch origin main`, check out `main`, and fast-forward it.
 3. Require a clean worktree and `HEAD == origin/main`.
-4. Confirm the merged tree contains `netlify.toml`, `render.yaml`, both `Dockerfile.worker` and `Dockerfile.artifact-gateway`, the worker entrypoint/preflight files, `deploy/artifact-gateway/package.json` and its lockfile, `scripts/artifact-gateway.ts`, immutable historical migrations `0013_damm_methodology_pin_cutover.sql` and `0014`–`0018` DAMM source-pin cutovers, current migrations `0019_progressive_stage_artifacts.sql` and `0020`–`0028` DAMM source-pin cutovers, and this runbook.
+4. Confirm the merged tree contains `netlify.toml`, `render.yaml`, both `Dockerfile.worker` and `Dockerfile.artifact-gateway`, the worker entrypoint/preflight files, `deploy/artifact-gateway/package.json` and its lockfile, `scripts/artifact-gateway.ts`, immutable historical migrations `0013_damm_methodology_pin_cutover.sql` and `0014`–`0018` DAMM source-pin cutovers, current migrations `0019_progressive_stage_artifacts.sql` and `0020`–`0029` DAMM source-pin cutovers, and this runbook.
 5. Run `npm test`, `npm run typecheck`, `npm run lint`, `npm run build:dev`, and `npm run verify:netlify`. The last command exercises the committed Netlify adapter wrapper and PWA route/output contract without using the production build command.
 6. Inspect the production build command. It must not silently run migrations against a preview database. This runbook applies migrations explicitly with `DATABASE_URL_DIRECT`.
 
@@ -312,11 +313,11 @@ order by r.created_at;
 
 Require zero rows. The migration itself refuses stale or missing-pin active workflows, but the staging cutover is deliberately stricter: do not change schema while any workflow is active.
 
-Then go to **Backup & Restore**, enable **Enhanced view** if shown, make sure the root `production` branch is selected, and click **Create snapshot**. Name it with UTC date/time and the first eight characters of the merged deploy commit, for example `pre-0028-YYYYMMDD-HHMM-<DEPLOY_GIT_SHA[:8]>`. Capture the snapshot name. Snapshots are only offered on root branches and plan limits apply.
+Then go to **Backup & Restore**, enable **Enhanced view** if shown, make sure the root `production` branch is selected, and click **Create snapshot**. Name it with UTC date/time and the first eight characters of the merged deploy commit, for example `pre-0029-YYYYMMDD-HHMM-<DEPLOY_GIT_SHA[:8]>`. Capture the snapshot name. Snapshots are only offered on root branches and plan limits apply.
 
 Stop if there is an active workflow, snapshot creation fails, the snapshot limit is exhausted, or the snapshot is for another branch.
 
-### 7. Apply and verify migration 0028 after 0019 through 0027
+### 7. Apply and verify migration 0029 after 0019 through 0028
 
 Only after the snapshot, run from the clean merged checkout:
 
@@ -338,7 +339,10 @@ Migration `0027` advances only the source pin to DAMM PR #16 merge
 Migration `0028` pins DAMM PR #17 merge
 `3cd0c599ff137a09a1892b498f0eecfca5f43785`. It retrieves citation-only sources with bounded Exa Contents before eligible Reader fallback, requires exact source identity, and settles malformed or ambiguous outcomes durably. Its source pricing file adds the $0.001 one-page Contents bound. URL-changing redirects stop conservatively. The model, schema, workflow, engine, renderer and ratification identity remain unchanged. Its 38-file production closure is
 `f6d501249f0b448a8090406ac6829f2a55203582f791cbd1561ed3e24a313e13`.
-If `0028` reports the quoted stale/missing-pin guard, allow the active workflow
+Migration `0029` pins DAMM PR #18 merge
+`62fad75c92143999c5ed9ee832c4f671e7ea6963`. It corrects a live-reproduced PDF rejection: Exa's document ID may differ while the status ID and returned URL match the request. Both URL bindings remain mandatory. Fixed private validation categories survive terminal replay without raw provider details. The model, schema, workflow, engine, renderer, source pricing and ratification identity remain unchanged. Its 38-file production closure is
+`dce8994d1e788b2487737e0235ec1e779853e5faa0c8f0b341cdb30137fc7b66`. The repaired adapter passed a fresh live PDF check; this does not establish full live eight-stage completion.
+If `0029` reports the quoted stale/missing-pin guard, allow the active workflow
 to finish and retry the deployment; never alter the ledger or the workflow to
 force the cutover.
 
@@ -357,12 +361,13 @@ where name in (
   '0025_damm_source_pin_cutover.sql',
   '0026_damm_source_pin_cutover.sql',
   '0027_damm_source_pin_cutover.sql',
-  '0028_damm_source_pin_cutover.sql'
+  '0028_damm_source_pin_cutover.sql',
+  '0029_damm_source_pin_cutover.sql'
 )
 order by name;
 ```
 
-Require exactly ten rows, one for each filename in that order. Verify that the
+Require exactly eleven rows, one for each filename in that order. Verify that the
 progressive schema and its insert/completeness guards exist:
 
 ```sql
@@ -387,7 +392,7 @@ retains the unratified identity, exact DAMM merge, and renderer digest:
 
 ```sql
 select pg_get_functiondef('require_active_workflow_methodology()'::regprocedure)
-  like '%3cd0c599ff137a09a1892b498f0eecfca5f43785%' as pinned_commit,
+  like '%62fad75c92143999c5ed9ee832c4f671e7ea6963%' as pinned_commit,
        pg_get_functiondef('require_active_workflow_methodology()'::regprocedure)
   like '%95dcef014086f6c01f58678db426fb48d87546b8b6a4315c530801b1ff74c5be%'
     as renderer_digest,
@@ -397,8 +402,8 @@ select pg_get_functiondef('require_active_workflow_methodology()'::regprocedure)
 
 Require all three values to be `true`. Keep the pre-migration snapshot through the entire smoke test.
 
-Also require the whole migration ledger to contain exactly 28 rows through
-`0028`, repeat the active-workflow query and require zero rows, and prove the six
+Also require the whole migration ledger to contain exactly 29 rows through
+`0029`, repeat the active-workflow query and require zero rows, and prove the seven
 preserved failures are byte-for-byte historical state rather than collateral
 cutover victims:
 
@@ -423,12 +428,13 @@ where r.id in (
   'b481ddea-1ab3-4757-ba96-64e87c9c6bb2',
   'fcc17f6c-ce24-439b-83fc-a2f66523bf52',
   '9e5e8a13-2d37-4af8-8cb9-ce08e84c5ceb',
-  '615e7139-c220-4c3e-ba2c-9fb9c08f771b'
+  '615e7139-c220-4c3e-ba2c-9fb9c08f771b',
+  'b0c325f0-9ded-49f2-b365-09aee2d99a63'
 )
 order by r.id;
 ```
 
-Require `28` and `0028_damm_source_pin_cutover.sql`. Require all six runs to remain
+Require `29` and `0029_damm_source_pin_cutover.sql`. Require all seven runs to remain
 `failed`, unclaimed, and without a final artifact set or final artifacts:
 
 - `7e301235`: 3/8 at `$28.1829`, with three stage publications and 18 stage artifacts.
@@ -437,6 +443,7 @@ Require `28` and `0028_damm_source_pin_cutover.sql`. Require all six runs to rem
 - `fcc17f6c`: 0/8 at `$14.8487319`, with zero stage publications/artifacts.
 - `9e5e8a13`: 0/8 at `$4.6051457`, with zero stage publications/artifacts.
 - `615e7139`: 0/8 at `$10.7913682`, with zero stage publications/artifacts.
+- `b0c325f0`: 0/8 at `$0.7494`, with zero stage publications/artifacts.
 
 Any difference is a hard stop before a provider build.
 
@@ -497,7 +504,7 @@ If no per-app broker client is available, keep `VITE_GROK_AUTH_ENABLED=false`. T
 ### 11. Create both Render Ohio services from the Blueprint (new environments only)
 
 Do this only for a new environment and only after migrations `0019` through
-`0028` are verified. For an existing environment whose Blueprint is already
+`0029` are verified. For an existing environment whose Blueprint is already
 disconnected, do not use this section: keep it disconnected and open/deploy the
 two existing services directly as specified in the source-pin upgrade order.
 
@@ -510,7 +517,7 @@ Dashboard path: **Render Dashboard > New > Blueprint > Connect** the exact
 4. Review `dar-studio-artifacts`: `type: web`, `runtime: docker`, `region: ohio`, plan `1c-2g`, `dockerfilePath: ./Dockerfile.artifact-gateway`, one instance, `autoDeployTrigger: off`, `healthCheckPath: /healthz`, `maxShutdownDelaySeconds: 300`, and **no disk**.
 5. At the initial `sync: false` prompts, give the worker `DATABASE_URL` (pooled) plus all six vendor keys. Give the gateway the same pooled `DATABASE_URL`, the generated `ARTIFACT_DELIVERY_SECRET`, and `APP_ORIGIN` set to the exact `NETLIFY_URL`/`BETTER_AUTH_URL`. Render supplies `PORT`.
 6. Reconfirm zero active workflows before clicking any deployment control. A new worker must not become available while a workflow is nonterminal.
-7. Refresh both bound source identities immediately before clicking: require local DAR `HEAD`, `origin/main`, and the direct GitHub branch identity to equal the recorded `DEPLOY_GIT_SHA`. In an empty temporary home with inherited/global/system Git configuration and interactive credential paths disabled, anonymously shallow-fetch and verify exact DAMM commit `3cd0c599ff137a09a1892b498f0eecfca5f43785`. Require a clean one-commit/no-tag checkout and strict object integrity. Record DAMM `refs/heads/main` only as diagnostic information; it may advance and must not be compared with the immutable manifest pin. If the exact pin cannot be fetched or verified, stop before deployment and restart from a reviewed source state.
+7. Refresh both bound source identities immediately before clicking: require local DAR `HEAD`, `origin/main`, and the direct GitHub branch identity to equal the recorded `DEPLOY_GIT_SHA`. In an empty temporary home with inherited/global/system Git configuration and interactive credential paths disabled, anonymously shallow-fetch and verify exact DAMM commit `62fad75c92143999c5ed9ee832c4f671e7ea6963`. Require a clean one-commit/no-tag checkout and strict object integrity. Record DAMM `refs/heads/main` only as diagnostic information; it may advance and must not be compared with the immutable manifest pin. If the exact pin cannot be fetched or verified, stop before deployment and restart from a reviewed source state.
 8. Review both `1c-2g` service charges and the worker disk charge, then click **Deploy Blueprint** once. The worker initializes a credential-free seed and shallow-fetches only the pinned commit from the public DAMM repository, with no tags or older reachable history. Do not start an overlapping manual deploy.
 9. Immediately open the created Blueprint's **Settings** and set **Auto Sync: No** while the initial builds settle. Both services already have `autoDeployTrigger: off` in `render.yaml`. Confirm all three automation controls are off before waiting for build completion.
 10. Wait for both initial credential-free deploys to reach terminal states—**Live**, **Failed**, or **Canceled**—without starting a second build. Continue only if both are Live on the recorded commit, the worker has no GitHub source credential or Secret File configured, and the active-workflow query still returns zero rows. A failed, canceled, wrong-commit, credential-bearing, or active-workflow initial deployment is a hard stop.
@@ -522,14 +529,14 @@ Render prompts for `sync: false` values only on initial creation. If a runtime v
 
 For `dar-studio-worker`, open **Logs**. Require `[worker-checkout] installed DAMM <commit>` (or `reusing`) followed by `[worker-preflight] ready ...` and the existing `[worker] ...`, `[worker] pipeline ...`, `[worker] interpreter ...`, and `[worker] watching the run queue` lines. It must prove:
 
-- the DAMM checkout is exactly commit `3cd0c599ff137a09a1892b498f0eecfca5f43785`;
+- the DAMM checkout is exactly commit `62fad75c92143999c5ed9ee832c4f671e7ea6963`;
 - `gauntlet/loop-1/render_v17.py` has SHA-256 `95dcef014086f6c01f58678db426fb48d87546b8b6a4315c530801b1ff74c5be`;
 - its tracked tree is clean and prohibited untracked/ignored executable source is absent;
 - the checkout lives under `/var/data/checkouts/<pinned-commit>`;
 - Node is exactly `22.22.3`, Python is exactly `3.12.13`, and the interpreter is
   `/opt/damm-venv/bin/python`;
-- preflight reports exactly `migrations=28`, after the SQL verification above
-  proved one ledger row through `0028` and no unexpected row;
+- preflight reports exactly `migrations=29`, after the SQL verification above
+  proved one ledger row through `0029` and no unexpected row;
 - Pandoc and LibreOffice/`soffice` are present for DOCX/PDF generation;
 - all six required vendor variable names are nonempty and the pinned SDKs import without printing values (the full workflow smoke later proves live vendor authorization);
 - the upstream root `.env` exists as a blank mode-`0600` compatibility file; and
@@ -709,7 +716,7 @@ For the single intended deploy, require:
 - deployed `server` Function metadata reports Node.js 22.x and streamed
   Functions-v2 invocation;
 - the migration output is `up to date` against the already verified exact
-  28-row ledger through `0028`; it must not be the first process to apply `0028`;
+  29-row ledger through `0029`; it must not be the first process to apply `0029`;
 - no migration is attempted during a preview build;
 - `/` and `/methodology` load over HTTPS;
 - `/login` offers email/password, and social buttons match the chosen auth mode;
@@ -722,12 +729,12 @@ Do not re-enable previews on this staging project merely to prove isolation. Use
 ### Deployment-only closeout and stop boundary
 
 When a paid canary is not separately authorized, stop here. Record the exact DAR
-commit on Netlify, the gateway, and the worker; exact DAMM `3cd0c599...`; worker
-`node=22.22.3 python=3.12.13 migrations=28`; Basic-protection anonymous denial
+commit on Netlify, the gateway, and the worker; exact DAMM `62fad75...`; worker
+`node=22.22.3 python=3.12.13 migrations=29`; Basic-protection anonymous denial
 and fresh authorized reachability; stopped Netlify builds with Deploy Previews
 disabled; disabled Render service auto-deploys; disconnected Blueprint with no
 Sync Hook; unchanged Render service deploy IDs and worker disk;
-zero active workflows; the `0028` guard; and the unchanged six failed-run rows.
+zero active workflows; the `0029` guard; and the unchanged seven failed-run rows.
 Stages 15 and 16 are an optional, separately authorized acceptance extension.
 Do not create identities or a country workspace merely to finish deployment.
 
@@ -751,16 +758,24 @@ This stage is outside deployment and consumes vendor budget. Stop after deployme
   control verified as acceptably bounded for the canary and provider-side spend
   limits recorded where available;
 - exact reviewed DAR on Netlify, gateway, and worker; exact DAMM
-  `3cd0c599ff137a09a1892b498f0eecfca5f43785`; 38-file identity
-  `f6d501249f0b448a8090406ac6829f2a55203582f791cbd1561ed3e24a313e13`;
+  `62fad75c92143999c5ed9ee832c4f671e7ea6963`; 38-file identity
+  `dce8994d1e788b2487737e0235ec1e779853e5faa0c8f0b341cdb30137fc7b66`;
   and the expected model/renderer hashes;
 - one Live worker instance, one possible claimant, a confirmed lease margin,
-  migration `0028`, zero active workflows, no unresolved spend reservation, and
-  all six failed runs unchanged; and
+  migration `0029`, zero active workflows, no unresolved spend reservation, and
+  all seven failed runs unchanged; and
 - stopped Netlify builds after the exact deploy, Deploy Previews disabled,
   Render automatic deploys disabled, Blueprint disconnected with no Sync Hook,
   private anonymous
   denial, and authorized reachability.
+
+For a cumulative-budget gauntlet, reconcile all previous charges and outstanding
+reservations before creating a workspace. The standard **Launch Draft DAR workflow**
+action fixes its ceiling at $500. If less than $500 remains authorized, stop this
+standard launch procedure and prepare a separately reviewed lower-ceiling launcher;
+verify its stored ceiling before dispatch. A spend journal or UI warning alone does
+not constrain the launched workflow. Never reset the cumulative journal to obtain
+another $500 allowance.
 
 Any failed or uncertain precondition is **NO-GO**. Sign in as the owner only
 after all of them and the separate authorization are recorded:

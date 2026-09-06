@@ -197,7 +197,7 @@ if [[ "$ENV_FILE" == ".env" ]]; then
 fi
 umask 077
 
-DAMM_SOURCE_COMMIT="3cd0c599ff137a09a1892b498f0eecfca5f43785"
+DAMM_SOURCE_COMMIT="62fad75c92143999c5ed9ee832c4f671e7ea6963"
 DAMM_PUBLIC_REPOSITORY="https://github.com/World-Bank-Digital/DAMM"
 DAMM_RENDERER_SHA256="95dcef014086f6c01f58678db426fb48d87546b8b6a4315c530801b1ff74c5be"
 NETLIFY_RELEASE_IMAGE="node:22.22.3-bookworm@sha256:46e94f8cf91baab69a2deb3153e74eeffd73c20c7cc1d8432f5b96469eaa0322"
@@ -371,6 +371,7 @@ required_files=(
   migrations/0026_damm_source_pin_cutover.sql
   migrations/0027_damm_source_pin_cutover.sql
   migrations/0028_damm_source_pin_cutover.sql
+  migrations/0029_damm_source_pin_cutover.sql
   docs/DEPLOYMENT-NETLIFY-NEON-RENDER-OHIO.md
 )
 for required_file in "${required_files[@]}"; do
@@ -546,13 +547,13 @@ say "If it is non-null, run the active-workflow query in docs/DEPLOYMENT-NETLIFY
 confirm_or_stop "Did the active-workflow query return zero rows?" \
   "Do not migrate while any workflow is queued, running, or otherwise nonterminal."
 step "Open Backup & Restore, enable Enhanced view if shown, select the root production branch, and click Create snapshot."
-step "Name it with UTC time and the deploy commit, for example pre-0028-YYYYMMDD-HHMM-${DEPLOY_GIT_SHA:0:8}."
+step "Name it with UTC time and the deploy commit, for example pre-0029-YYYYMMDD-HHMM-${DEPLOY_GIT_SHA:0:8}."
 ask NEON_SNAPSHOT_NAME "Exact pre-migration snapshot name:"
 require_value NEON_SNAPSHOT_NAME "$NEON_SNAPSHOT_NAME"
 write_env NEON_SNAPSHOT_NAME "$NEON_SNAPSHOT_NAME"
 confirm_or_stop "Is that snapshot complete and visibly tied to the root production branch?" \
   "A recoverable snapshot is required before migration."
-warn "Existing deployment only: suspend the preceding-pin Render worker before applying 0028. A reviewed merge is inert only while Netlify builds and Deploy Previews are disabled, Render service auto-deploys are off, and any Blueprint is disconnected. Leave the worker suspended until the exact repinned image is Live; queued arrivals must remain unclaimed and unspent meanwhile."
+warn "Existing deployment only: suspend the preceding-pin Render worker before applying 0029. A reviewed merge is inert only while Netlify builds and Deploy Previews are disabled, Render service auto-deploys are off, and any Blueprint is disconnected. Leave the worker suspended until the exact repinned image is Live; queued arrivals must remain unclaimed and unspent meanwhile."
 confirm_or_stop "Is there no preceding-pin worker because this is a new environment, or is the existing worker visibly suspended?" \
   "Do not migrate while a preceding-pin worker can claim newly pinned runs."
 step "For an existing site, freshly re-read Netlify Project configuration > Build & deploy after the worker suspension gate and require builds stopped and Deploy Previews disabled. For a new environment, require that no Netlify site exists yet."
@@ -566,17 +567,17 @@ confirm_or_stop "Is the provisioning Blueprint still disconnected or absent?" \
   "Do not migrate while a Blueprint can synchronize the repository into managed services."
 
 # ── 7 ─────────────────────────────────────────────────────────────────────
-stage "Apply and verify migration 0028 after 0019 through 0027"
-warn "This preserves the sealed progressive Stage 1-7 schema and prior source cutovers before repinning the worker to the reviewed DAMM revision with bounded Exa Contents retrieval for citation-only sources, exact source identity checks, conservative settlement, and durable paid-request replay protection. The direct URL is used, and the migrator takes its Postgres advisory lock."
+stage "Apply and verify migration 0029 after 0019 through 0028"
+warn "This preserves the sealed progressive Stage 1-7 schema and prior source cutovers before repinning the worker to the reviewed DAMM revision with corrected Exa document-ID validation and safe private diagnostics; exact status/URL binding, source pricing, conservative settlement, and durable paid-request replay protection remain unchanged. The direct URL is used, and the migrator takes its Postgres advisory lock."
 confirm_or_stop "Run the idempotent migration set against this Neon staging database now?" \
   "Migration was not authorized. No worker may be deployed yet."
 DATABASE_URL="$DATABASE_URL" MIGRATION_DATABASE_URL="$DATABASE_URL_DIRECT" npm run db:migrate ||
   stop "Migration failed. Keep the snapshot, read the exact error, and do not deploy the worker."
 open_url "https://console.neon.tech/app/projects/$NEON_PROJECT_ID"
-step "In SQL Editor, query _migrations for 0019_progressive_stage_artifacts.sql and 0020 through 0028 DAMM source-pin cutovers. Require exactly one row for each, in that order."
+step "In SQL Editor, query _migrations for 0019_progressive_stage_artifacts.sql and 0020 through 0029 DAMM source-pin cutovers. Require exactly one row for each, in that order."
 step "Require both progressive-publication tables and their sealing triggers, then run the function checks in the guide. Require pinned_commit=true, renderer_digest=true, and remains_unratified=true."
-step "Require exactly 28 total migration rows through 0028, repeat the zero-active-workflow query, and run the guide's preserved-failure query. Require all six protected failed run IDs (7e301235, e96a93fd, b481ddea, fcc17f6c, 9e5e8a13, 615e7139), stage counts, spend, publication/artifact counts, null final set, and null claim to remain unchanged."
-confirm_or_stop "Did every 0019 through 0028 migration verification query return the exact expected result?" \
+step "Require exactly 29 total migration rows through 0029, repeat the zero-active-workflow query, and run the guide's preserved-failure query. Require all seven protected failed run IDs (7e301235, e96a93fd, b481ddea, fcc17f6c, 9e5e8a13, 615e7139, b0c325f0), stage counts, spend, publication/artifact counts, null final set, and null claim to remain unchanged."
+confirm_or_stop "Did every 0019 through 0029 migration verification query return the exact expected result?" \
   "A worker cannot start on an unverified schema or methodology pin."
 write_env MIGRATION_0019_VERIFIED "true"
 write_env MIGRATION_0020_VERIFIED "true"
@@ -588,6 +589,7 @@ write_env MIGRATION_0025_VERIFIED "true"
 write_env MIGRATION_0026_VERIFIED "true"
 write_env MIGRATION_0027_VERIFIED "true"
 write_env MIGRATION_0028_VERIFIED "true"
+write_env MIGRATION_0029_VERIFIED "true"
 
 # ── 8 ─────────────────────────────────────────────────────────────────────
 stage "Import or verify the main branch in Netlify, then freeze builds"
@@ -722,7 +724,7 @@ chmod 600 "$ENV_FILE"
 # ── 11 ────────────────────────────────────────────────────────────────────
 stage "Render Ohio Blueprint: worker and artifact gateway"
 open_url "https://dashboard.render.com/"
-say "Migrations 0019 through 0028 must already be verified. Render does not run database migrations."
+say "Migrations 0019 through 0029 must already be verified. Render does not run database migrations."
 step "Review dar-studio-worker: worker/docker, region ohio, plan 1c-2g, auto deploy off, one instance, and no max shutdown delay field."
 step "Review disk dar-studio-worker-data at /var/data, 10 GB. Render forbids a custom max shutdown delay on a disk-backed service, so its documented 30-second default applies; checkpoints and the claim lease provide automatic recovery."
 step "Review dar-studio-artifacts: web/docker, region ohio, plan 1c-2g, auto deploy off, one instance, health /healthz, max shutdown delay 300 seconds, no disk."
@@ -801,7 +803,7 @@ stage "Render worker and artifact gateway verification"
 open_url "https://dashboard.render.com/worker/$RENDER_WORKER_SERVICE_ID"
 step "Open worker Logs. Require [worker-checkout] installed/reusing, [worker-preflight] ready, and [worker] host/pipeline/interpreter/watching queue lines."
 step "Require DAMM commit $DAMM_SOURCE_COMMIT, clean source, /var/data/checkouts/$DAMM_SOURCE_COMMIT, and /opt/damm-venv/bin/python."
-step "Require renderer SHA-256 $DAMM_RENDERER_SHA256, node=22.22.3, python=3.12.13, migrations=28 through 0028, Pandoc, LibreOffice/soffice, six nonempty vendor variables with pinned SDK imports, blank mode-0600 upstream .env, and queue watching."
+step "Require renderer SHA-256 $DAMM_RENDERER_SHA256, node=22.22.3, python=3.12.13, migrations=29 through 0029, Pandoc, LibreOffice/soffice, six nonempty vendor variables with pinned SDK imports, blank mode-0600 upstream .env, and queue watching."
 warn "Any worker-checkout, worker-preflight, or worker-entrypoint failed line, checkout drift, missing renderer/vendor, or crash loop is a hard stop."
 ask RENDER_WORKER_DEPLOY_ID "Successful Render worker deploy ID:"
 require_value RENDER_WORKER_DEPLOY_ID "$RENDER_WORKER_DEPLOY_ID"
@@ -1146,7 +1148,7 @@ cleanup_netlify_release ||
 trap - EXIT HUP INT TERM
 (( NETLIFY_DEPLOY_STATUS == 0 )) ||
   stop "The exact manual Netlify production deploy failed. Builds remain stopped; inspect the failed manual attempt before any retry."
-step "Require [deploy-preflight] success with Netlify CONTEXT=production, BRANCH=main, and COMMIT_REF exactly equal to EXPECTED_DEPLOY_GIT_SHA=$DEPLOY_GIT_SHA before Vite or migration starts. Require the migration advisory lock and an up-to-date exact 28-row ledger through 0028. Netlify must not be the first process to apply 0028."
+step "Require [deploy-preflight] success with Netlify CONTEXT=production, BRANCH=main, and COMMIT_REF exactly equal to EXPECTED_DEPLOY_GIT_SHA=$DEPLOY_GIT_SHA before Vite or migration starts. Require the migration advisory lock and an up-to-date exact 29-row ledger through 0029. Netlify must not be the first process to apply 0029."
 step "Require the Netlify adapter output, not .vercel output. Open /, /methodology, and /login over HTTPS."
 step "Require the deployed server Function metadata to show Node.js 22.x and streamed invocation; any Node 24.x runtime is a hard stop."
 step "Confirm email auth works and Google/X visibility exactly matches VITE_GROK_AUTH_ENABLED."
@@ -1165,7 +1167,7 @@ confirm_or_stop "Did the build freeze remain closed and did exactly one intended
   "Account for any extra deploy before closing the release."
 
 stage "Deployment-only closeout boundary"
-step "Record exact DAR on Netlify/gateway/worker, DAMM $DAMM_SOURCE_COMMIT, node=22.22.3, python=3.12.13, migrations=28 through 0028, private anonymous denial plus authorized access, every automation freeze, zero active workflows, and the unchanged preserved failures."
+step "Record exact DAR on Netlify/gateway/worker, DAMM $DAMM_SOURCE_COMMIT, node=22.22.3, python=3.12.13, migrations=29 through 0029, private anonymous denial plus authorized access, every automation freeze, zero active workflows, and the unchanged preserved failures."
 warn "Stop here unless post-deployment identity setup and the separately authorized paid canary are explicitly in scope. Deployment completion does not authorize either."
 if ! confirm "Are the post-deployment human test identities and one separately authorized named-country paid canary explicitly in scope now?"; then
   DEPLOYMENT_DEPLOYED_AT_UTC=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
@@ -1213,14 +1215,16 @@ warn "This stage is outside deployment and consumes vendor budget. Stop here unl
 confirm_or_stop "Is one complete eight-stage staging workflow for a specifically named country separately authorized now?" \
   "Do not launch without explicit vendor-spend authority."
 step "Reverify every selected provider model ID and tariff against first-party documentation today. Map the exact Render Jina key to its package/rate; verify its account funding control is acceptably bounded for the canary and record provider-side spend limits where available."
-step "Require exact DAR on Netlify/gateway/worker, DAMM $DAMM_SOURCE_COMMIT, 38-file identity f6d501249f0b448a8090406ac6829f2a55203582f791cbd1561ed3e24a313e13, expected model/renderer hashes, migrations=28 through 0028, and no unresolved spend reservation."
-step "Require exactly one Live worker instance and possible claimant with confirmed lease margin; zero active workflows; all six preserved failures unchanged; stopped Netlify builds after the exact deploy; Deploy Previews off; Render automatic deploys off; Blueprint disconnected with no Sync Hook; private anonymous denial; and authorized reachability."
+step "Require exact DAR on Netlify/gateway/worker, DAMM $DAMM_SOURCE_COMMIT, 38-file identity dce8994d1e788b2487737e0235ec1e779853e5faa0c8f0b341cdb30137fc7b66, expected model/renderer hashes, migrations=29 through 0029, and no unresolved spend reservation."
+step "Require exactly one Live worker instance and possible claimant with confirmed lease margin; zero active workflows; all seven preserved failures unchanged; stopped Netlify builds after the exact deploy; Deploy Previews off; Render automatic deploys off; Blueprint disconnected with no Sync Hook; private anonymous denial; and authorized reachability."
 confirm_or_stop "Are every same-day tariff, account-funding, identity, singleton, lease, zero-active, preserved-failure, and automation-freeze prelaunch gate recorded and green?" \
   "A missing or uncertain paid-canary precondition is NO-GO. Do not create a country workspace."
+confirm_or_stop 'Does the cumulative budget leave a full $500 for this fresh launch?' \
+  'The standard launch fixes its ceiling at $500. Stop before creating a workspace or launching; use a separately reviewed lower-ceiling launcher when less remains.'
 ask SMOKE_COUNTRY_NAME "Explicitly authorized canary country name:"
 require_value SMOKE_COUNTRY_NAME "$SMOKE_COUNTRY_NAME"
 step "As the owner, create exactly one new $SMOKE_COUNTRY_NAME country workspace, leave all optional upload categories empty, and click Launch Draft DAR workflow once. Never retry, resume, or reuse a historical failed run; capture the new run ID and artifact-set identity."
-step "At launch and after every stage, record sole claimant/lease margin, immutable publication and input/output hashes, settled spend plus unresolved reservations by provider/model/pass, and cumulative spend against $225, $262.50, $312.50, $350, $400, $425, then strictly below $500. Stage 8 adds no provider cost."
+step "At launch and after every stage, record sole claimant/lease margin, immutable publication and input/output hashes, settled spend plus unresolved reservations by provider/model/pass, and cumulative spend against \$225, \$262.50, \$312.50, \$350, \$400, \$425, then strictly below \$500. Stage 8 adds no provider cost."
 step "Observe all eight stages. There must be no human input, review gate, pause, approval, budget top-up, provider/model switch, or automatic retry."
 step "As each Stage 1-7 publication appears, require its owner-only report downloads to remain available while later stages run; anonymous and reviewer-only accounts must be denied."
 step "At completion require Draft · pre-review and explicit wording that automation is not G1/G2/G3 or publication readiness."
