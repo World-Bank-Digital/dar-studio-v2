@@ -37,6 +37,10 @@ export const APPROVAL_ASSESSMENT_INPUT_ARTIFACT_KEY = "assessment-input";
 // the pairs explicit so individually recognized hashes cannot be mixed across releases.
 const HISTORICAL_DAMM_SOURCE_RENDERER_PAIRS = [
   {
+    sourceCommit: "62fad75c92143999c5ed9ee832c4f671e7ea6963",
+    rendererSha256: "95dcef014086f6c01f58678db426fb48d87546b8b6a4315c530801b1ff74c5be",
+  },
+  {
     sourceCommit: "3cd0c599ff137a09a1892b498f0eecfca5f43785",
     rendererSha256: "95dcef014086f6c01f58678db426fb48d87546b8b6a4315c530801b1ff74c5be",
   },
